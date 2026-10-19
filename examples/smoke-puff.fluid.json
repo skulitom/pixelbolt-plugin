@@ -1,0 +1,147 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "smoke-puff",
+  "width": 32,
+  "height": 32,
+  "palette": {
+    "k": "#121019",
+    "d": "#5d5872",
+    "m": "#9a95ad",
+    "l": "#cfcadb",
+    "w": "#f8f6fc"
+  },
+  "effects": {
+    "smoke-puff": {
+      "frames": 19,
+      "duration": 60,
+      "seed": 5,
+      "buoyancy": 0,
+      "vorticity": 0.1,
+      "dissipation": 0.14,
+      "drag": 0.25,
+      "emitters": [
+        {
+          "at": [
+            16.5,
+            17.5
+          ],
+          "radius": 4,
+          "rate": 1,
+          "end": 3,
+          "density": 1.35,
+          "falloff": 0.95,
+          "expand": 0.9,
+          "noise": 0.3,
+          "flicker": 0.2
+        },
+        {
+          "at": [
+            10.5,
+            19.5
+          ],
+          "radius": 3,
+          "rate": 1,
+          "start": 1,
+          "end": 4,
+          "density": 1.3,
+          "falloff": 0.95,
+          "expand": 0.9,
+          "noise": 0.3,
+          "flicker": 0.2
+        },
+        {
+          "at": [
+            22.5,
+            19.5
+          ],
+          "radius": 3.25,
+          "rate": 1,
+          "start": 1,
+          "end": 4,
+          "density": 1.45,
+          "falloff": 0.95,
+          "expand": 0.9,
+          "noise": 0.3,
+          "flicker": 0.2
+        },
+        {
+          "at": [
+            12.5,
+            13.5
+          ],
+          "radius": 3,
+          "rate": 1,
+          "start": 2,
+          "end": 5,
+          "density": 1.45,
+          "falloff": 0.95,
+          "expand": 0.9,
+          "noise": 0.3,
+          "flicker": 0.2
+        },
+        {
+          "at": [
+            19.5,
+            12.5
+          ],
+          "radius": 3.5,
+          "rate": 1,
+          "start": 2,
+          "end": 5,
+          "density": 1.6,
+          "falloff": 0.95,
+          "expand": 0.9,
+          "noise": 0.3,
+          "flicker": 0.2
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "m"
+          ],
+          "thresholds": [
+            0.18
+          ],
+          "dither": 0
+        },
+        {
+          "field": "density",
+          "colors": [
+            "l"
+          ],
+          "thresholds": [
+            0.55
+          ],
+          "dither": 0
+        },
+        {
+          "field": "shadow",
+          "colors": [
+            "d"
+          ],
+          "thresholds": [
+            0.5
+          ],
+          "dither": 0
+        },
+        {
+          "field": "light",
+          "colors": [
+            "w"
+          ],
+          "thresholds": [
+            0.5
+          ],
+          "dither": 0
+        }
+      ],
+      "outline": "k",
+      "cleanup": {
+        "strays": true
+      }
+    }
+  }
+}

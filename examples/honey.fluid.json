@@ -1,0 +1,171 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "honey",
+  "width": 40,
+  "height": 48,
+  "palette": {
+    "H": "#fff3b0",
+    "y": "#f7c948",
+    "a": "#e09a1f",
+    "A": "#a85f0e",
+    "D": "#6b3a0b",
+    "b": "#6e4426",
+    "B": "#9c6a3c",
+    "n": "#c79a5b",
+    "q": "#c7d6e6",
+    "k": "#1b1a26"
+  },
+  "symbols": {
+    "dipper": [
+      ".bbbbbbbb...................",
+      "bnnbnnbnnb..................",
+      "bnnbnnbnnb..................",
+      "bnnbnnbnnnnnnnnnnnnnnnnnnnnn",
+      "bBBbBBbBBBBBBBBBBBBBBBBBBBBB",
+      "bBBbBBbBBbbbbbbbbbbbbbbbbbbb",
+      "bBBbBBbBBb..................",
+      "bBBbBBbBBb..................",
+      ".bbbbbbbb..................."
+    ],
+    "jar": [
+      "kkk....................kkk",
+      "kkk....................kkk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kq......................qk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ]
+  },
+  "effects": {
+    "honey": {
+      "kind": "liquid",
+      "frames": 24,
+      "duration": 70,
+      "loop": true,
+      "warmup": 3,
+      "seed": 6,
+      "iterations": 24,
+      "walls": [
+        "left",
+        "right",
+        "bottom"
+      ],
+      "viscosity": 10,
+      "apic": true,
+      "adhesion": 1.5,
+      "tension": 0.3,
+      "obstacles": [
+        {
+          "symbol": "dipper",
+          "x": 12,
+          "y": 2
+        },
+        {
+          "symbol": "jar",
+          "x": 7,
+          "y": 26
+        }
+      ],
+      "fill": [
+        {
+          "x": 9,
+          "y": 37,
+          "w": 22,
+          "h": 10
+        }
+      ],
+      "emitters": [
+        {
+          "name": "drizzle",
+          "at": [
+            16.5,
+            13
+          ],
+          "radius": 2,
+          "rate": 1,
+          "velocity": [
+            0,
+            0.8
+          ],
+          "pulse": {
+            "amplitude": 0.3,
+            "period": 12
+          }
+        },
+        {
+          "name": "seep",
+          "at": [
+            20,
+            36.5
+          ],
+          "area": [
+            22,
+            1
+          ],
+          "rate": 1,
+          "density": -0.25
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "a"
+          ],
+          "thresholds": [
+            0.5
+          ],
+          "dither": 0
+        },
+        {
+          "field": "speed",
+          "colors": [
+            "a"
+          ],
+          "thresholds": [
+            0.3
+          ],
+          "dither": 0
+        },
+        {
+          "field": "depth",
+          "colors": [
+            "H",
+            "y",
+            "a",
+            "A",
+            "D"
+          ],
+          "thresholds": [
+            1,
+            2,
+            3,
+            7,
+            13
+          ],
+          "dither": 0
+        }
+      ],
+      "cleanup": {
+        "strays": true
+      }
+    }
+  }
+}

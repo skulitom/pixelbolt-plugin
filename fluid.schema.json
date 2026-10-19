@@ -1,0 +1,970 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt fluid effects",
+  "description": "A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-fluid"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 128,
+      "description": "Canvas width in pixels; the grid has one cell per pixel."
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 128
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "symbols": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rows"
+      },
+      "description": "Named rows for obstacles: braziers, logs, pipes, flasks, rocks."
+    },
+    "anchor": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+    },
+    "effects": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "gas",
+              "liquid"
+            ],
+            "description": "gas (default): smoke, fire, steam, explosions, magic. liquid: water, potions, honey and slime as FLIP particles."
+          },
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 256
+          },
+          "duration": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60000
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60000
+                },
+                "maxItems": 256
+              }
+            ],
+            "description": "Milliseconds per frame, or one per frame; default 80."
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "Seamless loop: emitter timing, pulses, orbits and noise repeat every cycle; the simulation warms up and its closing frames blend toward the frames before frame 0."
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Default 1."
+          },
+          "warmup": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8,
+            "description": "Loops: whole cycles simulated before the recorded one; default 2. Raise it when a flow takes long to settle (a filling pool)."
+          },
+          "blend": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128,
+            "description": "Loops: closing frames blended toward the previous cycle's; default a third of the frames, at most 8."
+          },
+          "substeps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4,
+            "description": "Simulation steps per frame; default 2. Raise for fast liquids."
+          },
+          "iterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Pressure solve sweeps per step, and with viscosity or yield as many steps of the viscosity solve; default 30 (gas) or 40 (liquid)."
+          },
+          "buoyancy": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "description": "Gas: upward acceleration per unit of temperature; default 0.15."
+          },
+          "weight": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "description": "Gas: downward acceleration per unit of density (negative floats smoke); default 0."
+          },
+          "vorticity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2,
+            "description": "Gas: vorticity confinement, which keeps small swirls so smoke curls; default 0.25."
+          },
+          "dissipation": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Gas: share of density lost per frame; default 0.03."
+          },
+          "cooling": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Gas: share of temperature lost per frame; default 0.08."
+          },
+          "drag": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Share of velocity lost per frame, as if the surroundings held the fluid back (water under water, a gas in still air); it slows falling too. For a thick fluid use viscosity. Default 0.02 (gas) or 0 (liquid)."
+          },
+          "wind": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -2,
+              "maximum": 2
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Gas: acceleration [x, y] everywhere."
+          },
+          "advection": {
+            "enum": [
+              "smooth",
+              "sharp"
+            ],
+            "description": "Gas: smooth (default) is plain semi-Lagrangian advection, which blurs a little every step; sharp (MacCormack with a limiter) keeps edges and small swirls crisp, at up to twice the cost; smoke lingers longer, so a one-shot may need more dissipation to end empty."
+          },
+          "viscosity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 64,
+            "description": "Thickness, in square pixels per frame: it slows shearing and stretching but not falling or turning as a whole, so a thick drop falls as fast as water but spreads slowly and a stream never breaks into drops. Liquids: about 0.5 oil, 2–4 syrup, 8–16 honey, 32–64 tar. Gases: 0.1–1 for slow, smooth flows (a swirl dies away within frames above 1). Walls and obstacles hold a viscous fluid unless slip is set. Default 0."
+          },
+          "yield": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 16,
+            "description": "Liquid: yield stress, for mud, slime, dough and toothpaste. Below it the liquid is elastic and keeps its shape, squashing and springing back; pushed past it, it flows. A heap h pixels high holds itself up when yield is more than about gravity × h / 2. Default 0."
+          },
+          "slip": {
+            "type": "boolean",
+            "description": "With viscosity or yield: the fluid slides along walls and obstacles instead of being held by them (a greased pan). Default false."
+          },
+          "gravity": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -2,
+              "maximum": 2
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Liquid: acceleration [x, y]; default [0, 0.3]."
+          },
+          "flip": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Liquid: FLIP share of each particle's velocity (lively, noisier) against the grid's (calm); default 0.9. A viscous liquid lowers it where it is thick."
+          },
+          "apic": {
+            "type": "boolean",
+            "description": "Liquid: affine particle-in-cell. The calm (grid) share of each particle's velocity also carries the turning and shearing of the flow around it, so calm and thick liquids keep their swirls and folds instead of smearing them. Use it with a low flip. Default false."
+          },
+          "tension": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4,
+            "description": "Liquid: cohesion that keeps drops and streams together; default 0.5."
+          },
+          "adhesion": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4,
+            "description": "Liquid: how strongly it holds on to walls and obstacles. Liquid touching a solid stays on it unless pulled away faster than about adhesion ÷ 2 pixels per frame, so a film clings under a ledge, to a spoon or down a jar's side. Default 0."
+          },
+          "fill": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "y": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "w": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128
+                },
+                "h": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -256,
+                    "maximum": 512
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 128
+                },
+                "velocity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -16,
+                    "maximum": 16
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Starting velocity [x, y] in pixels per frame."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "description": "Liquid: water at frame 0 in discs (at, radius), boxes (x, y, w, h) or their overlap (both)."
+          },
+          "walls": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
+            },
+            "maxItems": 4,
+            "uniqueItems": true,
+            "description": "Closed canvas edges. Open edges (the default) let gas and water out."
+          },
+          "obstacles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "symbol": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "x": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "y": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "draw": {
+                  "enum": [
+                    "over",
+                    "under",
+                    "none"
+                  ],
+                  "description": "over (default): stamped in front of the fluid, its outline and sparks; under: behind its outline and sparks (the fluid itself never enters an obstacle); none: an invisible wall."
+                }
+              },
+              "required": [
+                "symbol"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 32,
+            "description": "Solid shapes from symbols: their visible pixels block the flow. They must fit the canvas."
+          },
+          "emitters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -256,
+                    "maximum": 512
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Centre [x, y] in canvas pixels (one grid cell per pixel)."
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 64,
+                  "description": "A disc of this radius; default 2."
+                },
+                "area": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 128
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "A box [w, h] centred on at, instead of a disc."
+                },
+                "burst": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 64,
+                  "description": "Add the amounts once, at start (each cycle when looping), times this strength."
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 64,
+                  "description": "Every frame from start until end, raise the covered cells toward the amounts times this strength, so a steady source holds its level."
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "Frame of the burst or first emission; default 0."
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 256,
+                  "description": "Frame where a rate emitter stops; default the last. A short window (end: 3) gives a burst that keeps growing for a few frames."
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "Gas: smoke added or held (default 0); negative drains. Liquid: share of each covered cell filled with water, 0–1 (default 1); negative drains that share of the particles there each frame."
+                },
+                "temperature": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "Gas only: heat added or held; heat rises by buoyancy and maps to fire ramps. Default 0."
+                },
+                "falloff": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "The amounts fall off from the centre toward the rim: 1 at the centre, 1 - falloff at the edge of the disc (or the ellipse inside the box), so a puff is densest in the middle. Default 0, a flat disc or box."
+                },
+                "velocity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -16,
+                    "maximum": 16
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Flow [x, y] in pixels per frame: a rate emitter steers its cells toward it (a jet; [0, 0] holds them still, as a drop gathering at a tip), a burst adds it once."
+                },
+                "expand": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "Push outward by this many pixels per frame while active (negative pulls inward): gas expands through the pressure solve, liquid particles are pushed."
+                },
+                "vortex": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "Swirl speed around at, in pixels per frame; positive turns clockwise on screen."
+                },
+                "noise": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 8,
+                  "description": "Random push in pixels per frame, coherent over about three pixels and new every frame (seeded): turbulence."
+                },
+                "flicker": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Random variation of strength from cell to cell and frame to frame (seeded value noise), so a flame base breaks into tongues."
+                },
+                "pulse": {
+                  "type": "object",
+                  "properties": {
+                    "amplitude": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share by which strength rises and falls; default 0.5. 1 switches the emitter off at the trough."
+                    },
+                    "period": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 256,
+                      "description": "Frames per cycle; default the effect's frame count. A looping effect's period must divide its frame count."
+                    },
+                    "phase": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees into the cycle at frame 0."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false,
+                  "description": "Strength follows a sine wave: puffs, heaves, heartbeats."
+                },
+                "orbit": {
+                  "type": "object",
+                  "properties": {
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 128
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 128
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels from at, or [x, y] for an ellipse."
+                    },
+                    "period": {
+                      "type": "integer",
+                      "minimum": -256,
+                      "maximum": 256,
+                      "description": "Frames per cycle; default the effect's frame count. A looping effect's period must divide its frame count. Negative turns anticlockwise; not 0."
+                    },
+                    "phase": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees into the cycle at frame 0."
+                    }
+                  },
+                  "required": [
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The emitter circles at (or follows an ellipse round it); a negative period turns anticlockwise. A rate emitter is laid along the path it covered since the last frame, so a fast orbit leaves a smooth trail."
+                },
+                "sparks": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number",
+                      "minimum": 0.01,
+                      "maximum": 256,
+                      "description": "Sparks per frame for a rate emitter (at most 16; fractions spawn on some frames), or in all for a burst; follows pulse and flicker."
+                    },
+                    "life": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frames each spark lives; [min, max] picks per spark. Default [8, 16]."
+                    },
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (grid rows name colours by character)."
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "description": "Palette keys spread over each spark's life, from birth to death."
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 3,
+                      "description": "Pixels across each spark; default 1. 2 reads at 1× (bubbles, embers, spray)."
+                    },
+                    "trail": {
+                      "type": "boolean",
+                      "description": "Streak back to where the spark was a frame earlier, in the next colour of its list: flying debris, rising embers."
+                    },
+                    "angle": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -3600,
+                          "maximum": 3600
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -3600,
+                            "maximum": 3600
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Launch direction in degrees, clockwise: 0 right, 90 down, 270 up. Default [0, 360]. [min, max] picks per particle."
+                    },
+                    "speed": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 16
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 16
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Launch speed in pixels per frame; default 0. [min, max] picks per particle."
+                    },
+                    "gravity": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -2,
+                        "maximum": 2
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "The spark's own acceleration [x, y]; negative y rises (bubbles, embers)."
+                    },
+                    "drag": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the spark's own speed lost each frame; default 0.05."
+                    },
+                    "follow": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2,
+                      "description": "How much the flow carries the spark: 1 (default) moves with the fluid, 0 ignores it (thrown debris). In a liquid, a spark with follow 0 that leaves the water ends where it falls back in (spray)."
+                    },
+                    "pop": {
+                      "type": "boolean",
+                      "description": "Liquid only: the spark pops where it leaves the liquid, drawn as a ring around it for one frame and two droplets the next (bubbles bursting at the surface)."
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "One-pixel particles carried by the flow and drawn over it: embers, sparkles, debris, bubbles. In a loop they wrap round, so they loop exactly."
+                }
+              },
+              "required": [
+                "at"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "description": "1–16 sources; a liquid with a fill may have none."
+          },
+          "look": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "enum": [
+                    "density",
+                    "temperature",
+                    "speed",
+                    "depth",
+                    "light",
+                    "shadow"
+                  ],
+                  "description": "density (smoke or water; water is 1 inside), temperature (gas heat), speed (pixels per frame; foam, fast flow), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew)."
+                },
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (grid rows name colours by character)."
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Palette keys from the lowest level to the highest."
+                },
+                "thresholds": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0.001,
+                    "maximum": 256
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "One rising value per colour: each colour is fully on from its threshold up."
+                },
+                "dither": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Feather each colour in below its threshold through the pattern, over this share of the gap to the previous threshold (to 0 for the first). 0 draws hard bands; default 0.5."
+                },
+                "pattern": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "bayer2",
+                        "bayer4",
+                        "bayer8",
+                        "noise",
+                        "value"
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        "maxItems": 16,
+                        "minItems": 1
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "Dither pattern, as for the dither operation: bayer4 (default), bayer2, bayer8, noise or value (seeded by the effect) or a matrix of ranks. Anchored to the canvas, so it never crawls."
+                }
+              },
+              "required": [
+                "field",
+                "colors",
+                "thresholds"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "description": "Layers drawn in order, later over earlier, each mapping one field to palette colours."
+          },
+          "whitewater": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "impact": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 32,
+                  "description": "Throw where a particle's velocity changes by at least this many pixels per frame within one frame: a drop landing, water striking water. Use impact or speed."
+                },
+                "speed": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 32,
+                  "description": "Throw where a particle moves at least this many pixels per frame: a fast stream shedding drops. Use impact or speed."
+                },
+                "chance": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1,
+                  "description": "Share of qualifying surface particles that throw a droplet each frame (a seeded draw per particle); default 0.1."
+                },
+                "throw": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4,
+                  "description": "Droplet speed as a share of the impact or speed; default 1."
+                },
+                "spread": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 180,
+                  "description": "Degrees of random turn either way; default 20."
+                },
+                "life": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 256
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ],
+                  "description": "Frames each droplet lives; [min, max] picks per droplet. Default [6, 12]."
+                },
+                "colors": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (grid rows name colours by character)."
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Palette keys spread over each droplet's life, from birth to death."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 3,
+                  "description": "Pixels across each droplet; default 1."
+                },
+                "trail": {
+                  "type": "boolean",
+                  "description": "Streak back to where the droplet was a frame earlier, in the next colour of its list."
+                },
+                "gravity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "The droplet's own acceleration [x, y]; default the effect's gravity."
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Share of the droplet's speed lost each frame; default 0.02."
+                },
+                "follow": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "How much the flow carries the droplet: 0 (default) is spray, drawn once it has left the water and ending where it falls back in; above 0 is foam carried on the flow, ending once it is carried under."
+                }
+              },
+              "required": [
+                "colors"
+              ],
+              "additionalProperties": false,
+              "oneOf": [
+                {
+                  "required": [
+                    "impact"
+                  ]
+                },
+                {
+                  "required": [
+                    "speed"
+                  ]
+                }
+              ],
+              "description": "Spray and foam thrown off the liquid by its own motion, from particles at the surface, tipped away from the water."
+            },
+            "maxItems": 4,
+            "description": "Liquid: up to four layers of spray or foam thrown off the water where it lands or runs fast, drawn over it like sparks."
+          },
+          "light": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Direction toward the light for the light and shadow fields; default [-1, -1], the upper left."
+          },
+          "outline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "Palette key for a one-pixel outline around the fluid."
+          },
+          "cleanup": {
+            "type": "object",
+            "properties": {
+              "strays": {
+                "type": "boolean"
+              },
+              "corners": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "De-Stray (specks and pinholes take their surroundings' colour) and De-Corner cleanup of the fluid before outline and sparks."
+          }
+        },
+        "required": [
+          "frames",
+          "emitters",
+          "look"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "effects"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "format": "pixelforge-scene",
+  "version": 1,
+  "name": "forest-spirit-lit",
+  "width": 72,
+  "height": 40,
+  "duration": 1200,
+  "background": "#141a2a",
+  "assets": {
+    "spirit": {
+      "recipe": "forest-spirit.json",
+      "normal": "forest-spirit-normal.json"
+    }
+  },
+  "instances": [
+    {
+      "name": "spirit",
+      "asset": "spirit",
+      "at": [
+        24,
+        8
+      ],
+      "animation": "idle"
+    }
+  ],
+  "lighting": {
+    "ambient": 0.35,
+    "bands": 4,
+    "lights": [
+      {
+        "at": [
+          14,
+          10
+        ],
+        "height": 12,
+        "radius": 48,
+        "color": "#fff2d6"
+      }
+    ]
+  }
+}

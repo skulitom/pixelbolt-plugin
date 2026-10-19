@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "pixelbolt",
+  "displayName": "Pixelbolt pixel art",
+  "version": "0.9.0",
+  "description": "Pixel art and sprite animation for agents: sprites, sprite sheets, tiles, icons, effects and short animations from editable JSON recipes, exported as PNG, GIF, APNG or video frames. Local, no account, no API key.",
+  "author": {
+    "name": "skulitom",
+    "url": "https://github.com/skulitom"
+  },
+  "homepage": "https://github.com/skulitom/Pixelbolt#readme",
+  "repository": "https://github.com/skulitom/Pixelbolt",
+  "license": "MIT",
+  "keywords": [
+    "pixel-art",
+    "sprites",
+    "sprite-sheet",
+    "sprite-animation",
+    "tileset",
+    "game-assets",
+    "gamedev",
+    "gif",
+    "mcp"
+  ],
+  "mcpServers": {
+    "pixelbolt": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/pixelbolt.js", "mcp"]
+    }
+  }
+}

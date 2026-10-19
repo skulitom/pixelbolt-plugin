@@ -1,0 +1,312 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "steam-vent",
+  "width": 32,
+  "height": 48,
+  "palette": {
+    "q": "#7d8ca3",
+    "Q": "#b4c2d6",
+    "w": "#eef4fb",
+    "p": "#4a5160",
+    "P": "#6f7889",
+    "h": "#9aa3b3",
+    "k": "#262a33"
+  },
+  "symbols": {
+    "pipe": [
+      "kkkkkkkkkk",
+      "kPhhhhhhPk",
+      "kpPPPPPPpk",
+      ".kpPPPPpk.",
+      ".kpPPPPpk.",
+      ".kpPPPPpk."
+    ]
+  },
+  "effects": {
+    "steam-vent": {
+      "frames": 24,
+      "duration": 70,
+      "loop": true,
+      "seed": 2,
+      "walls": [
+        "bottom"
+      ],
+      "buoyancy": 0.25,
+      "vorticity": 0.7,
+      "dissipation": 0.11,
+      "cooling": 0.1,
+      "drag": 0.04,
+      "obstacles": [
+        {
+          "symbol": "pipe",
+          "x": 11,
+          "y": 42
+        }
+      ],
+      "emitters": [
+        {
+          "name": "billow",
+          "at": [
+            16,
+            20
+          ],
+          "radius": 17,
+          "rate": 0.2,
+          "velocity": [
+            0,
+            -2.8
+          ],
+          "expand": 6
+        },
+        {
+          "name": "puff-1",
+          "at": [
+            16,
+            39.5
+          ],
+          "radius": 3.5,
+          "rate": 1,
+          "start": 0,
+          "end": 2,
+          "density": 0.25,
+          "temperature": 0.8,
+          "velocity": [
+            -0.6,
+            -2
+          ],
+          "expand": 1,
+          "noise": 0.8,
+          "flicker": 0.3,
+          "vortex": 0.8
+        },
+        {
+          "name": "body-1",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 2,
+          "rate": 1,
+          "start": 0,
+          "end": 2,
+          "density": 0.36,
+          "flicker": 0.3
+        },
+        {
+          "name": "core-1",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 1,
+          "rate": 1,
+          "start": 0,
+          "end": 1,
+          "density": 1.45
+        },
+        {
+          "name": "gap-1",
+          "at": [
+            16,
+            39
+          ],
+          "area": [
+            8,
+            4
+          ],
+          "rate": 1,
+          "start": 3,
+          "end": 8,
+          "density": -1,
+          "temperature": -1
+        },
+        {
+          "name": "puff-2",
+          "at": [
+            16,
+            39.5
+          ],
+          "radius": 3.5,
+          "rate": 1,
+          "start": 8,
+          "end": 10,
+          "density": 0.25,
+          "temperature": 0.8,
+          "velocity": [
+            0.6,
+            -2
+          ],
+          "expand": 1,
+          "noise": 0.8,
+          "flicker": 0.3,
+          "vortex": -0.8
+        },
+        {
+          "name": "body-2",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 2,
+          "rate": 1,
+          "start": 8,
+          "end": 10,
+          "density": 0.36,
+          "flicker": 0.3
+        },
+        {
+          "name": "core-2",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 1,
+          "rate": 1,
+          "start": 8,
+          "end": 9,
+          "density": 1.45
+        },
+        {
+          "name": "gap-2",
+          "at": [
+            16,
+            39
+          ],
+          "area": [
+            8,
+            4
+          ],
+          "rate": 1,
+          "start": 11,
+          "end": 16,
+          "density": -1,
+          "temperature": -1
+        },
+        {
+          "name": "puff-3",
+          "at": [
+            16,
+            39.5
+          ],
+          "radius": 3.5,
+          "rate": 1,
+          "start": 16,
+          "end": 18,
+          "density": 0.25,
+          "temperature": 0.8,
+          "velocity": [
+            0,
+            -2
+          ],
+          "expand": 1,
+          "noise": 0.8,
+          "flicker": 0.3,
+          "vortex": 0.6
+        },
+        {
+          "name": "body-3",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 2,
+          "rate": 1,
+          "start": 16,
+          "end": 18,
+          "density": 0.36,
+          "flicker": 0.3
+        },
+        {
+          "name": "core-3",
+          "at": [
+            16,
+            40
+          ],
+          "radius": 1,
+          "rate": 1,
+          "start": 16,
+          "end": 17,
+          "density": 1.45
+        },
+        {
+          "name": "gap-3",
+          "at": [
+            16,
+            39
+          ],
+          "area": [
+            8,
+            4
+          ],
+          "rate": 1,
+          "start": 19,
+          "end": 24,
+          "density": -1,
+          "temperature": -1
+        },
+        {
+          "name": "thin",
+          "at": [
+            16,
+            6
+          ],
+          "area": [
+            32,
+            10
+          ],
+          "rate": 1,
+          "density": -0.15
+        },
+        {
+          "name": "fade",
+          "at": [
+            16,
+            2
+          ],
+          "area": [
+            32,
+            6
+          ],
+          "rate": 1,
+          "density": -0.4
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "q"
+          ],
+          "thresholds": [
+            0.11
+          ],
+          "dither": 0.65,
+          "pattern": "noise"
+        },
+        {
+          "field": "density",
+          "colors": [
+            "q"
+          ],
+          "thresholds": [
+            0.25
+          ],
+          "dither": 0.45
+        },
+        {
+          "field": "density",
+          "colors": [
+            "Q",
+            "w"
+          ],
+          "thresholds": [
+            0.42,
+            1
+          ],
+          "dither": 0.6
+        }
+      ]
+    }
+  }
+}

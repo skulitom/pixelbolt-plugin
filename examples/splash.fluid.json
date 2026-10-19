@@ -1,0 +1,153 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "splash",
+  "width": 48,
+  "height": 40,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff"
+  },
+  "effects": {
+    "splash": {
+      "kind": "liquid",
+      "frames": 40,
+      "duration": 60,
+      "seed": 3,
+      "walls": [
+        "left",
+        "right",
+        "bottom"
+      ],
+      "gravity": [
+        0,
+        0.6
+      ],
+      "flip": 0.2,
+      "drag": 0.08,
+      "tension": 1.2,
+      "fill": [
+        {
+          "x": 0,
+          "y": 28,
+          "w": 48,
+          "h": 12
+        },
+        {
+          "at": [
+            24,
+            5
+          ],
+          "radius": 3,
+          "velocity": [
+            0,
+            0.5
+          ]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "settle",
+          "at": [
+            24,
+            38
+          ],
+          "area": [
+            48,
+            2
+          ],
+          "rate": 1,
+          "start": 12,
+          "end": 29,
+          "density": -0.017
+        },
+        {
+          "name": "rebound",
+          "at": [
+            24,
+            31
+          ],
+          "area": [
+            4,
+            3
+          ],
+          "rate": 1,
+          "start": 15,
+          "end": 17,
+          "density": 0,
+          "velocity": [
+            0,
+            -2
+          ]
+        }
+      ],
+      "whitewater": [
+        {
+          "impact": 1.5,
+          "chance": 0.45,
+          "throw": 1.8,
+          "spread": 30,
+          "life": [
+            12,
+            20
+          ],
+          "colors": [
+            "w",
+            "w",
+            "c"
+          ],
+          "trail": true
+        },
+        {
+          "impact": 2.5,
+          "chance": 0.3,
+          "throw": 1.6,
+          "spread": 20,
+          "life": [
+            12,
+            20
+          ],
+          "colors": [
+            "w",
+            "w",
+            "c"
+          ],
+          "size": 2
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "b"
+          ],
+          "thresholds": [
+            0.5
+          ],
+          "dither": 0
+        },
+        {
+          "field": "depth",
+          "colors": [
+            "w",
+            "c",
+            "b",
+            "B"
+          ],
+          "thresholds": [
+            1,
+            2,
+            5,
+            9
+          ],
+          "dither": 0
+        }
+      ],
+      "cleanup": {
+        "strays": true
+      }
+    }
+  }
+}

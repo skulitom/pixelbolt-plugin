@@ -1,0 +1,442 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "explosion",
+  "width": 64,
+  "height": 64,
+  "palette": {
+    "W": "#fffbe6",
+    "y": "#ffd34d",
+    "o": "#ff8a2b",
+    "r": "#d6402b",
+    "R": "#8f2a2e",
+    "s": "#b3a5ad",
+    "S": "#867882",
+    "k": "#5a4e5b"
+  },
+  "effects": {
+    "explosion": {
+      "frames": 32,
+      "duration": 60,
+      "seed": 7,
+      "buoyancy": 0.18,
+      "weight": -0.04,
+      "vorticity": 0.3,
+      "dissipation": 0.1375,
+      "cooling": 0.16,
+      "drag": 0.1,
+      "emitters": [
+        {
+          "name": "flash",
+          "at": [
+            32,
+            37
+          ],
+          "radius": 5,
+          "burst": 1,
+          "temperature": 2.6,
+          "flicker": 0.4
+        },
+        {
+          "name": "blast-1",
+          "at": [
+            32,
+            38
+          ],
+          "radius": 4,
+          "rate": 1,
+          "end": 3,
+          "density": 2,
+          "temperature": 2.8,
+          "expand": 3.2,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "blast-2",
+          "at": [
+            24,
+            37
+          ],
+          "radius": 3,
+          "rate": 1,
+          "start": 1,
+          "end": 4,
+          "density": 2.4,
+          "temperature": 2.4,
+          "expand": 2.4,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "blast-3",
+          "at": [
+            40,
+            33
+          ],
+          "radius": 3,
+          "rate": 1,
+          "start": 2,
+          "end": 4,
+          "density": 1,
+          "temperature": 2,
+          "expand": 2.4,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "blast-4",
+          "at": [
+            37,
+            44
+          ],
+          "radius": 2.5,
+          "rate": 1,
+          "start": 1,
+          "end": 3,
+          "density": 1.4,
+          "temperature": 2,
+          "expand": 1.8,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "blast-5",
+          "at": [
+            30,
+            31
+          ],
+          "radius": 3,
+          "rate": 1,
+          "start": 1,
+          "end": 3,
+          "density": 3.4,
+          "temperature": 2.2,
+          "expand": 2,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "blast-6",
+          "at": [
+            27,
+            43
+          ],
+          "radius": 2,
+          "rate": 1,
+          "start": 3,
+          "end": 5,
+          "density": 0.8,
+          "temperature": 1.8,
+          "expand": 1.6,
+          "noise": 1.6,
+          "flicker": 0.5
+        },
+        {
+          "name": "debris-1",
+          "at": [
+            15,
+            33.5
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              168,
+              212
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        },
+        {
+          "name": "debris-2",
+          "at": [
+            20,
+            27
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              198,
+              242
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        },
+        {
+          "name": "debris-3",
+          "at": [
+            26,
+            21
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              228,
+              272
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        },
+        {
+          "name": "debris-4",
+          "at": [
+            36.5,
+            22.5
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              268,
+              312
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        },
+        {
+          "name": "debris-5",
+          "at": [
+            43,
+            27
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              298,
+              342
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        },
+        {
+          "name": "debris-6",
+          "at": [
+            47,
+            34
+          ],
+          "radius": 1.5,
+          "burst": 1,
+          "start": 2,
+          "sparks": {
+            "count": 2.7,
+            "life": [
+              9,
+              15
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o",
+              "r"
+            ],
+            "trail": true,
+            "angle": [
+              328,
+              372
+            ],
+            "speed": [
+              3,
+              5.5
+            ],
+            "gravity": [
+              0,
+              0.12
+            ],
+            "drag": 0.03,
+            "follow": 0
+          }
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "k"
+          ],
+          "thresholds": [
+            0.08
+          ],
+          "dither": 0.6,
+          "pattern": "bayer4"
+        },
+        {
+          "field": "density",
+          "colors": [
+            "S",
+            "s"
+          ],
+          "thresholds": [
+            0.2,
+            0.45
+          ],
+          "dither": 0.65,
+          "pattern": "value"
+        },
+        {
+          "field": "shadow",
+          "colors": [
+            "k"
+          ],
+          "thresholds": [
+            0.3
+          ],
+          "dither": 0.4,
+          "pattern": "value"
+        },
+        {
+          "field": "light",
+          "colors": [
+            "s"
+          ],
+          "thresholds": [
+            0.6
+          ],
+          "dither": 0.4,
+          "pattern": "value"
+        },
+        {
+          "field": "temperature",
+          "colors": [
+            "R",
+            "r",
+            "o",
+            "y",
+            "W"
+          ],
+          "thresholds": [
+            0.28,
+            0.5,
+            1,
+            1.7,
+            2.4
+          ],
+          "dither": 0.5,
+          "pattern": "value"
+        }
+      ],
+      "cleanup": {
+        "strays": true
+      }
+    }
+  }
+}

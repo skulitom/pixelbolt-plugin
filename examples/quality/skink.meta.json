@@ -1,0 +1,1580 @@
+{
+  "format": "pixelforge-pose-metadata",
+  "version": 1,
+  "coordinates": "unscaled source pixels; top-left origin; positive y down; marker times are milliseconds before playback-rate adjustment",
+  "poses": {
+    "idle": {
+      "origin": [
+        14,
+        15
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            15
+          ],
+          "anchor": [
+            7,
+            15
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            10
+          ],
+          "anchor": [
+            14,
+            15
+          ],
+          "points": {
+            "neck": [
+              17,
+              11
+            ],
+            "grip": [
+              17,
+              14
+            ],
+            "hip": [
+              11,
+              15
+            ],
+            "tail": [
+              7,
+              14
+            ]
+          }
+        },
+        "feet": {
+          "definition": "stand",
+          "topLeft": [
+            8,
+            15
+          ],
+          "anchor": [
+            11,
+            15
+          ],
+          "points": {
+            "foot": [
+              10,
+              18
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            6
+          ],
+          "anchor": [
+            17,
+            11
+          ],
+          "points": {
+            "mouth": [
+              22,
+              11
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            14
+          ],
+          "anchor": [
+            17,
+            14
+          ],
+          "points": {
+            "light": [
+              18,
+              17
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            10,
+            18
+          ]
+        }
+      ]
+    },
+    "blink": {
+      "origin": [
+        14,
+        15
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            15
+          ],
+          "anchor": [
+            7,
+            15
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            10
+          ],
+          "anchor": [
+            14,
+            15
+          ],
+          "points": {
+            "neck": [
+              17,
+              11
+            ],
+            "grip": [
+              17,
+              14
+            ],
+            "hip": [
+              11,
+              15
+            ],
+            "tail": [
+              7,
+              14
+            ]
+          }
+        },
+        "feet": {
+          "definition": "stand",
+          "topLeft": [
+            8,
+            15
+          ],
+          "anchor": [
+            11,
+            15
+          ],
+          "points": {
+            "foot": [
+              10,
+              18
+            ]
+          }
+        },
+        "head": {
+          "definition": "blink",
+          "topLeft": [
+            15,
+            6
+          ],
+          "anchor": [
+            17,
+            11
+          ],
+          "points": {
+            "mouth": [
+              22,
+              11
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            14
+          ],
+          "anchor": [
+            17,
+            14
+          ],
+          "points": {
+            "light": [
+              18,
+              17
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            10,
+            18
+          ]
+        }
+      ]
+    },
+    "contact-a": {
+      "origin": [
+        14,
+        15
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            15
+          ],
+          "anchor": [
+            7,
+            15
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            10
+          ],
+          "anchor": [
+            14,
+            15
+          ],
+          "points": {
+            "neck": [
+              17,
+              11
+            ],
+            "grip": [
+              17,
+              14
+            ],
+            "hip": [
+              11,
+              15
+            ],
+            "tail": [
+              7,
+              14
+            ]
+          }
+        },
+        "feet": {
+          "definition": "contactA",
+          "topLeft": [
+            7,
+            15
+          ],
+          "anchor": [
+            11,
+            15
+          ],
+          "points": {
+            "foot": [
+              17,
+              18
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            6
+          ],
+          "anchor": [
+            17,
+            11
+          ],
+          "points": {
+            "mouth": [
+              22,
+              11
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            14
+          ],
+          "anchor": [
+            17,
+            14
+          ],
+          "points": {
+            "light": [
+              18,
+              17
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "foot-contact",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            17,
+            18
+          ]
+        }
+      ]
+    },
+    "down-a": {
+      "origin": [
+        14,
+        16
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            16
+          ],
+          "anchor": [
+            7,
+            16
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "compressed",
+          "topLeft": [
+            7,
+            13
+          ],
+          "anchor": [
+            14,
+            16
+          ],
+          "points": {
+            "neck": [
+              17,
+              13
+            ],
+            "grip": [
+              18,
+              16
+            ],
+            "hip": [
+              11,
+              16
+            ],
+            "tail": [
+              7,
+              16
+            ]
+          }
+        },
+        "feet": {
+          "definition": "downA",
+          "topLeft": [
+            8,
+            16
+          ],
+          "anchor": [
+            11,
+            16
+          ],
+          "points": {
+            "foot": [
+              15,
+              19
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            8
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "mouth": [
+              22,
+              13
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            18,
+            16
+          ],
+          "anchor": [
+            18,
+            16
+          ],
+          "points": {
+            "light": [
+              19,
+              19
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            15,
+            19
+          ]
+        }
+      ]
+    },
+    "passing-a": {
+      "origin": [
+        14,
+        14
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tailUp",
+          "topLeft": [
+            0,
+            9
+          ],
+          "anchor": [
+            7,
+            14
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            9
+          ],
+          "anchor": [
+            14,
+            14
+          ],
+          "points": {
+            "neck": [
+              17,
+              10
+            ],
+            "grip": [
+              17,
+              13
+            ],
+            "hip": [
+              11,
+              14
+            ],
+            "tail": [
+              7,
+              13
+            ]
+          }
+        },
+        "feet": {
+          "definition": "passA",
+          "topLeft": [
+            8,
+            14
+          ],
+          "anchor": [
+            11,
+            14
+          ],
+          "points": {
+            "foot": [
+              9,
+              17
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            5
+          ],
+          "anchor": [
+            17,
+            10
+          ],
+          "points": {
+            "mouth": [
+              22,
+              10
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            13
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "light": [
+              18,
+              16
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            9,
+            17
+          ]
+        }
+      ]
+    },
+    "contact-b": {
+      "origin": [
+        14,
+        15
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            15
+          ],
+          "anchor": [
+            7,
+            15
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            10
+          ],
+          "anchor": [
+            14,
+            15
+          ],
+          "points": {
+            "neck": [
+              17,
+              11
+            ],
+            "grip": [
+              17,
+              14
+            ],
+            "hip": [
+              11,
+              15
+            ],
+            "tail": [
+              7,
+              14
+            ]
+          }
+        },
+        "feet": {
+          "definition": "contactB",
+          "topLeft": [
+            7,
+            15
+          ],
+          "anchor": [
+            11,
+            15
+          ],
+          "points": {
+            "foot": [
+              15,
+              18
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            6
+          ],
+          "anchor": [
+            17,
+            11
+          ],
+          "points": {
+            "mouth": [
+              22,
+              11
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            14
+          ],
+          "anchor": [
+            17,
+            14
+          ],
+          "points": {
+            "light": [
+              18,
+              17
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "foot-contact",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            15,
+            18
+          ]
+        }
+      ]
+    },
+    "down-b": {
+      "origin": [
+        14,
+        16
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            16
+          ],
+          "anchor": [
+            7,
+            16
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "compressed",
+          "topLeft": [
+            7,
+            13
+          ],
+          "anchor": [
+            14,
+            16
+          ],
+          "points": {
+            "neck": [
+              17,
+              13
+            ],
+            "grip": [
+              18,
+              16
+            ],
+            "hip": [
+              11,
+              16
+            ],
+            "tail": [
+              7,
+              16
+            ]
+          }
+        },
+        "feet": {
+          "definition": "downB",
+          "topLeft": [
+            8,
+            16
+          ],
+          "anchor": [
+            11,
+            16
+          ],
+          "points": {
+            "foot": [
+              15,
+              19
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            8
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "mouth": [
+              22,
+              13
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            18,
+            16
+          ],
+          "anchor": [
+            18,
+            16
+          ],
+          "points": {
+            "light": [
+              19,
+              19
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            15,
+            19
+          ]
+        }
+      ]
+    },
+    "passing-b": {
+      "origin": [
+        14,
+        14
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            14
+          ],
+          "anchor": [
+            7,
+            14
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            9
+          ],
+          "anchor": [
+            14,
+            14
+          ],
+          "points": {
+            "neck": [
+              17,
+              10
+            ],
+            "grip": [
+              17,
+              13
+            ],
+            "hip": [
+              11,
+              14
+            ],
+            "tail": [
+              7,
+              13
+            ]
+          }
+        },
+        "feet": {
+          "definition": "passB",
+          "topLeft": [
+            8,
+            14
+          ],
+          "anchor": [
+            11,
+            14
+          ],
+          "points": {
+            "foot": [
+              14,
+              17
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            5
+          ],
+          "anchor": [
+            17,
+            10
+          ],
+          "points": {
+            "mouth": [
+              22,
+              10
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            13
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "light": [
+              18,
+              16
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            14,
+            17
+          ]
+        }
+      ]
+    },
+    "gather": {
+      "origin": [
+        14,
+        16
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tailUp",
+          "topLeft": [
+            0,
+            11
+          ],
+          "anchor": [
+            7,
+            16
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "compressed",
+          "topLeft": [
+            7,
+            13
+          ],
+          "anchor": [
+            14,
+            16
+          ],
+          "points": {
+            "neck": [
+              17,
+              13
+            ],
+            "grip": [
+              18,
+              16
+            ],
+            "hip": [
+              11,
+              16
+            ],
+            "tail": [
+              7,
+              16
+            ]
+          }
+        },
+        "feet": {
+          "definition": "downA",
+          "topLeft": [
+            8,
+            16
+          ],
+          "anchor": [
+            11,
+            16
+          ],
+          "points": {
+            "foot": [
+              15,
+              19
+            ]
+          }
+        },
+        "head": {
+          "definition": "crest",
+          "topLeft": [
+            15,
+            8
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "mouth": [
+              22,
+              13
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            18,
+            16
+          ],
+          "anchor": [
+            18,
+            16
+          ],
+          "points": {
+            "light": [
+              19,
+              19
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            15,
+            19
+          ]
+        }
+      ]
+    },
+    "release": {
+      "origin": [
+        14,
+        14
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tailUp",
+          "topLeft": [
+            0,
+            9
+          ],
+          "anchor": [
+            7,
+            14
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            9
+          ],
+          "anchor": [
+            14,
+            14
+          ],
+          "points": {
+            "neck": [
+              17,
+              10
+            ],
+            "grip": [
+              17,
+              13
+            ],
+            "hip": [
+              11,
+              14
+            ],
+            "tail": [
+              7,
+              13
+            ]
+          }
+        },
+        "feet": {
+          "definition": "contactA",
+          "topLeft": [
+            7,
+            14
+          ],
+          "anchor": [
+            11,
+            14
+          ],
+          "points": {
+            "foot": [
+              17,
+              17
+            ]
+          }
+        },
+        "head": {
+          "definition": "crest",
+          "topLeft": [
+            15,
+            5
+          ],
+          "anchor": [
+            17,
+            10
+          ],
+          "points": {
+            "mouth": [
+              22,
+              10
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            13
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "light": [
+              18,
+              16
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "spell-release",
+          "part": "head",
+          "point": "mouth",
+          "at": [
+            22,
+            10
+          ]
+        }
+      ]
+    },
+    "recoil": {
+      "origin": [
+        14,
+        16
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            16
+          ],
+          "anchor": [
+            7,
+            16
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "compressed",
+          "topLeft": [
+            7,
+            13
+          ],
+          "anchor": [
+            14,
+            16
+          ],
+          "points": {
+            "neck": [
+              17,
+              13
+            ],
+            "grip": [
+              18,
+              16
+            ],
+            "hip": [
+              11,
+              16
+            ],
+            "tail": [
+              7,
+              16
+            ]
+          }
+        },
+        "feet": {
+          "definition": "downB",
+          "topLeft": [
+            8,
+            16
+          ],
+          "anchor": [
+            11,
+            16
+          ],
+          "points": {
+            "foot": [
+              15,
+              19
+            ]
+          }
+        },
+        "head": {
+          "definition": "blink",
+          "topLeft": [
+            15,
+            8
+          ],
+          "anchor": [
+            17,
+            13
+          ],
+          "points": {
+            "mouth": [
+              22,
+              13
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            18,
+            16
+          ],
+          "anchor": [
+            18,
+            16
+          ],
+          "points": {
+            "light": [
+              19,
+              19
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            15,
+            19
+          ]
+        }
+      ]
+    },
+    "recover": {
+      "origin": [
+        14,
+        15
+      ],
+      "parts": {
+        "tail": {
+          "definition": "tail",
+          "topLeft": [
+            0,
+            15
+          ],
+          "anchor": [
+            7,
+            15
+          ],
+          "points": {}
+        },
+        "body": {
+          "definition": "body",
+          "topLeft": [
+            7,
+            10
+          ],
+          "anchor": [
+            14,
+            15
+          ],
+          "points": {
+            "neck": [
+              17,
+              11
+            ],
+            "grip": [
+              17,
+              14
+            ],
+            "hip": [
+              11,
+              15
+            ],
+            "tail": [
+              7,
+              14
+            ]
+          }
+        },
+        "feet": {
+          "definition": "stand",
+          "topLeft": [
+            8,
+            15
+          ],
+          "anchor": [
+            11,
+            15
+          ],
+          "points": {
+            "foot": [
+              10,
+              18
+            ]
+          }
+        },
+        "head": {
+          "definition": "head",
+          "topLeft": [
+            15,
+            6
+          ],
+          "anchor": [
+            17,
+            11
+          ],
+          "points": {
+            "mouth": [
+              22,
+              11
+            ]
+          }
+        },
+        "charm": {
+          "definition": "charm",
+          "topLeft": [
+            17,
+            14
+          ],
+          "anchor": [
+            17,
+            14
+          ],
+          "points": {
+            "light": [
+              18,
+              17
+            ]
+          }
+        }
+      },
+      "markers": [
+        {
+          "name": "pose",
+          "part": "feet",
+          "point": "foot",
+          "at": [
+            10,
+            18
+          ]
+        }
+      ]
+    }
+  },
+  "animations": {
+    "idle": {
+      "duration": 1860,
+      "loop": true,
+      "entries": [
+        {
+          "position": 0,
+          "frame": "idle",
+          "start": 0,
+          "duration": 880,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                10,
+                18
+              ]
+            }
+          ]
+        },
+        {
+          "position": 1,
+          "frame": "blink",
+          "start": 880,
+          "duration": 100,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                10,
+                18
+              ]
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "frame": "idle",
+          "start": 980,
+          "duration": 880,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                10,
+                18
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "run": {
+      "duration": 500,
+      "loop": true,
+      "entries": [
+        {
+          "position": 0,
+          "frame": "contact-a",
+          "start": 0,
+          "duration": 90,
+          "markers": [
+            {
+              "name": "foot-contact",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                17,
+                18
+              ]
+            }
+          ]
+        },
+        {
+          "position": 1,
+          "frame": "down-a",
+          "start": 90,
+          "duration": 80,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                15,
+                19
+              ]
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "frame": "passing-a",
+          "start": 170,
+          "duration": 80,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                9,
+                17
+              ]
+            }
+          ]
+        },
+        {
+          "position": 3,
+          "frame": "contact-b",
+          "start": 250,
+          "duration": 90,
+          "markers": [
+            {
+              "name": "foot-contact",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                15,
+                18
+              ]
+            }
+          ]
+        },
+        {
+          "position": 4,
+          "frame": "down-b",
+          "start": 340,
+          "duration": 80,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                15,
+                19
+              ]
+            }
+          ]
+        },
+        {
+          "position": 5,
+          "frame": "passing-b",
+          "start": 420,
+          "duration": 80,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                14,
+                17
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "cast": {
+      "duration": 600,
+      "loop": false,
+      "entries": [
+        {
+          "position": 0,
+          "frame": "gather",
+          "start": 0,
+          "duration": 220,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                15,
+                19
+              ]
+            }
+          ]
+        },
+        {
+          "position": 1,
+          "frame": "release",
+          "start": 220,
+          "duration": 80,
+          "markers": [
+            {
+              "name": "spell-release",
+              "part": "head",
+              "point": "mouth",
+              "at": [
+                22,
+                10
+              ]
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "frame": "recoil",
+          "start": 300,
+          "duration": 120,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                15,
+                19
+              ]
+            }
+          ]
+        },
+        {
+          "position": 3,
+          "frame": "recover",
+          "start": 420,
+          "duration": 180,
+          "markers": [
+            {
+              "name": "pose",
+              "part": "feet",
+              "point": "foot",
+              "at": [
+                10,
+                18
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

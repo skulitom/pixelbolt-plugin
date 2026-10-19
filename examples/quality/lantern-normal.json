@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "name": "lantern-normal",
+  "width": 24,
+  "height": 32,
+  "palette": {
+    "L": "#35a5e0",
+    "R": "#d5a5e0",
+    "F": "#8080ff"
+  },
+  "frames": [
+    {
+      "name": "warm",
+      "duration": 450,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 4,
+          "rows": [
+            ".........LL......",
+            "........LLLL.....",
+            ".......LLRRLL....",
+            "......LLR..RLL...",
+            "......LR....RL...",
+            "......LR....RL...",
+            "......LR....RL...",
+            ".....LLRRRRRRLL..",
+            ".....LLFFFFFRLL..",
+            "......LFFFFFL....",
+            "......LFFFFFL....",
+            "......LFFFFFL....",
+            ".......LFFFL.....",
+            "........LFL......",
+            ".........L.......",
+            ".........R.......",
+            "........RRR......",
+            ".......RRFRR.....",
+            ".......RFFFR.....",
+            "......RRFFFRR....",
+            ".....RRFFFFFRR...",
+            "....RRRFFFFFRRR..",
+            "...RRRRFFFFFRRRR.",
+            "..RRRRRFFFFFRRRRR"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bright",
+      "duration": 160,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 4,
+          "rows": [
+            ".........LL......",
+            "........LLLL.....",
+            ".......LLRRLL....",
+            "......LLR..RLL...",
+            "......LR....RL...",
+            "......LR....RL...",
+            "......LR....RL...",
+            ".....LLRRRRRRLL..",
+            ".....LLFFFFFRLL..",
+            "......LFFFFFL....",
+            "......LFFFFFL....",
+            "......LFFFFFL....",
+            ".......LFFFL.....",
+            "........LFL......",
+            ".........L.......",
+            ".........R.......",
+            "........RRR......",
+            ".......RRFRR.....",
+            ".......RFFFR.....",
+            "......RRFFFRR....",
+            ".....RRFFFFFRR...",
+            "....RRRFFFFFRRR..",
+            "...RRRRFFFFFRRRR.",
+            "..RRRRRFFFFFRRRRR"
+          ]
+        },
+        {
+          "op": "grid",
+          "x": 8,
+          "y": 13,
+          "rows": [
+            ".LF.",
+            "LFFL",
+            ".FL."
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "glow": {
+      "frames": [
+        "warm",
+        "bright"
+      ]
+    }
+  }
+}

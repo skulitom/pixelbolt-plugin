@@ -1,0 +1,487 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt particle effects",
+  "description": "Seeded particle emitters compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), drawn with stamp, grid and line operations on these symbols. Deterministic for a given seed.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-fx"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "symbols": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rows"
+      }
+    },
+    "anchor": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+    },
+    "effects": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 256
+          },
+          "duration": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60000
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60000
+                },
+                "maxItems": 256
+              }
+            ],
+            "description": "Milliseconds per frame, or one per frame; default 100."
+          },
+          "loop": {
+            "type": "boolean",
+            "description": "Seamless loop: the simulation warms up so particles in flight at frame 0 are those alive at the end. Needs a finite life."
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Default 1."
+          },
+          "emitters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Spawn centre [x, y] in canvas pixels."
+                },
+                "area": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 256
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Spawn box [w, h] centred on at; default [1, 1]."
+                },
+                "burst": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1024,
+                  "description": "Particles spawned at start (each cycle when looping)."
+                },
+                "rate": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 64,
+                  "description": "Particles per frame from start until end."
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "Frame of the burst or first spawn; default 0."
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 256,
+                  "description": "Frame where a rate emitter stops; default the last."
+                },
+                "life": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 256
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ],
+                  "description": "Frames a particle lives; [min, max] picks per particle. Required to loop or dissolve; otherwise particles live to the end."
+                },
+                "angle": {
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -3600,
+                        "maximum": 3600
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ],
+                  "description": "Launch direction in degrees, clockwise: 0 right, 90 down, 270 up. Default [0, 360]. [min, max] picks per particle."
+                },
+                "speed": {
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 64
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 64
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ],
+                  "description": "Launch speed in pixels per frame; default 0. [min, max] picks per particle."
+                },
+                "gravity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -8,
+                    "maximum": 8
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Acceleration [x, y] added each frame."
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Share of velocity lost each frame."
+                },
+                "attract": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    },
+                    "strength": {
+                      "type": "number",
+                      "minimum": -8,
+                      "maximum": 8,
+                      "description": "Acceleration toward at (negative repels); default 0.5."
+                    }
+                  },
+                  "required": [
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Pull every particle toward a point."
+                },
+                "sway": {
+                  "type": "object",
+                  "properties": {
+                    "amplitude": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 32
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Drawn offset [x, y]: x follows a sine and y a cosine, from a random phase."
+                    },
+                    "period": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 256,
+                      "description": "Frames per cycle; default 8."
+                    }
+                  },
+                  "required": [
+                    "amplitude"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Wobble, added when drawing (drifting leaves, rising embers)."
+                },
+                "floor": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096,
+                  "description": "Particles never go below this y."
+                },
+                "bounce": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Share of downward speed returned at the floor; default 0 (they settle)."
+                },
+                "shapes": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                      },
+                      "maxItems": 64,
+                      "minItems": 1
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                        },
+                        "maxItems": 64,
+                        "minItems": 1
+                      },
+                      "maxItems": 64,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "Symbol names drawn centred on the particle: one sequence, or a list of sequences with one picked per particle."
+                },
+                "play": {
+                  "enum": [
+                    "life",
+                    "loop",
+                    "once"
+                  ],
+                  "description": "life spreads the sequence over the lifetime (default); loop steps one symbol per frame from a random start; once steps and holds the last."
+                },
+                "remaps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "propertyNames": {
+                      "minLength": 1,
+                      "maxLength": 1
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    },
+                    "description": "Recolor grid characters for this operation only: character → palette name or colour."
+                  },
+                  "maxItems": 64,
+                  "description": "Colour variants; each particle picks one."
+                },
+                "trail": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 16,
+                      "description": "Frames back the streak reaches; default 2."
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A one-pixel streak from an earlier position, drawn under the particle."
+                },
+                "dissolve": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Share of the life, at its end, during which the particle thins out through an ordered-dither pattern."
+                },
+                "pattern": {
+                  "oneOf": [
+                    {
+                      "enum": [
+                        "bayer2",
+                        "bayer4",
+                        "bayer8",
+                        "noise",
+                        "value"
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        "maxItems": 16,
+                        "minItems": 1
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "Dissolve pattern, as for the dither operation: bayer2, bayer4 (default), bayer8, noise (ordered by the effect's seed) or a matrix of ranks, e.g. [[0, 1, 2], [1, 2, 0], [2, 0, 1]] for diagonal stripes."
+                }
+              },
+              "required": [
+                "at",
+                "shapes"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "minItems": 1
+          }
+        },
+        "required": [
+          "frames",
+          "emitters"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "symbols",
+    "effects"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    }
+  }
+}

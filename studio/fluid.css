@@ -1,0 +1,129 @@
+.fluid-workspace{
+  display:grid;
+  grid-template-columns:210px minmax(380px,1fr) 360px;
+  min-height:calc(100vh - 64px);
+  max-width:1800px;
+  margin:auto
+}
+.fluid-presets{
+  padding:29px 20px 24px;
+  border-right:1px solid var(--line)
+}
+.fluid-stage{
+  padding:28px 30px 20px;
+  min-width:0
+}
+.fluid-controls{
+  padding:29px 24px 24px;
+  border-left:1px solid var(--line);
+  background:var(--surface);
+  min-width:0
+}
+.fluid-preview{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:420px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--surface);
+  overflow:auto;
+  padding:24px
+}
+.fluid-preview canvas{
+  image-rendering:pixelated;
+  flex-shrink:0
+}
+.fluid-playback{
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:14px;
+  margin-top:16px;
+  font-size:11px;
+  color:var(--muted)
+}
+.fluid-playback select{
+  border:1px solid var(--line);
+  background:var(--raised)
+}
+.fluid-status{
+  margin-top:14px;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.6
+}
+.fluid-sliders{
+  display:grid;
+  gap:16px;
+  margin:22px 0 18px
+}
+.fluid-sliders label,.fluid-seed{
+  display:grid;
+  grid-template-columns:1fr auto;
+  gap:6px 10px;
+  font-size:12px;
+  align-items:center
+}
+.fluid-sliders input{
+  grid-column:1 / -1;
+  width:100%;
+  accent-color:var(--accent)
+}
+.fluid-sliders output{
+  font:11px var(--mono);
+  color:var(--muted)
+}
+.fluid-seed{
+  grid-template-columns:auto 1fr auto
+}
+.fluid-seed input{
+  width:100%;
+  min-width:0;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:7px 9px;
+  background:var(--raised);
+  color:var(--ink);
+  font:12px var(--mono)
+}
+.fluid-downloads{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:22px 0 18px
+}
+.fluid-controls pre{
+  background:var(--selection);
+  padding:12px;
+  border-radius:6px;
+  font:11px/1.7 var(--mono);
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  margin:8px 0 16px
+}
+.fluid-controls .frames-call-label{
+  font-size:11px
+}
+@media(max-width:1150px){
+  .fluid-workspace{
+    grid-template-columns:170px minmax(0,1fr) 300px
+  }
+}
+@media(max-width:900px){
+  .fluid-workspace{
+    grid-template-columns:minmax(0,1fr)
+  }
+  .fluid-presets,.fluid-controls{
+    border:0
+  }
+  .fluid-presets .examples{
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr))
+  }
+  .fluid-preview{
+    min-height:260px
+  }
+}
+a.button{
+  text-decoration:none
+}

@@ -1,0 +1,304 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "magic-swirl",
+  "width": 48,
+  "height": 48,
+  "palette": {
+    "v": "#3d2a6b",
+    "p": "#7a44c9",
+    "m": "#c06cf0",
+    "c": "#6fe3f2",
+    "W": "#f4f0ff"
+  },
+  "effects": {
+    "magic-swirl": {
+      "frames": 24,
+      "duration": 60,
+      "loop": true,
+      "seed": 9,
+      "substeps": 1,
+      "buoyancy": 0,
+      "vorticity": 0.2,
+      "dissipation": 0.08,
+      "cooling": 0.35,
+      "drag": 0.05,
+      "emitters": [
+        {
+          "name": "swirl",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 21,
+          "rate": 1,
+          "vortex": 0.7,
+          "expand": -1.15,
+          "pulse": {
+            "amplitude": 0.4,
+            "period": 24
+          }
+        },
+        {
+          "name": "comet-1",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 2.2,
+          "rate": 1,
+          "temperature": 1.05,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24
+          }
+        },
+        {
+          "name": "glint-1",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 1.5,
+          "rate": 1,
+          "temperature": 1.45,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24
+          }
+        },
+        {
+          "name": "halo-1",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 2.4,
+          "rate": 1,
+          "density": 0.15,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24
+          }
+        },
+        {
+          "name": "tail-1",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 1.2,
+          "rate": 1,
+          "density": 1.1,
+          "pulse": {
+            "amplitude": 0.5,
+            "period": 6
+          },
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24
+          },
+          "sparks": {
+            "count": 0.7,
+            "life": [
+              12,
+              20
+            ],
+            "colors": [
+              "W",
+              "c",
+              "c",
+              "m"
+            ],
+            "angle": [
+              0,
+              360
+            ],
+            "speed": [
+              0.1,
+              0.3
+            ],
+            "follow": 1,
+            "drag": 0.08
+          }
+        },
+        {
+          "name": "comet-2",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 2.2,
+          "rate": 1,
+          "temperature": 1.05,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24,
+            "phase": 180
+          }
+        },
+        {
+          "name": "glint-2",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 1.5,
+          "rate": 1,
+          "temperature": 1.45,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24,
+            "phase": 180
+          }
+        },
+        {
+          "name": "halo-2",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 2.4,
+          "rate": 1,
+          "density": 0.15,
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24,
+            "phase": 180
+          }
+        },
+        {
+          "name": "tail-2",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 1.2,
+          "rate": 1,
+          "density": 1.1,
+          "pulse": {
+            "amplitude": 0.5,
+            "period": 6
+          },
+          "orbit": {
+            "radius": [
+              16,
+              13
+            ],
+            "period": 24,
+            "phase": 180
+          },
+          "sparks": {
+            "count": 0.7,
+            "life": [
+              12,
+              20
+            ],
+            "colors": [
+              "W",
+              "c",
+              "c",
+              "m"
+            ],
+            "angle": [
+              0,
+              360
+            ],
+            "speed": [
+              0.1,
+              0.3
+            ],
+            "follow": 1,
+            "drag": 0.08
+          }
+        },
+        {
+          "name": "drain",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 5,
+          "rate": 1,
+          "density": -0.25
+        },
+        {
+          "name": "core",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 2,
+          "rate": 1,
+          "density": 0.3,
+          "temperature": 1.1
+        },
+        {
+          "name": "eye",
+          "at": [
+            24,
+            24
+          ],
+          "radius": 1,
+          "rate": 1,
+          "density": 0.5,
+          "temperature": 1.3,
+          "orbit": {
+            "radius": 1.5,
+            "period": 12
+          }
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "v",
+            "p",
+            "m"
+          ],
+          "thresholds": [
+            0.12,
+            0.3,
+            0.65
+          ],
+          "dither": 0.5,
+          "pattern": "value"
+        },
+        {
+          "field": "temperature",
+          "colors": [
+            "c",
+            "W"
+          ],
+          "thresholds": [
+            0.5,
+            0.9
+          ],
+          "dither": 0.25
+        }
+      ]
+    }
+  }
+}

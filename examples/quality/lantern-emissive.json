@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "name": "lantern-emission",
+  "width": 24,
+  "height": 32,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "frames": [
+    {
+      "name": "warm",
+      "duration": 450,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 8,
+          "y": 13,
+          "rows": [
+            "....",
+            ".aa.",
+            ".ya.",
+            "...."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bright",
+      "duration": 160,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 8,
+          "y": 13,
+          "rows": [
+            ".aa.",
+            "aywa",
+            "aywa",
+            ".aa."
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "glow": {
+      "frames": [
+        "warm",
+        "bright"
+      ]
+    }
+  }
+}

@@ -2,10 +2,13 @@
 // fluid simulation on a grid with one cell per canvas pixel and bakes every frame into palette `grid` operations on
 // the source's own palette, so inspect, patch, overlay and export work unchanged and no colour outside the palette
 // can appear. Gases (smoke, fire, steam, explosions, magic) use Stam-style stable fluids on a staggered grid:
-// semi-Lagrangian advection, a fixed-iteration pressure solve, vorticity confinement, buoyancy from temperature,
-// dissipation and cooling. Liquids (water, splashes, drips, potions) use FLIP particles on the same grid and pressure
-// solve. Fields become pixels through palette ramps and ordered dither. Browser-compatible and deterministic: only
-// + − × ÷ and sqrt, craft.js's polynomial trigonometry and seeded hash, a fixed timestep and fixed iteration counts.
+// semi-Lagrangian advection (or MacCormack, for sharp edges), a fixed-iteration pressure solve, vorticity confinement,
+// buoyancy from temperature, dissipation and cooling. Liquids (water, splashes, drips, potions) use FLIP particles
+// (optionally APIC) on the same grid and pressure solve, with cohesion and adhesion. Either may be viscous: an implicit
+// viscosity solve in stress form, so a thick fluid falls as fast as water and only resists shearing; and a liquid may
+// have a yield stress, elastic below it and flowing above it, for mud and slime. Fields become pixels through palette
+// ramps and ordered dither. Browser-compatible and deterministic: only + − × ÷ and sqrt, craft.js's polynomial
+// trigonometry and seeded hash, a fixed timestep and fixed iteration counts.
 // createLiveFluid runs the same simulation a frame at a time for interactive pages, with pushes, puffs and boosts.
 import { PixelError, renderProject, parseColor } from './core.js';
 import { fields } from './authoring.js';
@@ -25,6 +28,13 @@ const DEPTH_REACH = 3;
 const SALT = { flicker: 1, noiseX: 2, noiseY: 3, spawn: 4, jitterX: 5, jitterY: 6, drain: 7, sparks: 8, sparkX: 9, sparkY: 10, angle: 11, speed: 12, life: 13 };
 // Whitewater layers draw from their own streams, keyed apart from the emitters (which are numbered from 0).
 const WHITEWATER = 1000;
+// Gas advection schemes and the thickest viscosity a source may ask for, in square pixels per frame.
+const ADVECTION = ['smooth', 'sharp'];
+const MAX_VISCOSITY = 64;
+// A yield-stress liquid's elastic stiffness (stress per unit of strain, in square pixels per frame squared): stiff enough
+// that a heap holding itself up sags by only a few hundredths, and solved implicitly, so it is stable at any timestep.
+// Where it has yielded and flows, the viscosity solve gives it PLASTIC instead, which keeps that flow steady.
+const STIFFNESS = 16, PLASTIC = 1;
 
 const fail = (path, message) => { throw new PixelError(path, message); };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -177,13 +187,18 @@ function readShape(value, path, width, height) {
 
 function readEffect(effect, path, source) {
   const { width, height, palette, symbols } = source;
-  fields(effect, ['kind', 'frames', 'duration', 'loop', 'seed', 'warmup', 'blend', 'substeps', 'iterations', 'buoyancy', 'weight', 'vorticity', 'dissipation', 'cooling', 'drag', 'wind', 'gravity', 'flip', 'tension', 'fill', 'walls', 'obstacles', 'emitters', 'look', 'whitewater', 'light', 'outline', 'cleanup'], path);
+  fields(effect, ['kind', 'frames', 'duration', 'loop', 'seed', 'warmup', 'blend', 'substeps', 'iterations', 'buoyancy', 'weight', 'vorticity', 'dissipation', 'cooling', 'drag', 'wind', 'advection', 'viscosity', 'yield', 'slip', 'gravity', 'flip', 'apic', 'tension', 'adhesion', 'fill', 'walls', 'obstacles', 'emitters', 'look', 'whitewater', 'light', 'outline', 'cleanup'], path);
   const kind = effect.kind ?? 'gas';
   if (!FLUID_KINDS.includes(kind)) fail(`${path}.kind`, 'expected gas (smoke, fire, steam, magic) or liquid (water, potions)');
   const liquid = kind === 'liquid';
-  for (const key of liquid ? ['buoyancy', 'weight', 'vorticity', 'dissipation', 'cooling', 'wind'] : ['gravity', 'flip', 'tension', 'fill']) {
+  if (liquid && effect.advection !== undefined) fail(`${path}.advection`, 'advection applies to gases; a liquid\'s particles carry it');
+  for (const key of liquid ? ['buoyancy', 'weight', 'vorticity', 'dissipation', 'cooling', 'wind'] : ['gravity', 'flip', 'apic', 'tension', 'adhesion', 'yield', 'fill']) {
     if (effect[key] !== undefined) fail(`${path}.${key}`, liquid ? `${key} applies to gases; liquids fall by gravity and keep their volume` : `${key} applies to liquids; gases rise by buoyancy`);
   }
+  const advection = effect.advection ?? 'smooth';
+  if (!ADVECTION.includes(advection)) fail(`${path}.advection`, 'expected smooth (plain semi-Lagrangian, the default) or sharp (MacCormack with a limiter: crisper edges and swirls)');
+  const viscosity = number(effect.viscosity ?? 0, `${path}.viscosity`, 0, MAX_VISCOSITY), yieldStress = liquid ? number(effect.yield ?? 0, `${path}.yield`, 0, 16) : 0;
+  if (effect.slip !== undefined && !viscosity && !yieldStress) fail(`${path}.slip`, `slip lets a thick fluid slide along walls and obstacles instead of being held by them; set viscosity${liquid ? ' or yield' : ''}`);
   if (!liquid && effect.whitewater !== undefined) fail(`${path}.whitewater`, 'whitewater is spray and foam thrown off a liquid; it applies to liquids');
   const frames = integer(effect.frames, `${path}.frames`, 1, 256), loop = effect.loop === undefined ? false : boolean(effect.loop, `${path}.loop`);
   const durations = Array.isArray(effect.duration)
@@ -241,8 +256,10 @@ function readEffect(effect, path, source) {
     buoyancy: number(effect.buoyancy ?? 0.15, `${path}.buoyancy`, -2, 2), weight: number(effect.weight ?? 0, `${path}.weight`, -2, 2),
     vorticity: number(effect.vorticity ?? 0.25, `${path}.vorticity`, 0, 2), dissipation: number(effect.dissipation ?? 0.03, `${path}.dissipation`, 0, 1),
     cooling: number(effect.cooling ?? 0.08, `${path}.cooling`, 0, 1), drag: number(effect.drag ?? (liquid ? 0 : 0.02), `${path}.drag`, 0, 1),
-    wind: effect.wind === undefined ? [0, 0] : pair(effect.wind, `${path}.wind`, -2, 2), gravity,
-    flip: number(effect.flip ?? 0.9, `${path}.flip`, 0, 1), tension: number(effect.tension ?? 0.5, `${path}.tension`, 0, 4),
+    wind: effect.wind === undefined ? [0, 0] : pair(effect.wind, `${path}.wind`, -2, 2), gravity, sharp: advection === 'sharp',
+    viscosity, yield: yieldStress, slip: effect.slip === undefined ? false : boolean(effect.slip, `${path}.slip`),
+    flip: number(effect.flip ?? 0.9, `${path}.flip`, 0, 1), apic: effect.apic === undefined ? false : boolean(effect.apic, `${path}.apic`),
+    tension: number(effect.tension ?? 0.5, `${path}.tension`, 0, 4), adhesion: liquid ? number(effect.adhesion ?? 0, `${path}.adhesion`, 0, 4) : 0,
     outline: effect.outline === undefined ? 0 : paletteKey(effect.outline, `${path}.outline`, palette).charCodeAt(0)
   };
 }
@@ -349,15 +366,233 @@ function advectVelocity(g, dt) {
   }
 }
 
-// Scalars move with the flow; the back-trace is shared by every scalar field.
-function advectScalars(g, dt, pairs) {
-  const { W, H, u, v, solid } = g;
+// Scalars move with the flow; the back-trace (and for sharp advection the forward trace) is shared by every field.
+function advectScalars(g, dt, pairs, sharp) {
+  const { W, H, N, u, v, solid } = g, s = sharp ? sharpScratch(g) : null;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
     const c = j * W + i;
     if (solid[c]) { for (const [, next] of pairs) next[c] = 0; continue; }
     const x = i + 0.5, y = j + 0.5, ax = sampleU(g, u, x, y), ay = sampleV(g, v, x, y), mx = x - 0.5 * dt * ax, my = y - 0.5 * dt * ay;
     const bx = x - dt * sampleU(g, u, mx, my) - 0.5, by = y - dt * sampleV(g, v, mx, my) - 0.5;
     for (const [field, next] of pairs) next[c] = bilinearZero(field, W, H, bx, by);
+    if (s) {
+      const fx = x + 0.5 * dt * ax, fy = y + 0.5 * dt * ay;
+      s.bx[c] = bx; s.by[c] = by; s.fx[c] = x + dt * sampleU(g, u, fx, fy) - 0.5; s.fy[c] = y + dt * sampleV(g, v, fx, fy) - 0.5;
+    }
+  }
+  if (!s) return;
+  for (const [field, next] of pairs) {
+    for (let c = 0; c < N; c++) if (!solid[c]) s.next[c] = bilinearZero(next, W, H, s.fx[c], s.fy[c]);
+    for (let c = 0; c < N; c++) {
+      if (solid[c]) continue;
+      cornersZero(field, W, H, s.bx[c], s.by[c], s.range);
+      const value = next[c] + 0.5 * (field[c] - s.next[c]);
+      next[c] = value < s.range[0] ? s.range[0] : value > s.range[1] ? s.range[1] : value;
+    }
+  }
+}
+
+// The lowest and highest of the four lattice values `bilinear` blends at (fx, fy), written to `out`.
+function corners(a, nx, ny, fx, fy, out) {
+  if (fx < 0) fx = 0; else if (fx > nx - 1) fx = nx - 1;
+  if (fy < 0) fy = 0; else if (fy > ny - 1) fy = ny - 1;
+  let i = Math.floor(fx), j = Math.floor(fy);
+  if (i > nx - 2) i = nx - 2;
+  if (j > ny - 2) j = ny - 2;
+  const k = j * nx + i, a0 = a[k], a1 = a[k + 1], a2 = a[k + nx], a3 = a[k + nx + 1];
+  out[0] = Math.min(a0, a1, a2, a3); out[1] = Math.max(a0, a1, a2, a3);
+}
+// The same for `bilinearZero`, where lattice points beyond the grid read 0.
+function cornersZero(a, nx, ny, fx, fy, out) {
+  const i = Math.floor(fx), j = Math.floor(fy), k = j * nx + i, left = i >= 0 && i < nx, right = i + 1 >= 0 && i + 1 < nx, top = j >= 0 && j < ny, bottom = j + 1 >= 0 && j + 1 < ny;
+  const a0 = left && top ? a[k] : 0, a1 = right && top ? a[k + 1] : 0, a2 = left && bottom ? a[k + nx] : 0, a3 = right && bottom ? a[k + nx + 1] : 0;
+  out[0] = Math.min(a0, a1, a2, a3); out[1] = Math.max(a0, a1, a2, a3);
+}
+// The slope [d/dx, d/dy] of the interpolation `bilinear` makes at (fx, fy), written to `out`; 0 along an axis where
+// the point lies beyond the lattice, since the interpolation is flat there.
+function slope(a, nx, ny, fx, fy, out) {
+  let flatX = false, flatY = false;
+  if (fx < 0) { fx = 0; flatX = true; } else if (fx > nx - 1) { fx = nx - 1; flatX = true; }
+  if (fy < 0) { fy = 0; flatY = true; } else if (fy > ny - 1) { fy = ny - 1; flatY = true; }
+  let i = Math.floor(fx), j = Math.floor(fy);
+  if (i > nx - 2) i = nx - 2;
+  if (j > ny - 2) j = ny - 2;
+  const s = fx - i, t = fy - j, k = j * nx + i;
+  out[0] = flatX ? 0 : (a[k + 1] - a[k]) * (1 - t) + (a[k + nx + 1] - a[k + nx]) * t;
+  out[1] = flatY ? 0 : (a[k + nx] - a[k]) * (1 - s) + (a[k + nx + 1] - a[k + 1]) * s;
+}
+
+// Sharp advection (MacCormack, with the limiter of Selle et al., "An unconditionally stable MacCormack method", 2008):
+// after the plain back-trace, the result is traced forward again and half the round trip's error is taken off, then
+// clamped to the values the back-trace blended, so edges and small swirls stay crisp without new peaks or ripples.
+function sharpScratch(g) {
+  if (!g.sharp) {
+    const f = n => new Float64Array(n), U = g.u.length, V = g.v.length, N = g.N;
+    g.sharp = { u1: f(U), v1: f(V), uLo: f(U), uHi: f(U), vLo: f(V), vHi: f(V), bx: f(N), by: f(N), fx: f(N), fy: f(N), next: f(N), range: f(2) };
+  }
+  return g.sharp;
+}
+function sharpenVelocity(g, dt) {
+  const { W, H, u, v, u0, v0, uFixed, vFixed } = g, { u1, v1, uLo, uHi, vLo, vHi, range } = sharpScratch(g);
+  // The limits come from the old velocities around each back-traced point.
+  const trace = (x, y, ax, ay, direction) => { const mx = x + direction * 0.5 * dt * ax, my = y + direction * 0.5 * dt * ay; return [x + direction * dt * sampleU(g, u0, mx, my), y + direction * dt * sampleV(g, v0, mx, my)]; };
+  for (let j = 0; j < H; j++) for (let i = 0; i <= W; i++) {
+    const k = j * (W + 1) + i;
+    if (uFixed[k]) continue;
+    const x = i, y = j + 0.5, ax = u0[k], ay = sampleV(g, v0, x, y), [bx, by] = trace(x, y, ax, ay, -1), [fx, fy] = trace(x, y, ax, ay, 1);
+    corners(u0, W + 1, H, bx, by - 0.5, range); uLo[k] = range[0]; uHi[k] = range[1];
+    u1[k] = sampleU(g, u, fx, fy);
+  }
+  for (let j = 0; j <= H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    if (vFixed[k]) continue;
+    const x = i + 0.5, y = j, ax = sampleU(g, u0, x, y), ay = v0[k], [bx, by] = trace(x, y, ax, ay, -1), [fx, fy] = trace(x, y, ax, ay, 1);
+    corners(v0, W, H + 1, bx - 0.5, by, range); vLo[k] = range[0]; vHi[k] = range[1];
+    v1[k] = sampleV(g, v, fx, fy);
+  }
+  const correct = (a, a0, a1, lo, hi, fixed) => { for (let k = 0; k < a.length; k++) if (!fixed[k]) { const value = a[k] + 0.5 * (a0[k] - a1[k]); a[k] = value < lo[k] ? lo[k] : value > hi[k] ? hi[k] : value; } };
+  correct(u, u0, u1, uLo, uHi, uFixed); correct(v, v0, v1, vLo, vHi, vFixed);
+}
+
+// ---- Viscosity --------------------------------------------------------------------------------------------------------
+// Implicit viscosity in stress form, after Batty and Bridson ("Accurate viscous free surfaces for buckling, coiling and
+// rotating liquids", 2008): the faces beside the fluid solve u − dt ∇·(μ (∇u + ∇uᵀ)) = u₀ with a fixed number of
+// Jacobi-preconditioned conjugate-gradient steps. On the staggered grid, stretching stress lives at cell centres and
+// shear at cell corners. μ is the fluid's viscosity in its cells and 0 in air, and a corner that touches air carries no
+// shear, so the surface is free of stress: a thick drop falls as fast as water, and only shearing and stretching are
+// slowed, never motion as a whole, sliding or turning. Walls and obstacles hold the fluid (faces in them, and anything
+// beyond a closed edge, read 0); with `slip`, corners touching them carry no shear, so it slides along them instead.
+const AIR = 0, FLUID = 1, SOLID = 2;
+function viscosityScratch(g) {
+  if (!g.visc) {
+    const { N, W, H } = g, U = g.u.length, V = g.v.length, M = (W + 1) * (H + 1), f = n => new Float64Array(n);
+    g.visc = { mu: f(N), node: f(M), kind: new Uint8Array(N), uLive: new Uint8Array(U), vLive: new Uint8Array(V), du: f(U), dv: f(V), ru: f(U), rv: f(V), zu: f(U), zv: f(V), pu: f(U), pv: f(V), qu: f(U), qv: f(V), sxx: f(N), syy: f(N), sxy: f(M) };
+  }
+  return g.visc;
+}
+// q = p − dt ∇·(μ (∇p + ∇pᵀ)) on the faces taking part; p must be 0 on the others, or on fixed faces at least.
+function applyViscosity(g, dt, pu, pv, qu, qv) {
+  const { W, H } = g, { mu, node, uLive, vLive, sxx, syy, sxy } = g.visc, X = W + 1;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const c = j * W + i, m = mu[c];
+    if (m) { sxx[c] = 2 * m * (pu[j * X + i + 1] - pu[j * X + i]); syy[c] = 2 * m * (pv[(j + 1) * W + i] - pv[j * W + i]); } else { sxx[c] = 0; syy[c] = 0; }
+  }
+  for (let j = 0; j <= H; j++) for (let i = 0; i <= W; i++) {
+    const n = j * X + i, m = node[n];
+    if (!m) { sxy[n] = 0; continue; }
+    const above = j > 0 ? pu[(j - 1) * X + i] : 0, below = j < H ? pu[j * X + i] : 0, left = i > 0 ? pv[j * W + i - 1] : 0, right = i < W ? pv[j * W + i] : 0;
+    sxy[n] = m * (below - above + right - left);
+  }
+  for (let j = 0; j < H; j++) for (let i = 0; i <= W; i++) {
+    const k = j * X + i;
+    qu[k] = uLive[k] ? pu[k] - dt * ((i < W ? sxx[j * W + i] : 0) - (i > 0 ? sxx[j * W + i - 1] : 0) + sxy[(j + 1) * X + i] - sxy[j * X + i]) : 0;
+  }
+  for (let j = 0; j <= H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i;
+    qv[k] = vLive[k] ? pv[k] - dt * ((j < H ? syy[k] : 0) - (j > 0 ? syy[k - W] : 0) + sxy[j * X + i + 1] - sxy[j * X + i]) : 0;
+  }
+}
+// Each cell as air, fluid (one of `active`) or solid, and what lies beyond each edge: a closed edge is a wall.
+function classify(g, active) {
+  const { N, solid } = g, { kind } = g.visc;
+  for (let c = 0; c < N; c++) kind[c] = solid[c] ? SOLID : active[c] ? FLUID : AIR;
+}
+// A value at each cell corner: the mean of `values` over the fluid cells around it, or 0 where it touches air (the free
+// surface carries no shear) or, with `slip`, a wall.
+function cornerMean(g, values, slip, out) {
+  const { W, H, walls } = g, { kind } = g.visc, X = W + 1;
+  const at = (i, j) => (i < 0 ? (walls.left ? SOLID : AIR) : i >= W ? (walls.right ? SOLID : AIR) : j < 0 ? (walls.top ? SOLID : AIR) : j >= H ? (walls.bottom ? SOLID : AIR) : kind[j * W + i]);
+  let sum = 0, count = 0, air = false, wall = false;
+  const look = (i, j) => { const k = at(i, j); if (k === AIR) air = true; else if (k === SOLID) wall = true; else { sum += values[j * W + i]; count++; } };
+  for (let j = 0; j <= H; j++) for (let i = 0; i <= W; i++) {
+    sum = 0; count = 0; air = false; wall = false;
+    look(i - 1, j - 1); look(i, j - 1); look(i - 1, j); look(i, j);
+    out[j * X + i] = air || !count || (slip && wall) ? 0 : sum / count;
+  }
+}
+// One viscosity step over the cells in `active` (the open cells of a gas, the wet cells of a liquid), each with the
+// effect's viscosity plus `extra` (a yield-stress liquid's stiffness where it has not yielded).
+function viscous(g, active, effect, dt, extra = null) {
+  const { W, H, N, u, v, uFixed, vFixed } = g, w = viscosityScratch(g), { mu, node, kind, uLive, vLive, du, dv } = w, X = W + 1;
+  classify(g, active);
+  for (let c = 0; c < N; c++) mu[c] = kind[c] === FLUID ? effect.viscosity + (extra ? extra[c] : 0) : 0;
+  cornerMean(g, mu, effect.slip, node);
+  for (let j = 0; j < H; j++) for (let i = 0; i <= W; i++) {
+    const k = j * X + i, l = i > 0 ? mu[j * W + i - 1] : 0, r = i < W ? mu[j * W + i] : 0;
+    uLive[k] = !uFixed[k] && ((i > 0 && kind[j * W + i - 1] === FLUID) || (i < W && kind[j * W + i] === FLUID)) ? 1 : 0;
+    if (uLive[k]) du[k] = 1 + dt * (2 * l + 2 * r + node[k] + node[k + X]);
+  }
+  for (let j = 0; j <= H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, t = j > 0 ? mu[k - W] : 0, b = j < H ? mu[k] : 0;
+    vLive[k] = !vFixed[k] && ((j > 0 && kind[k - W] === FLUID) || (j < H && kind[k] === FLUID)) ? 1 : 0;
+    if (vLive[k]) dv[k] = 1 + dt * (2 * t + 2 * b + node[j * X + i] + node[j * X + i + 1]);
+  }
+  // Conjugate gradients from the current velocities, so b = x and the first residual is x − A x.
+  const { ru, rv, zu, zv, pu, pv, qu, qv } = w;
+  applyViscosity(g, dt, u, v, qu, qv);
+  let rz = 0;
+  for (let k = 0; k < u.length; k++) { if (uLive[k]) { ru[k] = u[k] - qu[k]; zu[k] = ru[k] / du[k]; pu[k] = zu[k]; rz += ru[k] * zu[k]; } else pu[k] = 0; }
+  for (let k = 0; k < v.length; k++) { if (vLive[k]) { rv[k] = v[k] - qv[k]; zv[k] = rv[k] / dv[k]; pv[k] = zv[k]; rz += rv[k] * zv[k]; } else pv[k] = 0; }
+  for (let it = 0; it < effect.iterations && rz > 0; it++) {
+    applyViscosity(g, dt, pu, pv, qu, qv);
+    let pq = 0;
+    for (let k = 0; k < u.length; k++) if (uLive[k]) pq += pu[k] * qu[k];
+    for (let k = 0; k < v.length; k++) if (vLive[k]) pq += pv[k] * qv[k];
+    if (!(pq > 0)) break;
+    const alpha = rz / pq;
+    let next = 0;
+    for (let k = 0; k < u.length; k++) if (uLive[k]) { u[k] += alpha * pu[k]; ru[k] -= alpha * qu[k]; zu[k] = ru[k] / du[k]; next += ru[k] * zu[k]; }
+    for (let k = 0; k < v.length; k++) if (vLive[k]) { v[k] += alpha * pv[k]; rv[k] -= alpha * qv[k]; zv[k] = rv[k] / dv[k]; next += rv[k] * zv[k]; }
+    const beta = next / rz;
+    rz = next;
+    for (let k = 0; k < u.length; k++) if (uLive[k]) pu[k] = zu[k] + beta * pu[k];
+    for (let k = 0; k < v.length; k++) if (vLive[k]) pv[k] = zv[k] + beta * pv[k];
+  }
+}
+
+// ---- Yield stress -----------------------------------------------------------------------------------------------------
+// A yield-stress liquid (mud, slime, toothpaste) is elastic until it is pushed past its yield, and then flows: after
+// Goktekin, Bargteil and O'Brien, "A method for animating viscoelastic fluids" (2004). Each particle carries how far it
+// has been strained out of shape (the deviatoric strain: a stretch a and a shear b), turned with the flow and capped at
+// the yield strain, where any further strain is plastic flow. The elastic stress, 2 × STIFFNESS × strain, pushes the
+// liquid back toward its shape. It is split as implicit elasticity is: the stress of the strain so far is a force here,
+// and the strain this step adds acts as viscosity STIFFNESS × dt in the viscosity solve, in the cells below the yield.
+// A heap of height h holds itself up when the yield is more than about gravity × h / 2.
+function strainForce(state, effect, dt) {
+  const { g, fluid, strain } = state, { W, H, N, u, v, uFixed, vFixed } = g, { a, b, count, stiff, shear } = strain, X = W + 1;
+  const limit = effect.yield / (2 * STIFFNESS), k2 = 2 * STIFFNESS;
+  a.fill(0); b.fill(0); count.fill(0);
+  for (let k = 0; k < state.n; k++) { const c = Math.floor(state.y[k]) * W + Math.floor(state.x[k]); a[c] += state.ea[k]; b[c] += state.eb[k]; count[c]++; }
+  for (let c = 0; c < N; c++) {
+    if (count[c]) { a[c] /= count[c]; b[c] /= count[c]; }
+    stiff[c] = !fluid[c] ? 0 : a[c] * a[c] + b[c] * b[c] < 0.98 * limit * limit ? STIFFNESS * dt : Math.min(STIFFNESS * dt, PLASTIC);
+  }
+  viscosityScratch(g); classify(g, fluid);
+  cornerMean(g, b, effect.slip, shear);
+  // u gains dt (∂σxx/∂x + ∂σxy/∂y) and v gains dt (∂σxy/∂x + ∂σyy/∂y), with σxx = 2k a = −σyy and σxy = 2k b.
+  for (let j = 0; j < H; j++) for (let i = 0; i <= W; i++) {
+    const k = j * X + i, l = i > 0 && fluid[j * W + i - 1], r = i < W && fluid[j * W + i];
+    if (uFixed[k] || (!l && !r)) continue;
+    u[k] += dt * k2 * ((r ? a[j * W + i] : 0) - (l ? a[j * W + i - 1] : 0) + shear[(j + 1) * X + i] - shear[j * X + i]);
+  }
+  for (let j = 0; j <= H; j++) for (let i = 0; i < W; i++) {
+    const k = j * W + i, t = j > 0 && fluid[k - W], d = j < H && fluid[k];
+    if (vFixed[k] || (!t && !d)) continue;
+    v[k] += dt * k2 * ((t ? a[k - W] : 0) - (d ? a[k] : 0) + shear[j * X + i + 1] - shear[j * X + i]);
+  }
+}
+
+// The rate of strain (stretch, shear) and the spin of each wet cell, from the same differences the stress uses: stretch
+// across the cell, shear and spin at its corners (walls, and anything beyond a closed edge, still), averaged.
+function strainRates(state) {
+  const { g, fluid, strain } = state, { W, H, u, v } = g, { ra, rb, spin } = strain, X = W + 1;
+  const uAt = (i, j) => (j >= 0 && j < H ? u[j * X + i] : 0), vAt = (i, j) => (i >= 0 && i < W ? v[j * W + i] : 0);
+  const dudy = (i, j) => uAt(i, j) - uAt(i, j - 1), dvdx = (i, j) => vAt(i, j) - vAt(i - 1, j);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const c = j * W + i;
+    if (!fluid[c]) continue;
+    const uy = 0.25 * (dudy(i, j) + dudy(i + 1, j) + dudy(i, j + 1) + dudy(i + 1, j + 1)), vx = 0.25 * (dvdx(i, j) + dvdx(i + 1, j) + dvdx(i, j + 1) + dvdx(i + 1, j + 1));
+    ra[c] = 0.5 * (u[j * X + i + 1] - u[j * X + i] - v[(j + 1) * W + i] + v[j * W + i]); rb[c] = 0.5 * (uy + vx); spin[c] = vx - uy;
   }
 }
 
@@ -377,6 +612,23 @@ function confine(g, strength, dt, curl, magnitude) {
     u[j * (W + 1) + i] += fx * 0.5; u[j * (W + 1) + i + 1] += fx * 0.5;
     v[j * W + i] += fy * 0.5; v[(j + 1) * W + i] += fy * 0.5;
   }
+}
+
+// Whether the straight path from (x0, y0) to (x1, y1) enters a solid cell after the one it starts in. It visits every
+// cell the path passes through, in order (Amanatides and Woo's grid walk), so nothing that moves several pixels in a step
+// can skip over a wall one pixel thick, or slip between two pixels that touch only at their corners. Cells beyond the
+// grid are open.
+function crossesSolid(solid, W, H, x0, y0, x1, y1) {
+  let i = Math.floor(x0), j = Math.floor(y0);
+  const dx = x1 - x0, dy = y1 - y0, si = dx > 0 ? 1 : dx < 0 ? -1 : 0, sj = dy > 0 ? 1 : dy < 0 ? -1 : 0;
+  // How far along the path (0 to 1) the next vertical and horizontal cell edges are, and how far apart they lie.
+  let tx = si ? ((si > 0 ? i + 1 : i) - x0) / dx : 2, ty = sj ? ((sj > 0 ? j + 1 : j) - y0) / dy : 2;
+  const stepX = si ? si / dx : 0, stepY = sj ? sj / dy : 0;
+  for (let n = Math.abs(Math.floor(x1) - i) + Math.abs(Math.floor(y1) - j); n > 0; n--) {
+    if (tx < ty) { i += si; tx += stepX; } else { j += sj; ty += stepY; }
+    if (i >= 0 && j >= 0 && i < W && j < H && solid[j * W + i]) return true;
+  }
+  return false;
 }
 
 // ---- Emitters ---------------------------------------------------------------------------------------------------------
@@ -473,11 +725,13 @@ function stepGas(state, effect, dt) {
   if (effect.vorticity) confine(g, effect.vorticity, dt, state.curl, state.magnitude);
   enforce(g);
   advectVelocity(g, dt);
+  if (effect.sharp) sharpenVelocity(g, dt);
   if (effect.drag) { const keep = 1 - effect.drag * dt; for (let k = 0; k < u.length; k++) u[k] *= keep; for (let k = 0; k < v.length; k++) v[k] *= keep; }
   enforce(g);
+  if (effect.viscosity) viscous(g, state.open, effect, dt);
   project(g, state.open, effect.iterations, state.source);
   for (const a of [u, v]) for (let k = 0; k < a.length; k++) { if (a[k] > MAX_SPEED) a[k] = MAX_SPEED; else if (a[k] < -MAX_SPEED) a[k] = -MAX_SPEED; }
-  advectScalars(g, dt, [[d, d1], [T, T1]]);
+  advectScalars(g, dt, [[d, d1], [T, T1]], effect.sharp);
   const fade = 1 - effect.dissipation * dt, cool = 1 - effect.cooling * dt;
   for (let c = 0; c < g.N; c++) { d[c] = d1[c] * fade; T[c] = T1[c] * cool; }
 }
@@ -496,12 +750,32 @@ function createLiquid(effect, width, height) {
     g, n: 0, next: 0, x: new Float64Array(1024), y: new Float64Array(1024), vx: new Float64Array(1024), vy: new Float64Array(1024), id: new Float64Array(1024),
     pvx: new Float64Array(1024), pvy: new Float64Array(1024),
     uw: new Float64Array(U), vw: new Float64Array(V), uOld: new Float64Array(U), vOld: new Float64Array(V), uValid: new Uint8Array(U), vValid: new Uint8Array(V),
-    fluid: new Uint8Array(N), cells: new Uint16Array(N), target: new Float64Array(N), splat: new Float64Array(N), blur: new Float64Array(N), speedSum: new Float64Array(N)
+    fluid: new Uint8Array(N), cells: new Uint16Array(N), target: new Float64Array(N), splat: new Float64Array(N), blur: new Float64Array(N), speedSum: new Float64Array(N),
+    cux: new Float64Array(1024), cuy: new Float64Array(1024), cvx: new Float64Array(1024), cvy: new Float64Array(1024), ea: new Float64Array(1024), eb: new Float64Array(1024), apic: effect.apic,
+    cling: effect.adhesion ? clingField(g) : null, pressure: effect.viscosity || effect.yield ? new Float64Array(N) : null,
+    strain: effect.yield ? { a: new Float64Array(N), b: new Float64Array(N), count: new Float64Array(N), stiff: new Float64Array(N), shear: new Float64Array((width + 1) * (height + 1)), ra: new Float64Array(N), rb: new Float64Array(N), spin: new Float64Array(N) } : null
   };
   return state;
 }
-// A particle's position, velocity, id, and its velocity before this frame's steps (for whitewater impacts).
-const PARTICLE_KEYS = ['x', 'y', 'vx', 'vy', 'id', 'pvx', 'pvy'];
+// Adhesion makes the liquid hold on to walls and obstacles (and anything beyond a closed edge). A pull toward them would
+// do nothing, since the pressure solve takes away any pull that is the slope of a field, so instead a particle within a
+// cell of a solid holds on to it, as static friction holds: it does not move away from the solid unless it is pulled
+// away faster than 2 × adhesion × closeness pixels per frame, and then only by the excess. Closeness is the solids
+// blurred over a cell, ¼ in the middle of a cell beside a solid. Particles still slide along a solid freely, so a film
+// stays under a ledge, on a spoon or down a jar's side while the rest of the liquid falls or drains away.
+function clingField(g) {
+  const { W, H, solid, walls } = g, field = new Float64Array(W * H);
+  const solidAt = (x, y) => (x < 0 ? walls.left : x >= W ? walls.right : y < 0 ? walls.top : y >= H ? walls.bottom : solid[y * W + x]) ? 1 : 0;
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    let sum = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) sum += solidAt(i + di, j + dj) * (di ? 1 : 2) * (dj ? 1 : 2);
+    field[j * W + i] = sum / 16;
+  }
+  return field;
+}
+// A particle's position, velocity, id, its velocity before this frame's steps (for whitewater impacts), for APIC the
+// slopes of the flow around it (du/dx, du/dy, dv/dx, dv/dy), and for yield stress its strain (stretch, shear).
+const PARTICLE_KEYS = ['x', 'y', 'vx', 'vy', 'id', 'pvx', 'pvy', 'cux', 'cuy', 'cvx', 'cvy', 'ea', 'eb'];
 function addParticle(state, x, y, vx, vy) {
   if (state.n === state.x.length) {
     if (state.n >= LIMITS.particles) { state.full = true; return false; }
@@ -509,6 +783,7 @@ function addParticle(state, x, y, vx, vy) {
   }
   const k = state.n++;
   state.x[k] = x; state.y[k] = y; state.vx[k] = vx; state.vy[k] = vy; state.id[k] = state.next++; state.pvx[k] = vx; state.pvy[k] = vy;
+  state.cux[k] = 0; state.cuy[k] = 0; state.cvx[k] = 0; state.cvy[k] = 0; state.ea[k] = 0; state.eb[k] = 0;
   return true;
 }
 function removeParticle(state, k) {
@@ -586,13 +861,25 @@ function splat(a, weights, nx, ny, fx, fy, value) {
   const add = (x, y, w) => { if (x >= 0 && y >= 0 && x < nx && y < ny && w) { a[y * nx + x] += w * value; weights[y * nx + x] += w; } };
   add(i, j, (1 - s) * (1 - t)); add(i + 1, j, s * (1 - t)); add(i, j + 1, (1 - s) * t); add(i + 1, j + 1, s * t);
 }
+// As splat, with the particle's local flow (APIC): each lattice point gets value + gx (x − fx) + gy (y − fy), so a turning
+// or shearing patch of liquid hands the grid its turning and shearing, not only its mean velocity.
+function splatAffine(a, weights, nx, ny, fx, fy, value, gx, gy) {
+  const i = Math.floor(fx), j = Math.floor(fy), s = fx - i, t = fy - j;
+  const add = (x, y, w) => { if (x >= 0 && y >= 0 && x < nx && y < ny && w) { a[y * nx + x] += w * (value + gx * (x - fx) + gy * (y - fy)); weights[y * nx + x] += w; } };
+  add(i, j, (1 - s) * (1 - t)); add(i + 1, j, s * (1 - t)); add(i, j + 1, (1 - s) * t); add(i + 1, j + 1, s * t);
+}
 function transfer(state) {
   const { g, uw, vw, uValid, vValid, fluid } = state, { W, H, u, v, solid } = g;
   u.fill(0); v.fill(0); uw.fill(0); vw.fill(0); fluid.fill(0);
   for (let k = 0; k < state.n; k++) {
     const x = state.x[k], y = state.y[k];
-    splat(u, uw, W + 1, H, x, y - 0.5, state.vx[k]);
-    splat(v, vw, W, H + 1, x - 0.5, y, state.vy[k]);
+    if (state.apic) {
+      splatAffine(u, uw, W + 1, H, x, y - 0.5, state.vx[k], state.cux[k], state.cuy[k]);
+      splatAffine(v, vw, W, H + 1, x - 0.5, y, state.vy[k], state.cvx[k], state.cvy[k]);
+    } else {
+      splat(u, uw, W + 1, H, x, y - 0.5, state.vx[k]);
+      splat(v, vw, W, H + 1, x - 0.5, y, state.vy[k]);
+    }
     const i = Math.floor(x), j = Math.floor(y);
     if (i >= 0 && j >= 0 && i < W && j < H && !solid[j * W + i]) fluid[j * W + i] = 1;
   }
@@ -608,6 +895,7 @@ function stepLiquid(state, effect, dt) {
   for (let k = 0; k < u.length; k++) u[k] += dt * effect.gravity[0];
   for (let k = 0; k < v.length; k++) v[k] += dt * effect.gravity[1];
   if (effect.drag) { const keep = 1 - effect.drag * dt; for (let k = 0; k < u.length; k++) u[k] *= keep; for (let k = 0; k < v.length; k++) v[k] *= keep; }
+  if (effect.yield) strainForce(state, effect, dt);
   enforce(g);
   // Crowded cells spread and sparse cells inside the liquid draw particles in, so splashes neither shrink the volume nor
   // thin it out into a larger, emptier one. Cells on the surface only spread.
@@ -619,6 +907,16 @@ function stepLiquid(state, effect, dt) {
     target[c] = error > 0 || interior ? 0.5 * error : 0;
   }
   project(g, fluid, effect.iterations, target);
+  // A thick liquid resists the flow the pressure solve has just made (a heap slumping under its own weight) before it
+  // moves, then is made divergence-free again. That second solve starts from no pressure and leaves the first's in
+  // place to start the next step from.
+  const thick = effect.viscosity || effect.yield;
+  if (thick) {
+    viscous(g, fluid, effect, dt, effect.yield ? state.strain.stiff : null);
+    state.pressure.set(g.p); g.p.fill(0);
+    project(g, fluid, effect.iterations, target);
+    g.p.set(state.pressure);
+  }
   const uValid = new Uint8Array(state.uValid.length), vValid = new Uint8Array(state.vValid.length);
   for (let j = 0; j < H; j++) for (let i = 0; i <= W; i++) { const k = j * (W + 1) + i; uValid[k] = g.uFixed[k] || (i > 0 && fluid[j * W + i - 1]) || (i < W && fluid[j * W + i]) ? 1 : 0; }
   for (let j = 0; j <= H; j++) for (let i = 0; i < W; i++) { const k = j * W + i; vValid[k] = g.vFixed[k] || (j > 0 && fluid[(j - 1) * W + i]) || (j < H && fluid[j * W + i]) ? 1 : 0; }
@@ -638,28 +936,59 @@ function stepLiquid(state, effect, dt) {
     rho[j * W + i] = weights ? sum / weights / PER_CELL : 0;
   }
   // FLIP: particles keep their own velocity plus the grid's change, blended with the grid velocity (PIC) to calm noise.
-  const flip = effect.flip, pull = effect.tension * dt * 0.5;
+  // In a thick liquid a particle's own jitter, finer than the grid, fades as the grid's finest ripples do under its
+  // viscosity, so the FLIP share shrinks where the liquid is thick. With APIC the grid share also hands each particle the
+  // slopes of the flow around it, which it carries and hands back, so the calm share keeps swirls instead of smearing them.
+  const flip = effect.flip, pull = effect.tension * dt * 0.5, mu = thick ? g.visc.mu : null, cling = state.cling, normal = cling ? new Float64Array(2) : null;
+  const slopes = state.apic ? new Float64Array(2) : null, limit = effect.yield / (2 * STIFFNESS);
+  if (limit) strainRates(state);
   for (let k = state.n - 1; k >= 0; k--) {
     let x = state.x[k], y = state.y[k];
-    const pu = sampleU(g, u, x, y), pv = sampleV(g, v, x, y);
-    state.vx[k] = flip * (state.vx[k] + pu - sampleU(g, uOld, x, y)) + (1 - flip) * pu;
-    state.vy[k] = flip * (state.vy[k] + pv - sampleV(g, vOld, x, y)) + (1 - flip) * pv;
-    if (state.vx[k] > MAX_SPEED) state.vx[k] = MAX_SPEED; else if (state.vx[k] < -MAX_SPEED) state.vx[k] = -MAX_SPEED;
-    if (state.vy[k] > MAX_SPEED) state.vy[k] = MAX_SPEED; else if (state.vy[k] < -MAX_SPEED) state.vy[k] = -MAX_SPEED;
+    const pu = sampleU(g, u, x, y), pv = sampleV(g, v, x, y), share = mu ? flip / (1 + 8 * dt * mu[Math.floor(y) * W + Math.floor(x)]) : flip;
+    state.vx[k] = share * (state.vx[k] + pu - sampleU(g, uOld, x, y)) + (1 - share) * pu;
+    state.vy[k] = share * (state.vy[k] + pv - sampleV(g, vOld, x, y)) + (1 - share) * pv;
+    if (slopes) {
+      slope(u, W + 1, H, x, y - 0.5, slopes); state.cux[k] = slopes[0]; state.cuy[k] = slopes[1];
+      slope(v, W, H + 1, x - 0.5, y, slopes); state.cvx[k] = slopes[0]; state.cvy[k] = slopes[1];
+    }
+    // Yield stress: the particle's strain grows by this step's rate of strain, turns with the flow, and is capped at the
+    // yield strain; strain beyond the cap is plastic flow, which the liquid does not spring back from.
+    if (limit) {
+      const c = Math.floor(y) * W + Math.floor(x), { ra, rb, spin } = state.strain, ea = state.ea[k], eb = state.eb[k];
+      let na = ea + dt * (ra[c] - spin[c] * eb), nb = eb + dt * (rb[c] + spin[c] * ea);
+      const size = na * na + nb * nb;
+      if (size > limit * limit) { const scale = limit / Math.sqrt(size); na *= scale; nb *= scale; }
+      state.ea[k] = na; state.eb[k] = nb;
+    }
     if (pull) {
       const fx = x - 0.5, fy = y - 0.5;
       state.vx[k] += pull * (bilinear(rho, W, H, fx + 1, fy) - bilinear(rho, W, H, fx - 1, fy));
       state.vy[k] += pull * (bilinear(rho, W, H, fx, fy + 1) - bilinear(rho, W, H, fx, fy - 1));
     }
+    // The speed cap comes last, so cohesion cannot push a particle past it.
+    if (state.vx[k] > MAX_SPEED) state.vx[k] = MAX_SPEED; else if (state.vx[k] < -MAX_SPEED) state.vx[k] = -MAX_SPEED;
+    if (state.vy[k] > MAX_SPEED) state.vy[k] = MAX_SPEED; else if (state.vy[k] < -MAX_SPEED) state.vy[k] = -MAX_SPEED;
     const mx = x + 0.5 * dt * pu, my = y + 0.5 * dt * pv;
     let nx = x + dt * sampleU(g, u, mx, my), ny = y + dt * sampleV(g, v, mx, my);
+    if (cling) {
+      const close = bilinear(cling, W, H, x - 0.5, y - 0.5);
+      slope(cling, W, H, x - 0.5, y - 0.5, normal);
+      const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1]);
+      if (close > 0 && length > 0) {
+        const ux = normal[0] / length, uy = normal[1] / length, hold = 2 * effect.adhesion * close;
+        const away = (nx - x) * ux + (ny - y) * uy, leaving = state.vx[k] * ux + state.vy[k] * uy;
+        if (away < 0) { const keep = Math.min(-away, hold * dt); nx += keep * ux; ny += keep * uy; }
+        if (leaving < 0) { const keep = Math.min(-leaving, hold); state.vx[k] += keep * ux; state.vy[k] += keep * uy; }
+      }
+    }
     if (walls.left && nx < 0.01) { nx = 0.01; if (state.vx[k] < 0) state.vx[k] = 0; }
     if (walls.right && nx > W - 0.01) { nx = W - 0.01; if (state.vx[k] > 0) state.vx[k] = 0; }
     if (walls.top && ny < 0.01) { ny = 0.01; if (state.vy[k] < 0) state.vy[k] = 0; }
     if (walls.bottom && ny > H - 0.01) { ny = H - 0.01; if (state.vy[k] > 0) state.vy[k] = 0; }
     if (nx < 0 || ny < 0 || nx >= W || ny >= H) { removeParticle(state, k); continue; }
-    // Particles never enter an obstacle: they slide along it, or stay put and lose the speed into it.
-    const blocked = (px, py) => solid[Math.floor(py) * W + Math.floor(px)];
+    // Particles never enter an obstacle, however far they move in a step: they slide along it, or stay put and lose the
+    // speed into it.
+    const blocked = (px, py) => crossesSolid(solid, W, H, x, y, px, py);
     if (blocked(nx, ny)) {
       if (!blocked(nx, y)) { ny = y; state.vy[k] = 0; }
       else if (!blocked(x, ny)) { nx = x; state.vx[k] = 0; }
@@ -718,14 +1047,16 @@ function moveSparks(list, g, density, total, liquid, pops) {
     p.vx = (p.vx + s.gravity[0]) * (1 - s.drag); p.vy = (p.vy + s.gravity[1]) * (1 - s.drag);
     p.px = p.x; p.py = p.y; p.x += fx + p.vx; p.y += fy + p.vy;
     const i = Math.floor(p.x), j = Math.floor(p.y), inside = i >= 0 && j >= 0 && i < W && j < H, wet = liquid && inside && density[j * W + i] >= LEVEL;
-    const popped = s.pop && !wet && Number.isFinite(p.x + p.y);
+    // A spark that meets an obstacle anywhere along this frame's path ends there, not only one that lands inside it.
+    const finite = Number.isFinite(p.x + p.y), hit = finite && crossesSolid(solid, W, H, p.px, p.py, p.x, p.y);
+    const popped = s.pop && !wet && finite && !hit;
     // Whitewater foam rides the surface: it ends once the flow has carried it under, with water on every side, or once
     // it is lifted off into the air, with no water beside it.
     const dry = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !solid[y * W + x] && density[y * W + x] < LEVEL;
     const soaked = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !solid[y * W + x] && density[y * W + x] >= LEVEL;
     const sunk = p.foam && (wet ? !dry(i - 1, j) && !dry(i + 1, j) && !dry(i, j - 1) && !dry(i, j + 1) : !soaked(i - 1, j) && !soaked(i + 1, j) && !soaked(i, j - 1) && !soaked(i, j + 1));
     if (popped) pops.push({ x: p.x, y: p.y, size: s.size, code: sparkColor(p), age: 0 });
-    if (p.age >= p.life || !Number.isFinite(p.x + p.y) || (inside && solid[j * W + i]) || popped || (wet && p.out) || sunk || p.x < -16 || p.y < -16 || p.x > W + 16 || p.y > H + 16) { list.splice(k, 1); total.alive--; }
+    if (p.age >= p.life || !finite || hit || popped || (wet && p.out) || sunk || p.x < -16 || p.y < -16 || p.x > W + 16 || p.y > H + 16) { list.splice(k, 1); total.alive--; }
     else if (liquid && inside && !wet && !s.follow) p.out = true;
   }
 }
@@ -821,6 +1152,10 @@ function renderFields(effect, base, width, height) {
 }
 
 // ---- Simulation -------------------------------------------------------------------------------------------------------
+// Cell updates per cell per step, for the work budget: one per pressure sweep plus the transfers and advection. A thick
+// fluid's viscosity solve (and a liquid's second pressure solve) costs about two more per sweep, sharp advection about
+// thirty.
+const stepWork = effect => effect.iterations * (effect.viscosity || effect.yield ? 3 : 1) + 10 + (effect.sharp ? 30 : 0);
 // A loop simulates its warm-up cycles, the recorded cycle, and as long again as its longest-lived spark.
 const simulatedFrames = effect => effect.loop ? (effect.warmup + 1) * effect.frames + Math.max(0, ...effect.emitters.map(e => (e.sparks ? e.sparks.life[1] : 0)), ...effect.whitewater.map(w => w.life[1])) : effect.frames;
 const crowded = path => fail(path, `more than ${LIMITS.particles} liquid particles; lower the emitters' density or rate, or the fill`);
@@ -982,7 +1317,7 @@ function buildRecipe(source, each) {
     const effect = readEffect(value, path, { width, height, palette, symbols });
     if (frames.length + effect.frames > 256) fail('fluid.effects', `the effects make more than 256 frames; a recipe holds at most 256`);
     // Bounded work: about one update per cell per pressure sweep, per step. The presets need at most 60 million.
-    work += width * height * simulatedFrames(effect) * effect.substeps * (effect.iterations + 10);
+    work += width * height * simulatedFrames(effect) * effect.substeps * stepWork(effect);
     if (work > LIMITS.work) fail(path, `the simulations need about ${Math.round(work / 1e6)} million cell updates, more than ${LIMITS.work / 1e6} million; lower frames, warmup, substeps, iterations or the canvas size`);
     const ops = each(name, effect, { width, height, path });
     const names = effect.durations.map((duration, i) => {
@@ -1048,7 +1383,7 @@ export function createLiveFluid(source, options = {}) {
   if (!chosen) fail('live.effect', `no effect named ${JSON.stringify(options.effect)}; the source has ${names.join(', ')}`);
   const { effect, width, height, path } = chosen, { emitters, liquid, seed } = effect, N = width * height;
   const warmup = options.warmup === undefined ? effect.frames : integer(options.warmup, 'live.warmup', 0, 2048);
-  if (N * warmup * effect.substeps * (effect.iterations + 10) > LIMITS.work) fail('live.warmup', `warming up ${warmup} frames needs more than ${LIMITS.work / 1e6} million cell updates; warm up fewer frames`);
+  if (N * warmup * effect.substeps * stepWork(effect) > LIMITS.work) fail('live.warmup', `warming up ${warmup} frames needs more than ${LIMITS.work / 1e6} million cell updates; warm up fewer frames`);
 
   // Colours by palette key, and the obstacles stamped under and over the fluid, composited in a compiled frame's order.
   const palette = {}, colours = new Map();

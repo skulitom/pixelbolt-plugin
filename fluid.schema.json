@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt fluid effects",
-  "description": "A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
+  "description": "A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
   "type": "object",
   "properties": {
     "format": {
@@ -80,7 +80,7 @@
               "gas",
               "liquid"
             ],
-            "description": "gas (default): smoke, fire, steam, explosions, magic. liquid: water and potions as FLIP particles."
+            "description": "gas (default): smoke, fire, steam, explosions, magic. liquid: water, potions, honey and slime as FLIP particles."
           },
           "frames": {
             "type": "integer",
@@ -138,7 +138,7 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 200,
-            "description": "Pressure solve sweeps per step; default 30 (gas) or 40 (liquid)."
+            "description": "Pressure solve sweeps per step, and with viscosity or yield as many steps of the viscosity solve; default 30 (gas) or 40 (liquid)."
           },
           "buoyancy": {
             "type": "number",
@@ -174,7 +174,7 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Share of velocity lost per frame; default 0.02 (gas) or 0 (liquid)."
+            "description": "Share of velocity lost per frame, as if the surroundings held the fluid back (water under water, a gas in still air); it slows falling too. For a thick fluid use viscosity. Default 0.02 (gas) or 0 (liquid)."
           },
           "wind": {
             "type": "array",
@@ -186,6 +186,29 @@
             "maxItems": 2,
             "minItems": 2,
             "description": "Gas: acceleration [x, y] everywhere."
+          },
+          "advection": {
+            "enum": [
+              "smooth",
+              "sharp"
+            ],
+            "description": "Gas: smooth (default) is plain semi-Lagrangian advection, which blurs a little every step; sharp (MacCormack with a limiter) keeps edges and small swirls crisp, at up to twice the cost; smoke lingers longer, so a one-shot may need more dissipation to end empty."
+          },
+          "viscosity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 64,
+            "description": "Thickness, in square pixels per frame: it slows shearing and stretching but not falling or turning as a whole, so a thick drop falls as fast as water but spreads slowly and a stream never breaks into drops. Liquids: about 0.5 oil, 2–4 syrup, 8–16 honey, 32–64 tar. Gases: 0.1–1 for slow, smooth flows (a swirl dies away within frames above 1). Walls and obstacles hold a viscous fluid unless slip is set. Default 0."
+          },
+          "yield": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 16,
+            "description": "Liquid: yield stress, for mud, slime, dough and toothpaste. Below it the liquid is elastic and keeps its shape, squashing and springing back; pushed past it, it flows. A heap h pixels high holds itself up when yield is more than about gravity × h / 2. Default 0."
+          },
+          "slip": {
+            "type": "boolean",
+            "description": "With viscosity or yield: the fluid slides along walls and obstacles instead of being held by them (a greased pan). Default false."
           },
           "gravity": {
             "type": "array",
@@ -202,13 +225,23 @@
             "type": "number",
             "minimum": 0,
             "maximum": 1,
-            "description": "Liquid: FLIP share of each particle's velocity (lively, noisier) against the grid's (calm); default 0.9."
+            "description": "Liquid: FLIP share of each particle's velocity (lively, noisier) against the grid's (calm); default 0.9. A viscous liquid lowers it where it is thick."
+          },
+          "apic": {
+            "type": "boolean",
+            "description": "Liquid: affine particle-in-cell. The calm (grid) share of each particle's velocity also carries the turning and shearing of the flow around it, so calm and thick liquids keep their swirls and folds instead of smearing them. Use it with a low flip. Default false."
           },
           "tension": {
             "type": "number",
             "minimum": 0,
             "maximum": 4,
             "description": "Liquid: cohesion that keeps drops and streams together; default 0.5."
+          },
+          "adhesion": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 4,
+            "description": "Liquid: how strongly it holds on to walls and obstacles. Liquid touching a solid stays on it unless pulled away faster than about adhesion ÷ 2 pixels per frame, so a film clings under a ledge, to a spoon or down a jar's side. Default 0."
           },
           "fill": {
             "type": "array",

@@ -27,14 +27,16 @@ Then restart Claude Code in your project folder and ask in your own words, for e
 
 ## What it runs, writes and sends
 
-- **What it runs:** the plugin starts `node bin/pixelbolt.js mcp` from this plugin's own folder. Nothing is downloaded
-  or installed.
-- **What it reads and writes:** only files under the folder you opened in Claude Code. It reads the recipes and PNGs
+- **What it runs:** the plugin starts `node <this plugin's folder>/bin/pixelbolt.js mcp`, running in your project
+  folder. Nothing is downloaded or installed. The skill may also have Claude run Pixelbolt's command-line tool
+  (`node bin/pixelbolt.js validate|inspect|render|gif|preview`, from the same folder) through its shell, writing where
+  Claude tells it to; `preview` serves the studio pages on 127.0.0.1 only and, with `--open`, opens them in your
+  browser.
+- **What the MCP server reads and writes:** only files under the folder you opened in Claude Code. It reads the recipes and PNGs
   you name there, saves recipe revisions in `output/.revisions/`, and writes each export into a new folder under
   `output/`.
 - **What it sends:** nothing. The MCP server uses no network and no external service.
-- **What else is here:** `studio/` and `src/server.js` are Pixelbolt's command-line preview studio, which serves pages
-  on your own machine when you run `pixelbolt preview` yourself; the plugin never starts it. `examples/` and `docs/`
+- **What else is here:** `studio/` and `src/server.js` are that preview studio; the MCP server never starts it. `examples/` and `docs/`
   are recipes and guides the tools can point to. `evals/` holds test cases with mocked replies for
   `claude plugin eval`; Claude Code never loads them when you use the plugin.
 

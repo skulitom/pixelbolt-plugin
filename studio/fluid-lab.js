@@ -12,7 +12,8 @@ const PRESETS = [
   { file: 'smoke-puff', title: 'Smoke puff', note: 'Gas · one-shot' }, { file: 'steam-vent', title: 'Steam vent', note: 'Gas · loop' },
   { file: 'magic-swirl', title: 'Magic swirl', note: 'Gas · loop' }, { file: 'torch', title: 'Torch', note: 'Gas · loop' },
   { file: 'splash', title: 'Splash', note: 'Liquid · one-shot' }, { file: 'waterfall', title: 'Waterfall', note: 'Liquid · loop' },
-  { file: 'drip', title: 'Drip', note: 'Liquid · loop' }, { file: 'potion', title: 'Bubbling potion', note: 'Liquid · loop' }
+  { file: 'drip', title: 'Drip', note: 'Liquid · loop' }, { file: 'potion', title: 'Bubbling potion', note: 'Liquid · loop' },
+  { file: 'honey', title: 'Honey', note: 'Viscous liquid · loop' }, { file: 'slime', title: 'Slime', note: 'Yield-stress liquid · one-shot' }
 ];
 // Each slider sets one setting of the preset's effect; Strength scales every emitter's rate or burst.
 const strength = { key: 'strength', label: 'Strength', min: 0.25, max: 2, step: 0.05, initial: () => 1, show: v => `× ${v.toFixed(2)}` };
@@ -24,7 +25,11 @@ const SLIDERS = {
   liquid: [strength,
     { key: 'gravity', label: 'Gravity', min: 0, max: 0.6, step: 0.01, initial: e => (e.gravity ?? [0, 0.3])[1] },
     { key: 'flip', label: 'Liveliness (flip)', min: 0, max: 1, step: 0.01, initial: e => e.flip ?? 0.9 },
-    { key: 'drag', label: 'Calm (drag)', min: 0, max: 0.3, step: 0.005, initial: e => e.drag ?? 0 }]
+    // Thickness slows spreading and keeps streams whole without slowing a fall; resistance (drag) slows everything,
+    // falling included, as if the liquid moved through something thick.
+    { key: 'viscosity', label: 'Thickness (viscosity)', min: 0, max: 32, step: 0.5, initial: e => e.viscosity ?? 0 },
+    { key: 'yield', label: 'Firmness (yield)', min: 0, max: 8, step: 0.1, initial: e => e.yield ?? 0 },
+    { key: 'drag', label: 'Resistance (drag)', min: 0, max: 0.3, step: 0.005, initial: e => e.drag ?? 0 }]
 };
 const HOLD = 600, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const round = value => Math.round(value * 1000) / 1000;
@@ -130,7 +135,7 @@ async function choose(entry) {
     if (mine !== version) return;
     preset = { ...entry, source }; effectName = Object.keys(source.effects)[0]; position = 0;
     const effect = effectOf(source);
-    $('name').textContent = entry.title; $('kind').textContent = effect.kind === 'liquid' ? 'Liquid · FLIP particles' : 'Gas · stable fluids';
+    $('name').textContent = entry.title; $('kind').textContent = effect.kind === 'liquid' ? `Liquid · ${effect.apic ? 'APIC' : 'FLIP'} particles` : 'Gas · stable fluids';
     $('size').textContent = `${source.width} × ${source.height} px`;
     document.querySelectorAll('#presets .example').forEach(button => { const active = button.dataset.file === entry.file; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
     history.replaceState(null, '', `#${entry.file}`);

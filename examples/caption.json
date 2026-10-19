@@ -1,0 +1,298 @@
+{
+  "version": 1,
+  "name": "caption",
+  "width": 240,
+  "height": 32,
+  "palette": {
+    "panel": "#141824e6",
+    "edge": "#0b0e16",
+    "gold": "#f2dc93",
+    "ink": "#f2f0e4",
+    "soft": "#9fb6c9"
+  },
+  "frames": [
+    {
+      "name": "bar",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        }
+      ]
+    },
+    {
+      "name": "open-1",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 70,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 70,
+          "h": 1,
+          "color": "edge"
+        }
+      ]
+    },
+    {
+      "name": "open-2",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 150,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 150,
+          "h": 1,
+          "color": "edge"
+        }
+      ]
+    },
+    {
+      "name": "open-3",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 210,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 210,
+          "h": 1,
+          "color": "edge"
+        }
+      ]
+    },
+    {
+      "name": "type-1",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 210,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 210,
+          "h": 1,
+          "color": "edge"
+        },
+        {
+          "op": "text",
+          "x": 11,
+          "y": 8,
+          "text": "PIX",
+          "color": "ink"
+        }
+      ]
+    },
+    {
+      "name": "type-2",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 210,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 210,
+          "h": 1,
+          "color": "edge"
+        },
+        {
+          "op": "text",
+          "x": 11,
+          "y": 8,
+          "text": "PIXELF",
+          "color": "ink"
+        }
+      ]
+    },
+    {
+      "name": "type-3",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 210,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 210,
+          "h": 1,
+          "color": "edge"
+        },
+        {
+          "op": "text",
+          "x": 11,
+          "y": 8,
+          "text": "PIXELFORGE",
+          "color": "ink"
+        }
+      ]
+    },
+    {
+      "name": "shown",
+      "duration": 2000,
+      "ops": [
+        {
+          "op": "rect",
+          "x": 0,
+          "y": 4,
+          "w": 3,
+          "h": 24,
+          "color": "gold"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 4,
+          "w": 210,
+          "h": 24,
+          "color": "panel"
+        },
+        {
+          "op": "rect",
+          "x": 3,
+          "y": 27,
+          "w": 210,
+          "h": 1,
+          "color": "edge"
+        },
+        {
+          "op": "text",
+          "x": 11,
+          "y": 8,
+          "text": "PIXELFORGE",
+          "color": "ink"
+        },
+        {
+          "op": "text",
+          "x": 11,
+          "y": 18,
+          "text": "text to pixels, frame by frame",
+          "color": "soft"
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "in": {
+      "frames": [
+        "bar",
+        "open-1",
+        "open-2",
+        "open-3",
+        "type-1",
+        "type-2",
+        "type-3",
+        "shown"
+      ],
+      "loop": false
+    },
+    "hold": {
+      "frames": [
+        "shown"
+      ]
+    }
+  },
+  "sheet": {
+    "columns": 2,
+    "padding": 1
+  }
+}

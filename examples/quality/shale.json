@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "name": "split-shale",
+  "width": 24,
+  "height": 16,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "frames": [
+    {
+      "name": "still",
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 1,
+          "rows": [
+            ".........sssss........",
+            "......ssshhhhsbb......",
+            "....sshhsssstssbbb....",
+            "...shhsssssttssbbbb...",
+            "..shhsssssttsssbbbbb..",
+            ".shsssstttssssbbbbbb..",
+            ".sssstttssssbbbbbbbb..",
+            "sssttssssbbbbbbbvbbbb.",
+            "sstssbbbbbbbbbvvbbbbbb",
+            "stssbbbbbbbbbvvbbbbbbb",
+            "ssbbbbbbbbbbvvbbvvvvv.",
+            ".bbbbbbbbbvvvbbvvv....",
+            "..bbvvvvvvvvvvv.......",
+            "....vvvvvvvv.........."
+          ]
+        }
+      ]
+    }
+  ]
+}

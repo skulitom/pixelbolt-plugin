@@ -1,0 +1,144 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "campfire",
+  "width": 32,
+  "height": 48,
+  "palette": {
+    "u": "#4d4558",
+    "S": "#6e6678",
+    "r": "#b8322f",
+    "o": "#f0772b",
+    "y": "#ffcc4d",
+    "W": "#fff6d1",
+    "b": "#5a3825",
+    "B": "#8a5a36",
+    "k": "#2a1c18"
+  },
+  "symbols": {
+    "ground": [
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ],
+    "logs": [
+      "....kk..............kk....",
+      "...kBBkk..........kkBBk...",
+      "..kBbbBBkk......kkBBbbBk..",
+      "..kbbbbbBBkk..kkBBbbbbbk..",
+      "...kkbbbbbBBkkBBbbbbbkk...",
+      ".....kkkbbbbBBbbbbkkk.....",
+      ".......kkkkbbbbkkkk.......",
+      "...........kkkk..........."
+    ]
+  },
+  "effects": {
+    "campfire": {
+      "frames": 24,
+      "duration": 70,
+      "loop": true,
+      "seed": 3,
+      "walls": [
+        "bottom"
+      ],
+      "buoyancy": 0.45,
+      "vorticity": 0.45,
+      "dissipation": 0.065,
+      "cooling": 0.24,
+      "obstacles": [
+        {
+          "symbol": "logs",
+          "x": 3,
+          "y": 40
+        },
+        {
+          "symbol": "ground",
+          "x": 0,
+          "y": 46,
+          "draw": "none"
+        }
+      ],
+      "emitters": [
+        {
+          "name": "fire",
+          "at": [
+            16,
+            42
+          ],
+          "radius": 6,
+          "rate": 1,
+          "temperature": 1.1,
+          "density": 0.4,
+          "velocity": [
+            0,
+            -1.2
+          ],
+          "noise": 1.4,
+          "flicker": 0.6
+        },
+        {
+          "name": "embers",
+          "at": [
+            16,
+            34
+          ],
+          "radius": 3,
+          "rate": 1,
+          "sparks": {
+            "count": 0.5,
+            "life": [
+              8,
+              14
+            ],
+            "colors": [
+              "W",
+              "y",
+              "y",
+              "o"
+            ],
+            "trail": true,
+            "angle": [
+              250,
+              290
+            ],
+            "speed": [
+              0.3,
+              0.7
+            ],
+            "drag": 0.08
+          }
+        }
+      ],
+      "look": [
+        {
+          "field": "density",
+          "colors": [
+            "u",
+            "S"
+          ],
+          "thresholds": [
+            0.16,
+            0.4
+          ],
+          "dither": 0.5,
+          "pattern": "value"
+        },
+        {
+          "field": "temperature",
+          "colors": [
+            "r",
+            "o",
+            "y",
+            "W"
+          ],
+          "thresholds": [
+            0.3,
+            0.42,
+            0.62,
+            1
+          ],
+          "dither": 0.5
+        }
+      ]
+    }
+  }
+}

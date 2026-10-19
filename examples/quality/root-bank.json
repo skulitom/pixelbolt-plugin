@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "name": "root-bank",
+  "width": 32,
+  "height": 24,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "frames": [
+    {
+      "name": "a",
+      "ops": [
+        {
+          "op": "grid",
+          "x": 0,
+          "y": 0,
+          "rows": [
+            "ggttgggttttggtttttgggttttggttggg",
+            "thggtgggggthggttggggtggghgggttgt",
+            "ttggtttttggggttttttggtttgggttttt",
+            "bbttttbbtttgtbbbtbbttttbbttttbbb",
+            "bbbbbbbbbbtgtbbbbbbbbbttbbbbbbbb",
+            "bbvvbbbbbbtgttbbbbbbbbbttbbvvbbb",
+            "bbbbbbvvbbbtgtbbbbbvvbbbtbbbbbbb",
+            "bbbbbbvvbbbtgtbbbbbbbbbtbbbbbbbb",
+            "vbbbbbbbbbbtgttbbbbbbbtbbbbbbvvb",
+            "vvbbbbbbbbbbtgtbbbbbbbttbbbbbvvb",
+            "vvvbbbbbbbbbttgtbbbbbbtbbbbbbvvv",
+            "vvvvbbbbbbbvbttgtbbbbttbbbbbvvvv",
+            "vvvvvvbbvvvvbbttgtbbttbbbbbvvvvv",
+            "vvvvvvvvvvvvvbbttgtttbbbbbvvvvvv",
+            "vvvvvvvvvvvvvvbbtggtbbbvvvvvvvvv",
+            "vvvvvvvvvvvvvvvvbttbbvvvvvvvvvvv",
+            "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "name": "listening-lantern",
+  "width": 24,
+  "height": 32,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "frames": [
+    {
+      "name": "warm",
+      "duration": 450,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 4,
+          "rows": [
+            ".........yy......",
+            "........yhhy.....",
+            ".......yhsshy....",
+            "......yhs..shy...",
+            "......ys....sy...",
+            "......ys....sy...",
+            "......ys....sy...",
+            ".....yyssssssyy..",
+            ".....yhaaaaashy..",
+            "......yaaaaay....",
+            "......yarrray....",
+            "......yarrpay....",
+            ".......yrrpy.....",
+            "........ypy......",
+            ".........y.......",
+            ".........s.......",
+            "........sss......",
+            ".......sstss.....",
+            ".......sttts.....",
+            "......sstttss....",
+            ".....sstttttss...",
+            "....ssstttttsss..",
+            "...sssstttttssss.",
+            "..ssssstttttsssss"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "bright",
+      "duration": 160,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 4,
+          "rows": [
+            ".........yy......",
+            "........yhhy.....",
+            ".......yhsshy....",
+            "......yhs..shy...",
+            "......ys....sy...",
+            "......ys....sy...",
+            "......ys....sy...",
+            ".....yyssssssyy..",
+            ".....yhaaaaashy..",
+            "......yaaaaay....",
+            "......yarrray....",
+            "......yarrpay....",
+            ".......yrrpy.....",
+            "........ypy......",
+            ".........y.......",
+            ".........s.......",
+            "........sss......",
+            ".......sstss.....",
+            ".......sttts.....",
+            "......sstttss....",
+            ".....sstttttss...",
+            "....ssstttttsss..",
+            "...sssstttttssss.",
+            "..ssssstttttsssss"
+          ]
+        },
+        {
+          "op": "grid",
+          "x": 8,
+          "y": 13,
+          "rows": [
+            ".yw.",
+            "ywwy",
+            ".wy."
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "glow": {
+      "frames": [
+        "warm",
+        "bright"
+      ]
+    }
+  }
+}

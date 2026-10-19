@@ -1,0 +1,61 @@
+{
+  "date": "2026-09-27",
+  "platform": "Windows x64, Node v24.19.0",
+  "artisticAcceptance": "Self-reviewed original study. No independent preference comparison or Animal Well parity claim.",
+  "automatedTests": 68,
+  "qualityFilesDeterministic": 28,
+  "stress": {
+    "recipes": 9,
+    "frames": 220,
+    "animations": 44,
+    "checks": 15,
+    "findings": 0,
+    "details": [
+      "All nine recipes validate via CLI; every bundle byte deterministic across two exports; checked-in atlases match recipes.",
+      "Rejected 257 frames with diagnostic.",
+      "Rejected 257px canvas with diagnostic.",
+      "Rejected source area over limit with diagnostic.",
+      "Rejected oversized atlas with diagnostic.",
+      "Rejected unknown field with diagnostic.",
+      "Rejected null option with diagnostic.",
+      "Rejected reserved output name with diagnostic.",
+      "Rejected case collision with diagnostic.",
+      "Canvas patch changes base and three inherited frames, leaving source unchanged.",
+      "256-frame comparison reports all frames and explicitly omits 240 preview rows.",
+      "Real MCP validate → paint → restart → grid inspect → render retains revision and returns all 33 frames.",
+      "PF-EF-002 fixed: full 1,024-entry animation exports; preview reports 256 samples and 768 omissions.",
+      "PF-EF-001 fixed: rejected before bundle allocation in 14.44 ms.",
+      "PF-EF-003 fixed: array symbol rejected at its exact field path."
+    ]
+  },
+  "browser": {
+    "version": "154.0.8037.57",
+    "checks": [
+      "scene scrub reaches reaction and settled state",
+      "scene reset is deterministic",
+      "density and lighting controls affect the image",
+      "moving a light changes hand-authored material response",
+      "requestAnimationFrame playback advances",
+      "narrow layout contains the integer-scale scene in a scrollable stage",
+      "reverse sparse sequence and repeated holds use playback-position onion neighbors",
+      "pingpong endpoints select the correct pose and neighbors",
+      "studio silhouette is solid and native preview is present"
+    ],
+    "errors": [],
+    "cpuSceneBenchmark": {
+      "medianMs": 1.3999999910593033,
+      "p95Ms": 1.7999999970197678,
+      "samples": 100,
+      "note": "CPU scene renderer after 20 warm-up samples, one desktop Chromium; not game FPS or mobile performance."
+    }
+  },
+  "independentDecoder": {
+    "bundles": 8,
+    "frames": 26,
+    "animation_frames": 26,
+    "material_passes": 15,
+    "png_filters": 5,
+    "zip_boundary_entries": 65535
+  },
+  "remaining": "See the implementation table in pixelforge-art-quality-roadmap.md and the candid visual review in ../art-quality-lab.md."
+}

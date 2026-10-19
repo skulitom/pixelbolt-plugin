@@ -1,0 +1,233 @@
+{
+  "stress": {
+    "date": "2026-09-27T01:06:08.19Z",
+    "node": "v24.19.0",
+    "platform": "win32 x64",
+    "baseline": "092b457",
+    "assets": [
+      {
+        "name": "fiends",
+        "frames": 22,
+        "animations": 3,
+        "operations": 1012,
+        "exportMs": 35,
+        "files": 32,
+        "bundleBytes": 187925,
+        "warnings": []
+      },
+      {
+        "name": "horizon",
+        "frames": 1,
+        "animations": 1,
+        "operations": 666,
+        "exportMs": 20.99,
+        "files": 9,
+        "bundleBytes": 109299,
+        "warnings": [
+          "Some drawing falls outside the canvas and is clipped."
+        ]
+      },
+      {
+        "name": "knight",
+        "frames": 33,
+        "animations": 7,
+        "operations": 1732,
+        "exportMs": 60.08,
+        "files": 47,
+        "bundleBytes": 372186,
+        "warnings": []
+      },
+      {
+        "name": "relics",
+        "frames": 37,
+        "animations": 9,
+        "operations": 2843,
+        "exportMs": 80.37,
+        "files": 53,
+        "bundleBytes": 482377,
+        "warnings": []
+      },
+      {
+        "name": "spellcraft",
+        "frames": 65,
+        "animations": 9,
+        "operations": 1081,
+        "exportMs": 74.6,
+        "files": 81,
+        "bundleBytes": 243295,
+        "warnings": []
+      },
+      {
+        "name": "terrain",
+        "frames": 19,
+        "animations": 5,
+        "operations": 903,
+        "exportMs": 14.6,
+        "files": 31,
+        "bundleBytes": 146688,
+        "warnings": []
+      },
+      {
+        "name": "warden",
+        "frames": 14,
+        "animations": 2,
+        "operations": 2716,
+        "exportMs": 75.63,
+        "files": 23,
+        "bundleBytes": 451539,
+        "warnings": []
+      },
+      {
+        "name": "wayfarer",
+        "frames": 23,
+        "animations": 5,
+        "operations": 1648,
+        "exportMs": 60.33,
+        "files": 35,
+        "bundleBytes": 291459,
+        "warnings": []
+      },
+      {
+        "name": "woodland",
+        "frames": 6,
+        "animations": 3,
+        "operations": 3442,
+        "exportMs": 85.44,
+        "files": 16,
+        "bundleBytes": 526105,
+        "warnings": []
+      }
+    ],
+    "checks": [
+      "All nine recipes validate via CLI; every bundle byte deterministic across two exports; checked-in atlases match recipes.",
+      "Rejected 257 frames with diagnostic.",
+      "Rejected 257px canvas with diagnostic.",
+      "Rejected source area over limit with diagnostic.",
+      "Rejected oversized atlas with diagnostic.",
+      "Rejected unknown field with diagnostic.",
+      "Rejected null option with diagnostic.",
+      "Rejected reserved output name with diagnostic.",
+      "Rejected case collision with diagnostic.",
+      "Canvas patch changes base and three inherited frames, leaving source unchanged.",
+      "256-frame comparison reports all frames and explicitly omits 240 preview rows.",
+      "Real MCP validate → paint → restart → grid inspect → render retains revision and returns all 33 frames."
+    ],
+    "findings": [
+      {
+        "id": "PF-EF-002",
+        "kind": "workflow limit",
+        "title": "Optional animation preview prevents an otherwise valid MCP export",
+        "error": "inspect: the contact sheet would be 4162×4162 pixels, above the 4096-pixel limit; select fewer frames, a smaller region or a lower scale",
+        "workaround": "Omit animation in pixel_render; inspect a shorter frames selection separately."
+      },
+      {
+        "id": "PF-EF-001",
+        "kind": "bug",
+        "title": "Valid recipe overflows ZIP32 entry count after full export work",
+        "inputBytes": 1692748,
+        "animationCount": 65528,
+        "files": 65536,
+        "elapsedMs": 2758.97,
+        "error": "RangeError: The value of \"value\" is out of range. It must be >= 0 and <= 65535. Received 65536"
+      },
+      {
+        "id": "PF-EF-003",
+        "kind": "bug",
+        "title": "Array-valued stamp symbol is accepted through property-key coercion",
+        "actual": "symbol: [\"dot\"] renders successfully",
+        "expected": "PixelError at project.frames[0].ops[0].symbol; schema requires a string."
+      }
+    ],
+    "capacity": {
+      "frames": 256,
+      "sourcePixels": 4194304,
+      "atlasPixels": 4194304,
+      "contact": [
+        2082,
+        2082
+      ],
+      "exportAndInspectMs": 1261.89
+    },
+    "summary": {
+      "recipes": 9,
+      "frames": 220,
+      "animations": 44,
+      "checks": 12,
+      "findings": 3,
+      "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor          "
+    }
+  },
+  "browserQA": {
+    "passed": [
+      "keyboard movement",
+      "double jump",
+      "spell switch and charge release",
+      "frost freezes brazier",
+      "ember rekindles brazier",
+      "pause/resume",
+      "dash",
+      "sound toggle",
+      "fullscreen round trip",
+      "400 actors",
+      "asset gallery",
+      "restart resets world",
+      "guided complete level / boss / portal",
+      "visible touch controls and touch jump",
+      "touch movement and mobile overflow"
+    ],
+    "errors": []
+  },
+  "benchmark": {
+    "browser": "145.0.7632.6",
+    "viewport": [
+      1440,
+      1080
+    ],
+    "headless": true,
+    "note": "Local desktop measurement; not a mobile or cross-device performance guarantee. Deterministic advanceTime was not used.",
+    "results": [
+      {
+        "extraActors": 0,
+        "frames": 211,
+        "seconds": 3.513,
+        "averageFps": 60.1,
+        "p95FrameMs": 16.8,
+        "state": {
+          "fps": 60,
+          "drawCalls": 104,
+          "ready": true
+        }
+      },
+      {
+        "extraActors": 160,
+        "frames": 211,
+        "seconds": 3.51,
+        "averageFps": 60.1,
+        "p95FrameMs": 16.7,
+        "state": {
+          "fps": 60,
+          "drawCalls": 263,
+          "ready": true
+        }
+      },
+      {
+        "extraActors": 400,
+        "frames": 211,
+        "seconds": 3.508,
+        "averageFps": 60.2,
+        "p95FrameMs": 16.8,
+        "state": {
+          "fps": 60,
+          "drawCalls": 504,
+          "ready": true
+        }
+      }
+    ]
+  },
+  "independentDecode": {
+    "bundles": 9,
+    "frames": 220,
+    "animations": 44,
+    "animation_frames": 220
+  }
+}

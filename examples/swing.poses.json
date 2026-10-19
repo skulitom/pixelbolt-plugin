@@ -1,0 +1,131 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "swing",
+  "width": 40,
+  "height": 40,
+  "palette": {
+    "k": "#1d1a2b",
+    "b": "#7a4a32",
+    "y": "#e8b04a",
+    "w": "#eef3ff",
+    "s": "#9aa7c7",
+    "S": "#5d6a8f"
+  },
+  "parts": {
+    "sword": {
+      "rows": [
+        "....k............",
+        "...kyk...........",
+        "kkkkykkkkkkkkkk..",
+        "kbbkykwwwwwwwwwkk",
+        "kkkkykssssssssSk.",
+        "...kyk.kkkkkkkk..",
+        "....k............"
+      ],
+      "anchor": [
+        2,
+        3
+      ],
+      "points": {
+        "tip": [
+          16,
+          3
+        ]
+      }
+    }
+  },
+  "poses": [
+    {
+      "name": "raise",
+      "duration": 180,
+      "origin": [
+        20,
+        24
+      ],
+      "parts": [
+        {
+          "name": "blade",
+          "part": "sword",
+          "rotate": -135
+        }
+      ],
+      "markers": [
+        {
+          "name": "tip",
+          "part": "blade",
+          "point": "tip"
+        }
+      ]
+    },
+    {
+      "name": "strike",
+      "duration": 90,
+      "origin": [
+        20,
+        24
+      ],
+      "parts": [
+        {
+          "name": "blade",
+          "part": "sword",
+          "rotate": 30
+        }
+      ],
+      "markers": [
+        {
+          "name": "tip",
+          "part": "blade",
+          "point": "tip"
+        }
+      ]
+    },
+    {
+      "name": "swing-1",
+      "duration": 50,
+      "tween": {
+        "from": "raise",
+        "to": "strike",
+        "t": 0.33,
+        "ease": "in"
+      }
+    },
+    {
+      "name": "swing-2",
+      "duration": 50,
+      "tween": {
+        "from": "raise",
+        "to": "strike",
+        "t": 0.67,
+        "ease": "in"
+      }
+    },
+    {
+      "name": "follow",
+      "duration": 160,
+      "origin": [
+        20,
+        24
+      ],
+      "parts": [
+        {
+          "name": "blade",
+          "part": "sword",
+          "rotate": 50
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "swing": {
+      "frames": [
+        "raise",
+        "swing-1",
+        "swing-2",
+        "strike",
+        "follow"
+      ],
+      "loop": false
+    }
+  }
+}

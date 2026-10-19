@@ -1,0 +1,18 @@
+export { PixelError, MAX_REQUEST_BYTES, parseColor, renderProject, buildAtlas, scalePixels, inspectProject, compareProjects, analyzeProject, reviewPixels, animationPosition, animationNeighbors, onionPixels, tileRepeat, tileReport } from './core.js';
+export { patchRecipe } from './patch.js';
+export { encodePNG, encodeAPNG } from './png.js';
+export { measureText, layoutText, FONT_CHARACTERS, FONT_HEIGHT, FONT_CAP_HEIGHT } from './font.js';
+export { encodeGIF, animationGIF, framesGIF } from './gif.js';
+export { numberedFrames, folderGIF } from './frame-folder.js';
+export { createSequence, createSceneSequence, planSequence, placeSprite, parseFrameRate, frameGrid, VIDEO_SIZES } from './sequence.js';
+export { createBundle, writeBundle, createZip, generateCSS, formatJSON } from './export.js';
+export { compilePoses, compileAutotile, compileNormals, NORMAL_DIRECTIONS } from './authoring.js';
+export { compileEffects } from './fx.js';
+export { compileFluid, createLiveFluid, FLUID_KINDS, FLUID_FIELDS, FLUID_WALLS } from './fluid.js';
+export { DITHER_PATTERNS, EASINGS, ease, ditherThreshold, cleanupIds, rotateRows, ruleVariants, rewriteIds } from './craft.js';
+export { BLOB_MASKS, CARDINAL_MASKS, neighbourMask, quadrantPieces, templatePiece } from './autotile.js';
+export { prepareScene, renderScene, inspectTile } from './scene.js';
+export { createSceneBundle } from './scene-export.js';
+export { createOverlay, applyOverlay, recipeFingerprint } from './overlays.js';
+export { decodePNG, importPNG } from './import.js';
+export { resolveReferences, restorePaletteReference } from './resolve.js';

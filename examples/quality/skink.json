@@ -1,0 +1,1018 @@
+{
+  "version": 1,
+  "name": "lantern-skink",
+  "width": 32,
+  "height": 26,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "symbols": {
+    "body": [
+      "...aayyyya..",
+      "..ayyyaaaaa.",
+      "aayaaaaaaarr",
+      "aaaaaaaarrrr",
+      "rraaaarrrrrp",
+      ".rrrrrppppp.",
+      "..pppppppp.."
+    ],
+    "compressed": [
+      "...aayyyya...",
+      "aayyaaaaaaaa.",
+      "aaaaaaaaarrrr",
+      "rraaaarrrrrpp",
+      ".rrrrrpppppp."
+    ],
+    "head": [
+      "..y...y..",
+      "..ay.ya..",
+      "...ayaa..",
+      "..yaaaa..",
+      "..aaawaa.",
+      "..aaakyaa",
+      "...aarr..",
+      "....rr..."
+    ],
+    "blink": [
+      "..y...y..",
+      "..ay.ya..",
+      "...ayaa..",
+      "..yaaaa..",
+      "..aaaaaa.",
+      "..aaakyaa",
+      "...aarr..",
+      "....rr..."
+    ],
+    "crest": [
+      "y.....y..",
+      "ay...ya..",
+      ".ayaaay..",
+      "..yaaa...",
+      "..aaawaa.",
+      "..aaakyaa",
+      "...aarr..",
+      "....rr..."
+    ],
+    "tail": [
+      "......rr",
+      "....rrpp",
+      "..rrpp..",
+      ".rpp....",
+      "rp......",
+      "r......."
+    ],
+    "tailUp": [
+      "r.......",
+      "rp......",
+      ".rpp....",
+      "..rrpp..",
+      "....rrpp",
+      "......rr"
+    ],
+    "stand": [
+      "..rr...rr",
+      "..rp...rp",
+      "..rp...rp",
+      ".rrp..rrp"
+    ],
+    "contactA": [
+      "...rr...rr...",
+      "..rr.....rr..",
+      ".rr.......rr.",
+      "rpp.......rpp"
+    ],
+    "downA": [
+      "..rr...rr.",
+      ".rrp....rr",
+      "..rp....rp",
+      "..rpp..rpp"
+    ],
+    "passA": [
+      "..rr...rr",
+      "..rp..rr.",
+      "..rp..ppp",
+      ".rpp....."
+    ],
+    "contactB": [
+      "...rr...rr.",
+      "....rr..rr.",
+      ".....rrrr..",
+      "....rpp.rpp"
+    ],
+    "downB": [
+      "..rr...rr.",
+      "...rr.rr..",
+      "....rprp..",
+      "...rpp.rpp"
+    ],
+    "passB": [
+      "..rr...rr",
+      "..rr...rp",
+      ".ppp...rp",
+      "......rpp"
+    ],
+    "charm": [
+      "y..",
+      "a..",
+      "yay",
+      "ywy",
+      "yay",
+      ".a."
+    ]
+  },
+  "frames": [
+    {
+      "name": "idle",
+      "duration": 880,
+      "anchor": [
+        14,
+        15
+      ],
+      "points": {
+        "pose": [
+          10,
+          18
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 10
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "stand",
+              "x": 8,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blink",
+      "duration": 100,
+      "anchor": [
+        14,
+        15
+      ],
+      "points": {
+        "pose": [
+          10,
+          18
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 10
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "stand",
+              "x": 8,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "blink",
+              "x": 15,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "contact-a",
+      "duration": 90,
+      "anchor": [
+        14,
+        15
+      ],
+      "points": {
+        "foot-contact": [
+          17,
+          18
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 10
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "contactA",
+              "x": 7,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "down-a",
+      "duration": 80,
+      "anchor": [
+        14,
+        16
+      ],
+      "points": {
+        "pose": [
+          15,
+          19
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "compressed",
+              "x": 7,
+              "y": 13
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "downA",
+              "x": 8,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 18,
+              "y": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "passing-a",
+      "duration": 80,
+      "anchor": [
+        14,
+        14
+      ],
+      "points": {
+        "pose": [
+          9,
+          17
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tailUp",
+              "x": 0,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "passA",
+              "x": 8,
+              "y": 14
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "contact-b",
+      "duration": 90,
+      "anchor": [
+        14,
+        15
+      ],
+      "points": {
+        "foot-contact": [
+          15,
+          18
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 10
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "contactB",
+              "x": 7,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 14
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "down-b",
+      "duration": 80,
+      "anchor": [
+        14,
+        16
+      ],
+      "points": {
+        "pose": [
+          15,
+          19
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "compressed",
+              "x": 7,
+              "y": 13
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "downB",
+              "x": 8,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 18,
+              "y": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "passing-b",
+      "duration": 80,
+      "anchor": [
+        14,
+        14
+      ],
+      "points": {
+        "pose": [
+          14,
+          17
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 14
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "passB",
+              "x": 8,
+              "y": 14
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gather",
+      "duration": 220,
+      "anchor": [
+        14,
+        16
+      ],
+      "points": {
+        "pose": [
+          15,
+          19
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tailUp",
+              "x": 0,
+              "y": 11
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "compressed",
+              "x": 7,
+              "y": 13
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "downA",
+              "x": 8,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "crest",
+              "x": 15,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 18,
+              "y": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "release",
+      "duration": 80,
+      "anchor": [
+        14,
+        14
+      ],
+      "points": {
+        "spell-release": [
+          22,
+          10
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tailUp",
+              "x": 0,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 9
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "contactA",
+              "x": 7,
+              "y": 14
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "crest",
+              "x": 15,
+              "y": 5
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recoil",
+      "duration": 120,
+      "anchor": [
+        14,
+        16
+      ],
+      "points": {
+        "pose": [
+          15,
+          19
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "compressed",
+              "x": 7,
+              "y": 13
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "downB",
+              "x": 8,
+              "y": 16
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "blink",
+              "x": 15,
+              "y": 8
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 18,
+              "y": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recover",
+      "duration": 180,
+      "anchor": [
+        14,
+        15
+      ],
+      "points": {
+        "pose": [
+          10,
+          18
+        ]
+      },
+      "layers": [
+        {
+          "name": "tail",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "tail",
+              "x": 0,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "body",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "body",
+              "x": 7,
+              "y": 10
+            }
+          ]
+        },
+        {
+          "name": "feet",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "stand",
+              "x": 8,
+              "y": 15
+            }
+          ]
+        },
+        {
+          "name": "head",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "head",
+              "x": 15,
+              "y": 6
+            }
+          ]
+        },
+        {
+          "name": "charm",
+          "ops": [
+            {
+              "op": "stamp",
+              "symbol": "charm",
+              "x": 17,
+              "y": 14
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "idle": {
+      "frames": [
+        "idle",
+        "blink",
+        "idle"
+      ]
+    },
+    "run": {
+      "frames": [
+        "contact-a",
+        "down-a",
+        "passing-a",
+        "contact-b",
+        "down-b",
+        "passing-b"
+      ]
+    },
+    "cast": {
+      "frames": [
+        "gather",
+        "release",
+        "recoil",
+        "recover"
+      ],
+      "loop": false
+    }
+  }
+}

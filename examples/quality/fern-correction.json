@@ -1,0 +1,37 @@
+{
+  "format": "pixelforge-overlay",
+  "version": 1,
+  "base": "83f1b25fa423d878be75a84ef489bdcd17f1f27ee6a2c380be5941db18adf939",
+  "selections": {
+    "tip": {
+      "space": "canvas",
+      "x": 14,
+      "y": 2,
+      "w": 3,
+      "h": 3
+    }
+  },
+  "changes": [
+    {
+      "grid": "frames[still]",
+      "selection": "tip",
+      "value": {
+        "rows": [
+          "..h",
+          "..h",
+          ".hg"
+        ]
+      }
+    }
+  ],
+  "frames": {
+    "still": "e44b70ee9e12f4a566be394f27f1bb7bcb7513260e7085f318375c844e675116"
+  },
+  "targets": [
+    "still"
+  ],
+  "colors": {
+    "g": "#72967dff",
+    "h": "#afc4a0ff"
+  }
+}

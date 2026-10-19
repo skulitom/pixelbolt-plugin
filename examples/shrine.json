@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "name": "shrine",
+  "width": 48,
+  "height": 40,
+  "palette": {
+    "a": "#2a2140",
+    "b": "#43305a",
+    "e": "#6b4668",
+    "f": "#a8606a",
+    "u": "#2c3b2f",
+    "v": "#3f5a3a",
+    "k": "#1d1a2b",
+    "s": "#6d6a8a",
+    "S": "#4d4a6a",
+    "h": "#9e9bbd",
+    "c": "#2f2b45",
+    "m": "#6fa34f",
+    "M": "#46703f",
+    "g": "#5fc7b8",
+    "G": "#d6fff1"
+  },
+  "symbols": {
+    "rune": [
+      "..g..",
+      ".g.g.",
+      "g.g.g",
+      ".g.g.",
+      "..g.."
+    ]
+  },
+  "frames": [
+    {
+      "name": "idle",
+      "duration": 400,
+      "layers": [
+        {
+          "name": "sky",
+          "ops": [
+            {
+              "op": "rect",
+              "x": 0,
+              "y": 0,
+              "w": 48,
+              "h": 30,
+              "color": "a"
+            },
+            {
+              "op": "dither",
+              "x": 0,
+              "y": 8,
+              "w": 48,
+              "h": 10,
+              "color": "b",
+              "density": [
+                0,
+                1
+              ]
+            },
+            {
+              "op": "rect",
+              "x": 0,
+              "y": 18,
+              "w": 48,
+              "h": 6,
+              "color": "b"
+            },
+            {
+              "op": "dither",
+              "x": 0,
+              "y": 18,
+              "w": 48,
+              "h": 8,
+              "color": "e",
+              "density": [
+                0,
+                1
+              ]
+            },
+            {
+              "op": "rect",
+              "x": 0,
+              "y": 26,
+              "w": 48,
+              "h": 4,
+              "color": "e"
+            },
+            {
+              "op": "dither",
+              "x": 0,
+              "y": 26,
+              "w": 48,
+              "h": 4,
+              "color": "f",
+              "density": [
+                0,
+                0.75
+              ]
+            },
+            {
+              "op": "rect",
+              "x": 0,
+              "y": 30,
+              "w": 48,
+              "h": 10,
+              "color": "v"
+            },
+            {
+              "op": "dither",
+              "x": 0,
+              "y": 30,
+              "w": 48,
+              "h": 10,
+              "color": "u",
+              "density": [
+                0.25,
+                1
+              ]
+            }
+          ]
+        },
+        {
+          "name": "stone",
+          "ops": [
+            {
+              "op": "ellipse",
+              "x": 16,
+              "y": 6,
+              "w": 16,
+              "h": 12,
+              "color": "s"
+            },
+            {
+              "op": "rect",
+              "x": 16,
+              "y": 12,
+              "w": 16,
+              "h": 22,
+              "color": "s"
+            },
+            {
+              "op": "pixel",
+              "x": 26,
+              "y": 13,
+              "color": "c"
+            },
+            {
+              "op": "rewrite",
+              "x": 18,
+              "y": 12,
+              "w": 12,
+              "h": 20,
+              "rules": [
+                {
+                  "match": [
+                    "c.",
+                    ".s"
+                  ],
+                  "replace": [
+                    "..",
+                    ".c"
+                  ]
+                }
+              ],
+              "mirror": true,
+              "limit": 1,
+              "steps": 9,
+              "seed": 7
+            },
+            {
+              "op": "dither",
+              "x": 24,
+              "y": 6,
+              "w": 8,
+              "h": 28,
+              "color": "S",
+              "density": [
+                0,
+                1
+              ],
+              "direction": "right",
+              "over": "s"
+            },
+            {
+              "op": "outline",
+              "color": "h",
+              "position": "inside",
+              "directions": [
+                "xx.",
+                "x..",
+                "..."
+              ]
+            },
+            {
+              "op": "outline",
+              "color": "k"
+            },
+            {
+              "op": "rewrite",
+              "empty": "_",
+              "rules": [
+                {
+                  "match": [
+                    "_",
+                    "k"
+                  ],
+                  "replace": [
+                    ".",
+                    "m"
+                  ]
+                }
+              ],
+              "chance": 0.7,
+              "seed": 2
+            },
+            {
+              "op": "rewrite",
+              "rules": [
+                {
+                  "match": [
+                    "m",
+                    "h"
+                  ],
+                  "replace": [
+                    ".",
+                    "M"
+                  ]
+                },
+                {
+                  "match": [
+                    "m",
+                    "s"
+                  ],
+                  "replace": [
+                    ".",
+                    "M"
+                  ]
+                }
+              ],
+              "chance": 0.6,
+              "seed": 3
+            },
+            {
+              "op": "stamp",
+              "symbol": "rune",
+              "x": 19,
+              "y": 20
+            },
+            {
+              "op": "outline",
+              "color": "k",
+              "directions": [
+                "...",
+                "...",
+                ".x."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "glow",
+      "from": "idle",
+      "duration": 240,
+      "palette": {
+        "g": "G"
+      },
+      "ops": [
+        {
+          "op": "stamp",
+          "symbol": "rune",
+          "x": 19,
+          "y": 20
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "pulse": {
+      "frames": [
+        "idle",
+        "glow"
+      ]
+    }
+  }
+}

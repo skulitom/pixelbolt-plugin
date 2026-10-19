@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "name": "hush-crystal",
+  "width": 16,
+  "height": 24,
+  "palette": {
+    "k": "#0b1020",
+    "v": "#182239",
+    "b": "#26354c",
+    "s": "#3d5364",
+    "t": "#477975",
+    "g": "#72967d",
+    "h": "#afc4a0",
+    "y": "#e7ce89",
+    "w": "#f7edc4",
+    "a": "#cc8762",
+    "r": "#8d5260",
+    "p": "#573b57",
+    "c": "#75bfbc",
+    "d": "#3a8eaa"
+  },
+  "frames": [
+    {
+      "name": "whole",
+      "duration": 700,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 2,
+          "y": 7,
+          "rows": [
+            "......h..",
+            ".....hcc.",
+            "....hccdd",
+            "....hccdd",
+            "...hccddd",
+            "...hcdddd",
+            "..hccdddd",
+            "..hcddddb",
+            "..cddddbb",
+            "..cdddbb.",
+            "...ddbb..",
+            "....bb..."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "impact",
+      "duration": 65,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 3,
+          "y": 7,
+          "rows": [
+            "....w....",
+            "...www...",
+            "...w.w...",
+            ".wwwww.w.",
+            "www.w.www",
+            ".wwwww.w.",
+            "...w.w...",
+            "...www...",
+            "....w...."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "split",
+      "duration": 100,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 1,
+          "y": 7,
+          "rows": [
+            "....c.....h.",
+            "...cc.....cd",
+            "...cd.....dd",
+            "..cd......db",
+            "..dd......bb",
+            "...b........",
+            ".......c....",
+            ".......db...",
+            "......cdb..."
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fallen",
+      "duration": 150,
+      "ops": [
+        {
+          "op": "grid",
+          "x": 3,
+          "y": 13,
+          "rows": [
+            "..hc......",
+            "..cdb.....",
+            "...b..cc..",
+            "......dbb.",
+            ".hcdb.bbb.",
+            "..bbb....."
+          ]
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "break": {
+      "frames": [
+        "impact",
+        "split",
+        "fallen"
+      ],
+      "loop": false
+    }
+  }
+}

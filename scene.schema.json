@@ -1,0 +1,2391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt scene review",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-scene"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "background": {
+      "type": "string",
+      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60000
+    },
+    "palette": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Palette file, resolved by the CLI relative to the scene or inside the MCP root."
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+          }
+        }
+      ],
+      "description": "A theme for every asset: colours for palette keys the recipes share (keys a recipe lacks are ignored), or a palette file resolved by the CLI and MCP."
+    },
+    "cues": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 60000
+      },
+      "description": "Named times in milliseconds; sequence and trajectory times may say \"name\", \"name+90\" or \"name-20\"."
+    },
+    "assets": {
+      "type": "object",
+      "maxProperties": 64,
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/recipe"
+              },
+              {
+                "type": "string",
+                "description": "Recipe file, resolved by the CLI relative to the scene or inside the MCP root."
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "revision": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{12}$"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "recipe": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/recipe"
+                  },
+                  {
+                    "type": "string",
+                    "description": "Recipe file, resolved by the CLI relative to the scene or inside the MCP root."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "revision": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{12}$"
+                      }
+                    },
+                    "required": [
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "normal": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/recipe"
+                  },
+                  {
+                    "type": "string",
+                    "description": "Recipe file, resolved by the CLI relative to the scene or inside the MCP root."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "revision": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{12}$"
+                      }
+                    },
+                    "required": [
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "emissive": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/recipe"
+                  },
+                  {
+                    "type": "string",
+                    "description": "Recipe file, resolved by the CLI relative to the scene or inside the MCP root."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "revision": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{12}$"
+                      }
+                    },
+                    "required": [
+                      "revision"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "palette": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "description": "Palette file, resolved by the CLI relative to the scene or inside the MCP root."
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string",
+                      "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+                    }
+                  }
+                ],
+                "description": "A theme for this asset, applied after the scene palette."
+              }
+            },
+            "required": [
+              "recipe"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "at": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "anchor": {
+            "oneOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              {
+                "const": "frame"
+              }
+            ],
+            "description": "[x, y] in asset pixels placed at `at` (default [0, 0]), or \"frame\" to place every drawn frame by its own atlas anchor, so animated placements follow per-frame anchors. Tilemaps take [x, y] only."
+          },
+          "scale": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "frame": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "animation": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "hidden": {
+            "type": "boolean",
+            "description": "Start hidden; a later frame or animation cue shows the placement."
+          },
+          "repeat": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32
+            },
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "step": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "trajectory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 60000
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}([+-][0-9]{1,5})?$"
+                    }
+                  ],
+                  "description": "Milliseconds or a named cue."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                },
+                "ease": {
+                  "enum": [
+                    "linear",
+                    "hold",
+                    "in",
+                    "out",
+                    "inOut",
+                    "overshoot",
+                    "bounce"
+                  ],
+                  "description": "Shape of the segment starting at this key: linear (default), hold (jump at the end), in, out, inOut, overshoot or bounce. Positions round to whole pixels."
+                }
+              },
+              "required": [
+                "time",
+                "at"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 256,
+            "minItems": 2
+          },
+          "sequence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "time": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 59999
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}([+-][0-9]{1,5})?$"
+                    }
+                  ],
+                  "description": "Milliseconds or a named cue."
+                },
+                "frame": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "animation": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "hide": {
+                  "const": true,
+                  "description": "Hide the placement from this time until a later frame or animation cue."
+                }
+              },
+              "required": [
+                "time"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64
+          },
+          "attach": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "description": "Name of an earlier, uniquely named placement."
+              },
+              "point": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+              }
+            },
+            "required": [
+              "instance",
+              "point"
+            ],
+            "additionalProperties": false,
+            "description": "Follow a named frame point of another placement; at becomes the offset from it. Not drawn while that frame has no such point."
+          },
+          "sort": {
+            "const": "ground",
+            "description": "Draw among the other sorted placements by ground line (the y of the placement point), where the first of them is listed."
+          },
+          "shade": {
+            "type": "integer",
+            "minimum": -8,
+            "maximum": 8,
+            "description": "Draw no colours: wherever the frame is opaque, move the pixels beneath this many steps along the asset recipe's ramps (negative darkens). Not 0."
+          },
+          "tilemap": {
+            "type": "object",
+            "properties": {
+              "tile": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "maxItems": 256,
+                "minItems": 1
+              },
+              "outside": {
+                "enum": [
+                  "empty",
+                  "match"
+                ],
+                "description": "Cells beyond the map: empty (default), or matching every mask and rule pattern."
+              },
+              "empty": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1,
+                "description": "A character, not a legend key, that stands for empty cells in rule patterns."
+              },
+              "classes": {
+                "type": "object",
+                "propertyNames": {
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "description": "Characters that stand for several map characters in rule patterns, e.g. {\"#\": \"WV\"}; include the empty character to match empty cells too."
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "description": "Reorders seeded variant picks and rule chances; default 0 keeps position-based picks."
+              },
+              "legend": {
+                "type": "object",
+                "propertyNames": {
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "description": "Map characters to what they draw. Dot and space are empty cells.",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "description": "Frame name; with autotile, {mask} becomes the neighbour mask."
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "frame": {
+                          "type": "string",
+                          "description": "Frame name; with autotile, {mask} becomes the neighbour mask."
+                        },
+                        "frames": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 64,
+                          "minItems": 1,
+                          "description": "Variants of frame, picked by cell position (seeded when the tilemap has a seed)."
+                        },
+                        "animation": {
+                          "type": "string",
+                          "description": "Animation name; with autotile, {mask} becomes the neighbour mask."
+                        },
+                        "animations": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 64,
+                          "minItems": 1,
+                          "description": "Variants of animation, picked by cell position (seeded when the tilemap has a seed)."
+                        },
+                        "weights": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000
+                          },
+                          "maxItems": 64,
+                          "minItems": 1,
+                          "description": "One whole-number weight per variant name; heavier names are picked more often."
+                        },
+                        "autotile": {
+                          "enum": [
+                            "blob",
+                            "cardinal"
+                          ],
+                          "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                        },
+                        "match": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "Characters counted as the same terrain for the mask; default: this character."
+                        }
+                      },
+                      "required": [],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "rules": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "frame": {
+                                "type": "string",
+                                "description": "Frame name; with autotile, {mask} becomes the neighbour mask."
+                              },
+                              "frames": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "maxItems": 64,
+                                "minItems": 1,
+                                "description": "Variants of frame, picked by cell position (seeded when the tilemap has a seed)."
+                              },
+                              "animation": {
+                                "type": "string",
+                                "description": "Animation name; with autotile, {mask} becomes the neighbour mask."
+                              },
+                              "animations": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "maxItems": 64,
+                                "minItems": 1,
+                                "description": "Variants of animation, picked by cell position (seeded when the tilemap has a seed)."
+                              },
+                              "weights": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "maximum": 1000
+                                },
+                                "maxItems": 64,
+                                "minItems": 1,
+                                "description": "One whole-number weight per variant name; heavier names are picked more often."
+                              },
+                              "autotile": {
+                                "enum": [
+                                  "blob",
+                                  "cardinal"
+                                ],
+                                "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                              },
+                              "match": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "Characters counted as the same terrain for the mask; default: this character."
+                              },
+                              "where": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 3,
+                                  "maxLength": 3
+                                },
+                                "maxItems": 3,
+                                "minItems": 3,
+                                "description": "3×3 characters centred on the cell. A dot matches anything, the tilemap's empty character matches empty cells (and cells beyond the map), a class matches its members, any other character matches itself."
+                              },
+                              "chance": {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "description": "Seeded probability that a matching rule draws."
+                              },
+                              "offset": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": -8,
+                                  "maximum": 8
+                                },
+                                "maxItems": 2,
+                                "minItems": 2,
+                                "description": "[columns, rows] to draw into another cell; it draws over that cell's own tiles."
+                              },
+                              "stop": {
+                                "type": "boolean",
+                                "description": "When this rule draws, skip the rest of the cell's rules."
+                              }
+                            },
+                            "required": [],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 32,
+                          "minItems": 1,
+                          "description": "Every rule that matches draws, in order, until one with stop draws."
+                        }
+                      },
+                      "required": [
+                        "rules"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null",
+                      "description": "Context cell: never drawn, but it counts for other entries' match and for rules."
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "rows",
+              "legend"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "asset",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 256
+    },
+    "lighting": {
+      "type": "object",
+      "properties": {
+        "ambient": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bands": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 16
+        },
+        "scope": {
+          "enum": [
+            "passes",
+            "all"
+          ],
+          "description": "passes (default) lights only assets with normal/emissive passes; all also lights plain assets as flat surfaces."
+        },
+        "mode": {
+          "enum": [
+            "multiply",
+            "ramp"
+          ],
+          "description": "multiply (default) scales colours by the light; ramp moves each colour along its recipe's ramps instead, so the lit scene keeps its palette (light colour then only sets brightness)."
+        },
+        "steps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Ramp lighting: steps per unit of brightness away from 1; default 2."
+        },
+        "lights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              },
+              "radius": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 512
+              },
+              "color": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              }
+            },
+            "required": [
+              "at"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 8
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "assets",
+    "instances"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    },
+    "frame": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000,
+          "description": "Frame duration in milliseconds; default 100."
+        },
+        "from": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+        },
+        "translate": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -4096,
+            "maximum": 4096
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "wrap": {
+          "type": "boolean",
+          "description": "Translation wraps around the canvas instead of clipping (scrolling tiles)."
+        },
+        "flipX": {
+          "type": "boolean"
+        },
+        "flipY": {
+          "type": "boolean"
+        },
+        "palette": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {
+            "type": "string",
+            "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+          },
+          "description": "Recolor project palette keys for this frame only (palette cycling). Keys must exist in the project palette."
+        },
+        "anchor": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -4096,
+            "maximum": 4096
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+        },
+        "points": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "description": "Named frame positions (hands, hit points, glyph advance), exported in the atlas in exported pixels."
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/op"
+          },
+          "maxItems": 2048
+        },
+        "layers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/layer"
+          },
+          "maxItems": 64
+        },
+        "pixels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pixel"
+          },
+          "maxItems": 65536,
+          "description": "Final canvas-coordinate RGBA replacements after ops and layers. Coordinates must be inside this canvas. Later entries win; transparent erases."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "pixel": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "color": {
+          "type": "string",
+          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "color"
+      ],
+      "additionalProperties": false
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": -4096,
+          "maximum": 4096
+        },
+        "y": {
+          "type": "integer",
+          "minimum": -4096,
+          "maximum": 4096
+        },
+        "palette": {
+          "type": "object",
+          "maxProperties": 256,
+          "additionalProperties": {
+            "type": "string",
+            "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+          },
+          "description": "Recolor project palette keys for this layer's drawing only, on top of the frame palette: a flash or cycle on one layer leaves other drawing that shares the key alone. Keys must exist in the project palette; values are colours or project palette names."
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/op"
+          },
+          "maxItems": 2048
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "op": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "pixel"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "rect"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "ellipse"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "line"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "x2": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y2": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "x2",
+            "y2",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "clear"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "fill"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "replace"
+            },
+            "from": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "to": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "grid"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "rows": {
+              "$ref": "#/$defs/rows"
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "rows"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "stamp"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "text"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "Printable ASCII, western European accented letters and common symbols; \\n starts a new line (at most 64)."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "align": {
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ],
+              "description": "What x is: the left edge of the text (default), its centre or its right edge. Lines align the same way."
+            },
+            "spacing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16,
+              "description": "Pixels between glyphs; default 1."
+            },
+            "lineHeight": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Pixels from the top of one line to the top of the next; default 10."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "text",
+            "color"
+          ],
+          "additionalProperties": false,
+          "description": "Draw text in the built-in pixel font. y is the top of the capitals; a line is 8 rows: capitals 7 tall, lowercase 5, descenders 1 below, and the accent of a capital reaches 2 rows above y. Glyphs are 1 to 5 pixels wide (© ® — Œ œ are 7), digits always 5, a space 3. One line of n average characters is about 6n pixels wide."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "copy"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "sx": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "sy": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "maxProperties": 256,
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Symbol copies: recolor grid characters (one character each) → palette name or colour. Frame copies: swap exact colours, named by project palette key or hex (#RGB to #RRGGBBAA), for a palette name or colour."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "from"
+              ]
+            },
+            {
+              "required": [
+                "symbol"
+              ]
+            }
+          ],
+          "description": "Copy a rectangle of a symbol (palette characters) or an earlier frame (exact RGBA)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "autotile"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "mask": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255,
+              "description": "Neighbour mask. Blob: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128, reduced so a diagonal counts only with both of its sides. Cardinal: N=1, E=2, S=4, W=8."
+            },
+            "mode": {
+              "enum": [
+                "blob",
+                "cardinal"
+              ],
+              "description": "blob (default) or cardinal."
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "symbol",
+            "mask"
+          ],
+          "additionalProperties": false,
+          "description": "Draw one autotile tile from a template symbol two tiles wide and three tall: the four quarters the mask selects (see the autotile template format). The autotile compiler emits one per frame, so editing the template redraws every tile."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "outline"
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "diagonal": {
+              "type": "boolean"
+            },
+            "position": {
+              "enum": [
+                "outside",
+                "inside",
+                "middle"
+              ],
+              "description": "outside (default) surrounds the visible pixels; inside recolors their edge pixels; middle splits the width, the odd pixel outside."
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "Rings of pixels; default 1."
+            },
+            "directions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[x.]{3}$"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "description": "3×3 grid centred on a visible pixel, with a dot in the centre: x marks the sides that get the line, e.g. [\"...\", \"...\", \"..x\"] for a drop shadow or [\".x.\", \"...\", \"...\"] for a top rim. Replaces diagonal."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false,
+          "description": "Outline every visible pixel in this buffer (frame or layer): outside rings, inside edge rings or both, in chosen directions."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "dither"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "erase": {
+              "type": "boolean",
+              "description": "Clear the pattern pixels instead of drawing a color."
+            },
+            "density": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              ],
+              "description": "Share of pixels changed, 0–1, or [from, to] ramping along direction."
+            },
+            "direction": {
+              "enum": [
+                "down",
+                "up",
+                "right",
+                "left",
+                "radial"
+              ],
+              "description": "Ramp direction for a [from, to] density; radial runs from the centre to the edge."
+            },
+            "pattern": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "bayer2",
+                    "bayer4",
+                    "bayer8",
+                    "noise",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Rows of ranks from 0 to cells − 1; low ranks turn on first, and a highest rank n gives n + 1 levels, so [[0, 1], [1, 0]] is a checkerboard at 0.5."
+                }
+              ],
+              "description": "bayer4 by default. noise is seeded white noise with no repeating grid; value is seeded smooth noise that forms clumps about scale pixels across. Patterns follow canvas coordinates, so neighbouring areas line up."
+            },
+            "offset": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Shift the pattern, for example to crawl it between frames."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Orders the noise or value pattern (default 0): the same seed keeps every pixel's threshold, so a rising density grows in a fixed order; another seed reshuffles it."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Clump size of the value pattern in pixels; default 4."
+            },
+            "over": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                  },
+                  "maxItems": 64,
+                  "minItems": 1
+                }
+              ],
+              "description": "Only change pixels whose exact current color is listed (transparent included)."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "erase"
+              ]
+            }
+          ],
+          "description": "Ordered dither between the current pixels and color: draws (or erases) where a canvas-anchored threshold pattern is below the density (default 0.5). x/y default to 0 and w/h reach the canvas edge."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "shade"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": -8,
+              "maximum": 8,
+              "description": "Steps along each colour's ramp: negative darkens (default -1), positive lightens. Clamped at the ramp's ends; not 0."
+            },
+            "shape": {
+              "enum": [
+                "rect",
+                "ellipse"
+              ],
+              "description": "rect (default) or the ellipse inside the region."
+            },
+            "density": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              ],
+              "description": "Share of pixels changed, 0–1, or [from, to] ramping along direction."
+            },
+            "direction": {
+              "enum": [
+                "down",
+                "up",
+                "right",
+                "left",
+                "radial"
+              ],
+              "description": "Ramp direction for a [from, to] density; radial runs from the centre to the edge."
+            },
+            "pattern": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "bayer2",
+                    "bayer4",
+                    "bayer8",
+                    "noise",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Rows of ranks from 0 to cells − 1; low ranks turn on first, and a highest rank n gives n + 1 levels, so [[0, 1], [1, 0]] is a checkerboard at 0.5."
+                }
+              ],
+              "description": "bayer4 by default. noise is seeded white noise with no repeating grid; value is seeded smooth noise that forms clumps about scale pixels across. Patterns follow canvas coordinates, so neighbouring areas line up."
+            },
+            "offset": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Shift the pattern, for example to crawl it between frames."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Orders the noise or value pattern (default 0): the same seed keeps every pixel's threshold, so a rising density grows in a fixed order; another seed reshuffles it."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Clump size of the value pattern in pixels; default 4."
+            },
+            "over": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                  },
+                  "maxItems": 64,
+                  "minItems": 1
+                }
+              ],
+              "description": "Only change pixels whose exact current color is listed (transparent included)."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "description": "Move every pixel of the region along its colour's ramp (see ramps), so shadows and light keep the palette on any surface. Colours on no ramp stay. density (default 1) and pattern give a dithered edge. x/y default to 0 and w/h reach the canvas edge."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "tilemap"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "tile": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Cell size [width, height] in pixels."
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "maxItems": 256,
+              "minItems": 1
+            },
+            "outside": {
+              "enum": [
+                "empty",
+                "match"
+              ],
+              "description": "Cells beyond the map: empty (default), or matching every mask and rule pattern."
+            },
+            "empty": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A character, not a legend key, that stands for empty cells in rule patterns."
+            },
+            "classes": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "description": "Characters that stand for several map characters in rule patterns, e.g. {\"#\": \"WV\"}; include the empty character to match empty cells too."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Reorders seeded variant picks and rule chances; default 0 keeps position-based picks."
+            },
+            "legend": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "description": "Map characters to what they draw. Dot and space are empty cells.",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string",
+                        "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                      },
+                      "symbols": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "Variants of symbol, picked by cell position (seeded when the tilemap has a seed)."
+                      },
+                      "template": {
+                        "type": "string",
+                        "description": "An autotile template symbol (two tiles wide, three tall) drawn with the cell's neighbour mask; needs autotile."
+                      },
+                      "templates": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "Variants of template, picked by cell position (seeded when the tilemap has a seed)."
+                      },
+                      "weights": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "One whole-number weight per variant name; heavier names are picked more often."
+                      },
+                      "autotile": {
+                        "enum": [
+                          "blob",
+                          "cardinal"
+                        ],
+                        "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                      },
+                      "match": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Characters counted as the same terrain for the mask; default: this character."
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rules": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "symbol": {
+                              "type": "string",
+                              "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                            },
+                            "symbols": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "Variants of symbol, picked by cell position (seeded when the tilemap has a seed)."
+                            },
+                            "template": {
+                              "type": "string",
+                              "description": "An autotile template symbol (two tiles wide, three tall) drawn with the cell's neighbour mask; needs autotile."
+                            },
+                            "templates": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "Variants of template, picked by cell position (seeded when the tilemap has a seed)."
+                            },
+                            "weights": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "One whole-number weight per variant name; heavier names are picked more often."
+                            },
+                            "autotile": {
+                              "enum": [
+                                "blob",
+                                "cardinal"
+                              ],
+                              "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                            },
+                            "match": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Characters counted as the same terrain for the mask; default: this character."
+                            },
+                            "where": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 3,
+                                "maxLength": 3
+                              },
+                              "maxItems": 3,
+                              "minItems": 3,
+                              "description": "3×3 characters centred on the cell. A dot matches anything, the tilemap's empty character matches empty cells (and cells beyond the map), a class matches its members, any other character matches itself."
+                            },
+                            "chance": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "Seeded probability that a matching rule draws."
+                            },
+                            "offset": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -8,
+                                "maximum": 8
+                              },
+                              "maxItems": 2,
+                              "minItems": 2,
+                              "description": "[columns, rows] to draw into another cell; it draws over that cell's own tiles."
+                            },
+                            "stop": {
+                              "type": "boolean",
+                              "description": "When this rule draws, skip the rest of the cell's rules."
+                            }
+                          },
+                          "required": [],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "description": "Every rule that matches draws, in order, until one with stop draws."
+                      }
+                    },
+                    "required": [
+                      "rules"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null",
+                    "description": "Context cell: never drawn, but it counts for other entries' match and for rules."
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "op",
+            "tile",
+            "rows",
+            "legend"
+          ],
+          "additionalProperties": false,
+          "description": "Draw a character map from this recipe's symbols and autotile templates, with variants, weights and neighbour rules, so later operations see the composed result (dither over its floor, rewrite rules at its corners)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "rewrite"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 512
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "match": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "description": "Equal-width rows of palette keys; dot or space matches anything (match) or keeps the pixel (replace); the empty character stands for transparent."
+                  },
+                  "replace": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "description": "Equal-width rows of palette keys; dot or space matches anything (match) or keeps the pixel (replace); the empty character stands for transparent."
+                  }
+                },
+                "required": [
+                  "match",
+                  "replace"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16,
+              "minItems": 1
+            },
+            "empty": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A non-palette character meaning a transparent pixel in match and erasure in replace."
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Passes over every rule; stops early when a pass changes nothing."
+            },
+            "chance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Seeded probability that each match is applied."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536,
+              "description": "Most replacements per rule per step."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "rotate": {
+              "type": "boolean",
+              "description": "Also match the rules turned 90°, 180° and 270°."
+            },
+            "mirror": {
+              "type": "boolean",
+              "description": "Also match the rules mirrored horizontally."
+            }
+          },
+          "required": [
+            "op",
+            "rules"
+          ],
+          "additionalProperties": false,
+          "description": "Markov-style rewrite rules on this buffer: each small match grid found on exact colors is replaced, in a seeded order, without overlapping rewrites. The region defaults to the whole canvas."
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "properties": {
+        "$schema": {
+          "type": "string"
+        },
+        "version": {
+          "const": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "palette": {
+          "type": "object",
+          "maxProperties": 257,
+          "properties": {
+            "$ref": {
+              "type": "string",
+              "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+            }
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+          }
+        },
+        "ramps": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "maxItems": 32,
+            "minItems": 2
+          },
+          "maxItems": 64,
+          "description": "Palette keys from dark to light, one list per material. shade and scene ramp lighting move a colour along its ramp instead of inventing one. A key belongs to one ramp. A shared palette file ({\"palette\": {...}, \"ramps\": [...]}) can supply them."
+        },
+        "background": {
+          "type": "string",
+          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+        },
+        "symbols": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/rows"
+          }
+        },
+        "anchor": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -4096,
+            "maximum": 4096
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/frame"
+          },
+          "maxItems": 256,
+          "minItems": 1
+        },
+        "animations": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 65527,
+          "description": "ZIP32 bundle budget: animation count + frame count + 7 support files must not exceed 65,535.",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "frames": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "maxItems": 1024,
+                "minItems": 1
+              },
+              "direction": {
+                "enum": [
+                  "forward",
+                  "reverse",
+                  "pingpong"
+                ]
+              },
+              "loop": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "frames"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "sheet": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "padding": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "trim": {
+              "type": "boolean",
+              "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "name",
+        "width",
+        "height",
+        "frames"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

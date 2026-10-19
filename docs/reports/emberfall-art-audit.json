@@ -1,0 +1,422 @@
+{
+  "date": "2026-09-27",
+  "baseline": "a3f5b58",
+  "node": "v24.19.0",
+  "method": "Read each saved demo recipe; render with src/core.js renderProject; SHA-256 hash the complete frame.data RGBA buffer; count distinct hashes within each recipe and within each expanded animation sequence. No alignment, masking, perceptual similarity, or artistic scoring.",
+  "interpretation": "Duplicates can be intentional holds or reused poses. Distinct RGBA frames do not establish distinct body poses, useful motion, or visual quality. Totals are sums of within-recipe uniqueness, not global deduplication.",
+  "totals": {
+    "recipes": 9,
+    "frames": 220,
+    "animations": 44,
+    "distinctRgbaFramesWithinRecipes": 181
+  },
+  "recipes": [
+    {
+      "source": "demo/recipes/fiends.json",
+      "sourceSha256": "59653e0eb3a73fe459c72e7a2b7483d611b4767b9837d6e466546c43d02f2a6d",
+      "name": "fiends",
+      "width": 48,
+      "height": 48,
+      "frames": 22,
+      "distinctRgbaFrames": 15,
+      "animations": [
+        {
+          "name": "crawler",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 720,
+          "loop": true
+        },
+        {
+          "name": "wisp",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 5,
+          "durationMs": 680,
+          "loop": true
+        },
+        {
+          "name": "sentinel",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 2,
+          "durationMs": 1080,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/horizon.json",
+      "sourceSha256": "dd21b99b0effe2997a19982aff537c993ca167695a5f802949d532425765595c",
+      "name": "horizon",
+      "width": 256,
+      "height": 144,
+      "frames": 1,
+      "distinctRgbaFrames": 1,
+      "animations": [
+        {
+          "name": "moonrise",
+          "sequenceEntries": 1,
+          "distinctRgbaFrames": 1,
+          "durationMs": 100,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/knight.json",
+      "sourceSha256": "77f590f7a51feb58a82e2ed99d669f38e22d5cb0f12f4cac2fe45fd85bce2351",
+      "name": "knight",
+      "width": 48,
+      "height": 48,
+      "frames": 33,
+      "distinctRgbaFrames": 27,
+      "animations": [
+        {
+          "name": "idle",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 1300,
+          "loop": true
+        },
+        {
+          "name": "run",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 600,
+          "loop": true
+        },
+        {
+          "name": "jump",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 3,
+          "durationMs": 300,
+          "loop": false
+        },
+        {
+          "name": "fall",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 3,
+          "durationMs": 330,
+          "loop": true
+        },
+        {
+          "name": "cast",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 340,
+          "loop": false
+        },
+        {
+          "name": "dash",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 270,
+          "loop": false
+        },
+        {
+          "name": "hurt",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 2,
+          "durationMs": 270,
+          "loop": false
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/relics.json",
+      "sourceSha256": "501da2934102e850cd6a1c312f360dcff273174411c004ff88c28fb9a88672e4",
+      "name": "relics",
+      "width": 64,
+      "height": 64,
+      "frames": 37,
+      "distinctRgbaFrames": 30,
+      "animations": [
+        {
+          "name": "brazier",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 600,
+          "loop": true
+        },
+        {
+          "name": "brazier-frozen",
+          "sequenceEntries": 1,
+          "distinctRgbaFrames": 1,
+          "durationMs": 100,
+          "loop": true
+        },
+        {
+          "name": "crystal",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 900,
+          "loop": true
+        },
+        {
+          "name": "crate",
+          "sequenceEntries": 1,
+          "distinctRgbaFrames": 1,
+          "durationMs": 100,
+          "loop": true
+        },
+        {
+          "name": "vines",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 2,
+          "durationMs": 880,
+          "loop": true
+        },
+        {
+          "name": "grass",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 3,
+          "durationMs": 720,
+          "loop": true
+        },
+        {
+          "name": "grass-burned",
+          "sequenceEntries": 1,
+          "distinctRgbaFrames": 1,
+          "durationMs": 100,
+          "loop": true
+        },
+        {
+          "name": "checkpoint",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 2,
+          "durationMs": 960,
+          "loop": true
+        },
+        {
+          "name": "portal",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 800,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/spellcraft.json",
+      "sourceSha256": "6c6c6416b9d0923ef0d09c7cebc3e58ee8fdf25d945462db90a3a9725a6a89a3",
+      "name": "spellcraft",
+      "width": 64,
+      "height": 64,
+      "frames": 65,
+      "distinctRgbaFrames": 59,
+      "animations": [
+        {
+          "name": "ember",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 390,
+          "loop": true
+        },
+        {
+          "name": "ember-impact",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 500,
+          "loop": false
+        },
+        {
+          "name": "frost",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 390,
+          "loop": true
+        },
+        {
+          "name": "frost-impact",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 500,
+          "loop": false
+        },
+        {
+          "name": "storm",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 6,
+          "durationMs": 390,
+          "loop": true
+        },
+        {
+          "name": "storm-impact",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 500,
+          "loop": false
+        },
+        {
+          "name": "dust",
+          "sequenceEntries": 7,
+          "distinctRgbaFrames": 7,
+          "durationMs": 420,
+          "loop": false
+        },
+        {
+          "name": "shatter",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 520,
+          "loop": false
+        },
+        {
+          "name": "rune",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 2,
+          "durationMs": 800,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/terrain.json",
+      "sourceSha256": "9f2e254cd5e71ed5895021f0972a4125d538ddaf49e316548fd5422e165d6afd",
+      "name": "terrain",
+      "width": 32,
+      "height": 32,
+      "frames": 19,
+      "distinctRgbaFrames": 19,
+      "animations": [
+        {
+          "name": "earth",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 800,
+          "loop": true
+        },
+        {
+          "name": "stone",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 800,
+          "loop": true
+        },
+        {
+          "name": "scorched",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 800,
+          "loop": true
+        },
+        {
+          "name": "frozen",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 800,
+          "loop": true
+        },
+        {
+          "name": "platform",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 3,
+          "durationMs": 600,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/warden.json",
+      "sourceSha256": "945fbff740aa410d8cbea251f8f111a69a43fb15431656779347be835520c6dd",
+      "name": "warden",
+      "width": 96,
+      "height": 96,
+      "frames": 14,
+      "distinctRgbaFrames": 10,
+      "animations": [
+        {
+          "name": "idle",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 2,
+          "durationMs": 1080,
+          "loop": true
+        },
+        {
+          "name": "attack",
+          "sequenceEntries": 8,
+          "distinctRgbaFrames": 8,
+          "durationMs": 800,
+          "loop": false
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/wayfarer.json",
+      "sourceSha256": "bad9f6444938f84d29c2de9c477fa098b137fa55ac022ed0b8cc647f40e22421",
+      "name": "wayfarer",
+      "width": 80,
+      "height": 80,
+      "frames": 23,
+      "distinctRgbaFrames": 15,
+      "animations": [
+        {
+          "name": "fern",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 2,
+          "durationMs": 1040,
+          "loop": true
+        },
+        {
+          "name": "mushrooms",
+          "sequenceEntries": 4,
+          "distinctRgbaFrames": 4,
+          "durationMs": 1000,
+          "loop": true
+        },
+        {
+          "name": "lantern",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 3,
+          "durationMs": 660,
+          "loop": true
+        },
+        {
+          "name": "banner",
+          "sequenceEntries": 6,
+          "distinctRgbaFrames": 3,
+          "durationMs": 840,
+          "loop": true
+        },
+        {
+          "name": "rubble",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 3,
+          "durationMs": 1050,
+          "loop": true
+        }
+      ]
+    },
+    {
+      "source": "demo/recipes/woodland.json",
+      "sourceSha256": "848429c55a651a365999f06e39af3d0a777a427e91f8d7af39fa18ca05b57494",
+      "name": "woodland",
+      "width": 160,
+      "height": 192,
+      "frames": 6,
+      "distinctRgbaFrames": 5,
+      "animations": [
+        {
+          "name": "oak",
+          "sequenceEntries": 3,
+          "distinctRgbaFrames": 2,
+          "durationMs": 1200,
+          "loop": true
+        },
+        {
+          "name": "ruin",
+          "sequenceEntries": 1,
+          "distinctRgbaFrames": 1,
+          "durationMs": 100,
+          "loop": true
+        },
+        {
+          "name": "shrub",
+          "sequenceEntries": 2,
+          "distinctRgbaFrames": 2,
+          "durationMs": 900,
+          "loop": true
+        }
+      ]
+    }
+  ]
+}

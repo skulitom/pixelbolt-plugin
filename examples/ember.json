@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "name": "ember",
+  "width": 24,
+  "height": 24,
+  "palette": {
+    "o": "#6a3344",
+    "r": "#cf5b53",
+    "a": "#f39b5d",
+    "y": "#ffdb85",
+    "w": "#fff1ca"
+  },
+  "symbols": {
+    "flame": [
+      "........oo......",
+      ".......oro......",
+      "......oroo......",
+      ".....orrao......",
+      "....orraao......",
+      "...orraaooo.....",
+      "..orraaaaaro....",
+      "..raayyyaaro....",
+      ".oraywyyyaaro...",
+      ".oraywyyyaaro...",
+      ".orraayyaaro....",
+      "..orraaaaaro....",
+      "...orrrrro......",
+      "....ooooo......."
+    ]
+  },
+  "frames": [
+    {
+      "name": "flicker-a",
+      "duration": 110,
+      "ops": [
+        {
+          "op": "stamp",
+          "symbol": "flame",
+          "x": 4,
+          "y": 5
+        }
+      ]
+    },
+    {
+      "name": "flicker-b",
+      "duration": 90,
+      "from": "flicker-a",
+      "ops": [
+        {
+          "op": "clear",
+          "x": 11,
+          "y": 5,
+          "w": 4,
+          "h": 3
+        },
+        {
+          "op": "line",
+          "x": 12,
+          "y": 4,
+          "x2": 11,
+          "y2": 9,
+          "color": "r"
+        },
+        {
+          "op": "pixel",
+          "x": 15,
+          "y": 3,
+          "color": "y"
+        }
+      ]
+    },
+    {
+      "name": "flicker-c",
+      "duration": 120,
+      "ops": [
+        {
+          "op": "stamp",
+          "symbol": "flame",
+          "x": 4,
+          "y": 4,
+          "flipX": true
+        }
+      ]
+    },
+    {
+      "name": "flicker-d",
+      "duration": 80,
+      "from": "flicker-a",
+      "ops": [
+        {
+          "op": "pixel",
+          "x": 8,
+          "y": 3,
+          "color": "a"
+        },
+        {
+          "op": "pixel",
+          "x": 15,
+          "y": 1,
+          "color": "y"
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "burn": {
+      "frames": [
+        "flicker-a",
+        "flicker-b",
+        "flicker-c",
+        "flicker-d"
+      ]
+    }
+  },
+  "sheet": {
+    "columns": 4,
+    "padding": 1
+  }
+}

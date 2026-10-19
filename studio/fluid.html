@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Pixelbolt · Fluid lab</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/studio.css">
+  <link rel="stylesheet" href="/fluid.css">
+  <script type="module" src="/fluid-lab.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="Pixelbolt studio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h12v3h4v12h-4v3H4z" fill="currentColor"/><path d="M8 7h7v3h3v4h-7v4H8z" fill="#eef6e9"/></svg><span>Pixelbolt</span><span class="edition">Fluid lab</span></a>
+    <div class="header-actions"><span class="local"><i></i> Simulated in this browser</span><a class="button quiet" href="/">Sprite studio</a></div>
+  </header>
+  <div class="fluid-workspace">
+    <aside class="fluid-presets" aria-label="Fluid presets">
+      <div class="section-heading"><h2>Presets</h2><span id="preset-count"></span></div>
+      <p class="aside-description">Smoke, fire and magic are gases; water and potions are liquids.</p>
+      <div id="presets" class="examples"></div>
+    </aside>
+    <main class="fluid-stage">
+      <div class="project-heading"><div><div class="project-kicker" id="kind">Fluid effect</div><h1 id="name">Loading</h1></div><span id="size" class="dimension-badge"></span></div>
+      <div class="fluid-preview"><canvas id="canvas" width="32" height="32" aria-label="Fluid effect preview"></canvas></div>
+      <div class="fluid-playback">
+        <button id="play" class="play-button" aria-label="Pause animation">Ⅱ</button>
+        <span id="frame" class="timing">01 / 01</span>
+        <label>Display <select id="scale"><option>2</option><option>3</option><option selected>4</option><option>6</option><option>8</option></select> ×</label>
+        <label>Backdrop <select id="backdrop"><option value="#1b1d2a" selected>Night</option><option value="#59606f">Stone</option><option value="#e9e5da">Paper</option></select></label>
+      </div>
+      <p id="status" class="fluid-status" role="status">Simulating…</p>
+      <p id="error" class="error" role="alert" hidden></p>
+    </main>
+    <aside class="fluid-controls" aria-label="Simulation settings">
+      <div class="section-heading"><h2>Settings</h2><button id="reset" class="text-button">Reset</button></div>
+      <p class="aside-description">Every change runs the simulation again; the same settings always give the same pixels.</p>
+      <div id="sliders" class="fluid-sliders"></div>
+      <label class="fluid-seed">Seed <input id="seed" type="number" min="0" max="2147483647" step="1"><button id="reseed" class="text-button">Try another</button></label>
+      <div class="fluid-downloads">
+        <button id="gif" class="button primary">Download GIF</button>
+        <button id="sheet" class="button quiet">Sprite sheet PNG</button>
+        <button id="recipe" class="button quiet">Recipe JSON</button>
+        <button id="fluid-source" class="button quiet">Fluid source</button>
+      </div>
+      <p class="frames-call-label">The same from the command line, with the downloaded source:</p>
+      <pre id="cli"></pre>
+      <p class="frames-call-label">Or from an agent through MCP:</p>
+      <pre id="mcp"></pre>
+    </aside>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

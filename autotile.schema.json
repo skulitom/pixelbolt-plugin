@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt autotile template",
+  "description": "A template two tiles wide and three tall: row 0 holds an unused preview tile and an inner-corner tile; rows 1–2 hold a 2×2-tile island whose quadrants give outer corners, edges and fill. Compiles to a recipe whose frames copy four quarters each.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-autotile"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "tile": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 128,
+      "description": "Even tile size in pixels."
+    },
+    "mode": {
+      "enum": [
+        "blob",
+        "cardinal"
+      ]
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "template": {
+      "$ref": "#/$defs/rows",
+      "description": "tile × 3 rows of tile × 2 characters."
+    },
+    "frame": {
+      "type": "string",
+      "pattern": "\\{mask\\}",
+      "description": "Frame name template; {mask} is the neighbour mask and {variant} the variant name."
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,16}$"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60000
+          },
+          "palette": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "template": {
+            "$ref": "#/$defs/rows",
+            "description": "Redraw this variant from its own template of the same size (compiled as the symbol template-<name>): cracked or mossy stone with the base set's edges."
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 16,
+      "minItems": 1
+    },
+    "animation": {
+      "type": "string",
+      "pattern": "\\{mask\\}",
+      "description": "Optional per-mask animation over the variants, in order."
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "tile",
+    "template",
+    "frame"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    }
+  }
+}

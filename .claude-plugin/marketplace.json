@@ -1,0 +1,17 @@
+{
+  "name": "pixelbolt",
+  "owner": {
+    "name": "skulitom",
+    "url": "https://github.com/skulitom"
+  },
+  "description": "Pixelbolt for Claude Code: the pixelbolt MCP server and the pixel art skill. It runs this repository's own bin/pixelbolt.js, so it needs Node.js 20 or later and nothing else.",
+  "plugins": [
+    {
+      "name": "pixelbolt",
+      "source": "./",
+      "description": "Pixel art and sprite animation for agents: sprites, sprite sheets, tiles, icons, effects and short animations, exported as PNG, GIF, APNG or video frames.",
+      "category": "design",
+      "tags": ["pixel-art", "sprites", "sprite-sheet", "gamedev"]
+    }
+  ]
+}

@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "name": "swing",
+  "width": 40,
+  "height": 40,
+  "palette": { "k": "#1d1a2b", "b": "#7a4a32", "y": "#e8b04a", "w": "#eef3ff", "s": "#9aa7c7", "S": "#5d6a8f" },
+  "anchor": [20, 24],
+  "symbols": {
+    "sword": [
+      "....k............",
+      "...kyk...........",
+      "kkkkykkkkkkkkkk..",
+      "kbbkykwwwwwwwwwkk",
+      "kkkkykssssssssSk.",
+      "...kyk.kkkkkkkk..",
+      "....k............"
+    ],
+    "sword-r225": [
+      "kkkk.........",
+      ".kSsk........",
+      ".kwssk.......",
+      "..kwssk......",
+      "...kwssk.....",
+      "....kwssk....",
+      ".....kwss.k..",
+      "......kwskyk.",
+      ".......kkykk.",
+      ".......kykkk.",
+      "......kykkbk.",
+      ".......kkkkbk",
+      "...........k."
+    ],
+    "sword-r30": [
+      ".k...k.........",
+      "kbkkky.........",
+      ".kbkykk........",
+      "..kkykk........",
+      "..kykkwkk......",
+      "..kyksswwk.....",
+      "..k...sswwkk...",
+      "......kksswwk..",
+      "........kksswk.",
+      "..........kkSkk"
+    ],
+    "sword-r231": [
+      "kkk.........",
+      ".kSk........",
+      ".kwsk.......",
+      ".kwwsk......",
+      "..kwssk.....",
+      "...kwssk....",
+      "....kwsk....",
+      ".....kws....",
+      "......kkkyk.",
+      "......kkykk.",
+      "......kykkk.",
+      ".....kykkbk.",
+      "........kkkk",
+      ".........kk."
+    ],
+    "sword-r275": [
+      "....k..",
+      "....kk.",
+      "...kwSk",
+      "...kwsk",
+      "...kwsk",
+      "...kwsk",
+      "...kwsk",
+      "...kwsk",
+      "...kwsk",
+      "..kwsk.",
+      "..kks..",
+      ".kkkkk.",
+      "kyyyyyk",
+      ".kkkkk.",
+      "..kbk..",
+      "..kbk..",
+      "..kkk.."
+    ],
+    "sword-r50": [
+      ".k..........",
+      "kbk.........",
+      ".kbkkyk.....",
+      ".kkkyk......",
+      ".kkykk......",
+      ".kykwwk.....",
+      "....swwk....",
+      "....kswk....",
+      ".....kswk...",
+      ".....ksswk..",
+      "......ksswk.",
+      ".......kswk.",
+      "........kSkk",
+      "..........kk"
+    ]
+  },
+  "frames": [
+    {
+      "name": "raise",
+      "duration": 180,
+      "points": { "tip": [10, 14] },
+      "layers": [{ "name": "blade", "ops": [{ "op": "stamp", "symbol": "sword-r225", "x": 10, "y": 14 }] }]
+    },
+    {
+      "name": "strike",
+      "duration": 90,
+      "points": { "tip": [32, 31] },
+      "layers": [{ "name": "blade", "ops": [{ "op": "stamp", "symbol": "sword-r30", "x": 18, "y": 22 }] }]
+    },
+    {
+      "name": "swing-1",
+      "duration": 50,
+      "layers": [{ "name": "blade", "ops": [{ "op": "stamp", "symbol": "sword-r231", "x": 11, "y": 13 }] }]
+    },
+    {
+      "name": "swing-2",
+      "duration": 50,
+      "layers": [{ "name": "blade", "ops": [{ "op": "stamp", "symbol": "sword-r275", "x": 17, "y": 10 }] }]
+    },
+    {
+      "name": "follow",
+      "duration": 160,
+      "layers": [{ "name": "blade", "ops": [{ "op": "stamp", "symbol": "sword-r50", "x": 18, "y": 22 }] }]
+    }
+  ],
+  "animations": { "swing": { "frames": ["raise", "swing-1", "swing-2", "strike", "follow"], "loop": false } }
+}

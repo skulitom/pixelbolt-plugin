@@ -3,11 +3,7 @@
   "name": "lantern-normal",
   "width": 24,
   "height": 32,
-  "palette": {
-    "L": "#35a5e0",
-    "R": "#d5a5e0",
-    "F": "#8080ff"
-  },
+  "palette": { "L": "#35a5e0", "R": "#d5a5e0", "F": "#8080ff" },
   "frames": [
     {
       "name": "warm",
@@ -94,12 +90,5 @@
       ]
     }
   ],
-  "animations": {
-    "glow": {
-      "frames": [
-        "warm",
-        "bright"
-      ]
-    }
-  }
+  "animations": { "glow": { "frames": ["warm", "bright"] } }
 }

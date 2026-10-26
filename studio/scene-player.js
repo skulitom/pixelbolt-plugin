@@ -4,6 +4,8 @@ const $ = id => document.getElementById(id);
 let scene, time = 0, playing = !matchMedia('(prefers-reduced-motion: reduce)').matches, last, manualScale = false;
 // Light fields changed here ("0.height", "ambient"); saving writes them back into the scene source.
 const edited = new Set();
+// The lights as the last frame drew them: where a following, flickering or keyed light is at this time.
+let shown = [];
 const paint = (canvas, data, width, height) => { if (canvas.width !== width) canvas.width = width; if (canvas.height !== height) canvas.height = height; canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(data), width, height), 0, 0); };
 const hex = color => '#' + color.slice(0, 3).map(v => v.toString(16).padStart(2, '0')).join('');
 const shape = (name, attributes) => { const node = document.createElementNS('http://www.w3.org/2000/svg', name); for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, value); return node; };
@@ -12,13 +14,15 @@ function marks() {
   const lights = $('lit').checked ? scene.lighting?.lights ?? [] : [], scale = Number($('scale').value), chosen = Number($('light-pick').value);
   $('scene').parentElement.classList.toggle('lit', lights.length > 0);
   $('light-marks').replaceChildren(...lights.flatMap((light, i) => {
-    const [x, y] = light.at.map(v => (v + 0.5) * scale), color = hex(light.color);
-    return [shape('circle', { cx: x, cy: y, r: light.radius * scale, fill: 'none', stroke: color, 'stroke-opacity': i === chosen ? 0.7 : 0.3, 'stroke-dasharray': '4 4' }),
-      shape('circle', { cx: x, cy: y, r: i === chosen ? 6 : 4, fill: color, stroke: '#080c12', 'stroke-width': 2 })];
+    // A light that is off now (its keys at 0, or what it follows hidden) keeps a faint marker so it can still be picked.
+    const now = shown[i] ?? light, [x, y] = now.at.map(v => (v + 0.5) * scale), color = hex(light.color), off = now.strength === 0;
+    return [shape('circle', { cx: x, cy: y, r: now.radius * scale, fill: 'none', stroke: color, 'stroke-opacity': off ? 0.1 : i === chosen ? 0.7 : 0.3, 'stroke-dasharray': '4 4' }),
+      shape('circle', { cx: x, cy: y, r: i === chosen ? 6 : 4, fill: color, 'fill-opacity': off ? 0.35 : 1, stroke: '#080c12', 'stroke-width': 2 })];
   }));
 }
 function draw() {
   const view = renderScene(scene, { time, lit: $('lit').checked, density: $('density').checked });
+  shown = view.lights ?? [];
   paint($('scene'), view.data, view.width, view.height); paint($('native'), view.data, view.width, view.height);
   paint($('values'), reviewPixels(view.data, 'grayscale'), view.width, view.height);
   $('scene').style.width = `${view.width * Number($('scale').value)}px`; $('scene').style.height = `${view.height * Number($('scale').value)}px`;
@@ -59,10 +63,13 @@ function lightControls() {
   canvas.addEventListener('pointerdown', event => {
     if (!$('lit').checked || event.button !== 0) return;
     const point = toScene(event), reach = 8 / Number($('scale').value);
-    const near = lights.findIndex(light => Math.hypot(light.at[0] - point[0], light.at[1] - point[1]) <= reach);
+    const near = lights.findIndex((light, i) => { const now = shown[i] ?? light; return Math.hypot(now.at[0] - point[0], now.at[1] - point[1]) <= reach; });
     if (near >= 0) $('light-pick').value = String(near);
     canvas.setPointerCapture(event.pointerId);
-    const move = moved => change('at', () => { selected().at = toScene(moved); });
+    // A following light's `at` is an offset from what it follows, so dragging it moves the offset.
+    const light = selected(), now = shown[Number($('light-pick').value)];
+    const base = light.follow && now ? [now.at[0] - light.at[0], now.at[1] - light.at[1]] : [0, 0];
+    const move = moved => change('at', () => { const [x, y] = toScene(moved); selected().at = [x - base[0], y - base[1]]; });
     move(event);
     canvas.onpointermove = moved => { if (canvas.hasPointerCapture(moved.pointerId)) move(moved); };
     canvas.onpointerup = canvas.onpointercancel = () => { canvas.onpointermove = null; };

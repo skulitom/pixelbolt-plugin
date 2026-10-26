@@ -243,6 +243,58 @@
             "maximum": 4,
             "description": "Liquid: how strongly it holds on to walls and obstacles. Liquid touching a solid stays on it unless pulled away faster than about adhesion ÷ 2 pixels per frame, so a film clings under a ledge, to a spoon or down a jar's side. Default 0."
           },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255,
+                  "description": "The frame (within the cycle, for a loop) the change starts on."
+                },
+                "over": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 256,
+                  "description": "Frames to move to the new values in a straight line; default 0, at once."
+                },
+                "yield": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 16
+                },
+                "viscosity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 64
+                },
+                "adhesion": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "gravity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              },
+              "required": [
+                "frame"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "description": "Liquid: change yield, viscosity, adhesion or gravity at a chosen frame, so the decisive moment lands where you want it: a heap held up by its yield gives way when a key drops it, a blob held under a ledge by adhesion drops when a key sets adhesion to 0. Each setting starts from the effect's own value and follows the keys that name it, in frame order; a loop repeats them every cycle."
+          },
           "fill": {
             "type": "array",
             "items": {
@@ -293,6 +345,42 @@
                   "maxItems": 2,
                   "minItems": 2,
                   "description": "Starting velocity [x, y] in pixels per frame."
+                },
+                "burst": {
+                  "type": "object",
+                  "properties": {
+                    "speed": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 16
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 16
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "How fast each piece flies out from the middle of the fill, in pixels per frame; [min, max] picks per piece."
+                    },
+                    "pieces": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 64,
+                      "description": "How many pieces. Default 8."
+                    }
+                  },
+                  "required": [
+                    "speed"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Break the fill into seeded pieces with a one-pixel gap between them, each flying straight out at its own speed (plus velocity): a liquid burst in mid-air. Outward velocity on one connected blob is cancelled by the pressure solve; separate pieces keep it. The water of the gaps goes to their pieces, so the volume is kept."
                 }
               },
               "required": [],
@@ -341,7 +429,59 @@
                     "under",
                     "none"
                   ],
-                  "description": "over (default): stamped in front of the fluid, its outline and sparks; under: behind its outline and sparks (the fluid itself never enters an obstacle); none: an invisible wall."
+                  "description": "over (default): stamped in front of the fluid, its outline and sparks; under: behind its outline and sparks (the fluid itself never enters a solid obstacle); none: an invisible wall."
+                },
+                "surface": {
+                  "enum": [
+                    "pixels",
+                    "smooth"
+                  ],
+                  "description": "pixels (default): the fluid meets every pixel step. smooth: it meets an outline traced through the steps, so a liquid slides down a drawn slope, roof or chute (a 1:1 staircase acts as a straight 45° slope; draw lines at least 2 pixels thick to smooth both sides), and a liquid can fall away from it instead of hanging on by suction (adhesion still holds it on). The obstacle is drawn as it is either way."
+                },
+                "solid": {
+                  "type": "boolean",
+                  "description": "false: a decoration, drawn over or under the fluid as draw says but never met by it (a net, a candle flame, a label, a background). Default true."
+                },
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "frame": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255,
+                        "description": "The frame (within the cycle, for a loop) the change starts on."
+                      },
+                      "over": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 256,
+                        "description": "Frames to move to the new place in a straight line, in whole pixels; default 0, at once."
+                      },
+                      "x": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      },
+                      "y": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 127
+                      },
+                      "show": {
+                        "type": "boolean",
+                        "description": "false takes the obstacle away (not drawn, not solid) from this frame on; true brings it back."
+                      }
+                    },
+                    "required": [
+                      "frame"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Move the obstacle or take it away on cue: a dam that vanishes, a gate that lifts, a plunger, a paddle. Each key starts from where the obstacle is on its frame; the symbol must stay inside the canvas on every frame it shows. While a key's over runs, the obstacle pushes the fluid ahead of it (its faces carry its speed) and shoves fluid in cells it now covers to the first open cell, never through another solid. A key with no over is a cut: the obstacle is simply elsewhere, pushes nothing, and fluid where it lands (or where an obstacle appears) is taken away. A loop repeats the keys every cycle."
                 }
               },
               "required": [
@@ -350,7 +490,7 @@
               "additionalProperties": false
             },
             "maxItems": 32,
-            "description": "Solid shapes from symbols: their visible pixels block the flow. They must fit the canvas."
+            "description": "Solid shapes from symbols: their visible pixels block the flow (decorations with solid: false only draw). They must fit the canvas."
           },
           "emitters": {
             "type": "array",
@@ -535,6 +675,37 @@
                   "additionalProperties": false,
                   "description": "The emitter circles at (or follows an ellipse round it); a negative period turns anticlockwise. A rate emitter is laid along the path it covered since the last frame, so a fast orbit leaves a smooth trail."
                 },
+                "carry": {
+                  "type": "object",
+                  "properties": {
+                    "drag": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the difference between a carrier's velocity and the air's that it loses each frame; default 0.1. Low throws dust far, high lets the air take it at once."
+                    },
+                    "release": {
+                      "type": "number",
+                      "minimum": 0.01,
+                      "maximum": 1,
+                      "description": "Share of what a carrier still holds that it hands to the air each frame; default 0.2. What it holds is drawn with the smoke."
+                    },
+                    "gravity": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -2,
+                        "maximum": 2
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Each carrier's own acceleration [x, y]; a small positive y lets dust settle. Default [0, 0]."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false,
+                  "description": "Gas: throw this emitter's smoke and heat (it needs a positive density or temperature) on heavy carriers, one per covered cell (each frame for a rate emitter, whose amounts are then thrown every frame; an orbiting one throws once a frame), launched with its velocity, vortex, expand (outward) and noise. A puff of gas cannot be thrown through still air, but dust can: carriers keep their momentum, slow by drag, hand their smoke to the air as they go and drop the rest where they meet an obstacle. For dust waves, skid smoke, dash trails."
+                },
                 "sparks": {
                   "type": "object",
                   "properties": {
@@ -684,7 +855,7 @@
                     "light",
                     "shadow"
                   ],
-                  "description": "density (smoke or water; water is 1 inside), temperature (gas heat), speed (pixels per frame; foam, fast flow), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew)."
+                  "description": "density (smoke or water; water is 1 inside), temperature (gas heat), speed (pixels per frame; foam, fast flow; a liquid has speed where there is water, a gas wherever its air moves, smoke or not), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew)."
                 },
                 "colors": {
                   "type": "array",

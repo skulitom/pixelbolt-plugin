@@ -1,0 +1,98 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "dust-wave",
+  "width": 64,
+  "height": 32,
+  "palette": {
+    "d": "#6e5a48",
+    "l": "#9c8268",
+    "L": "#c9b08f",
+    "o": "#2b2230",
+    "s": "#8a8a9e",
+    "S": "#5e5e74",
+    "h": "#c4c4d4",
+    "g": "#4d3f36",
+    "G": "#352b26"
+  },
+  "symbols": {
+    "stone": [
+      "...hhhS...",
+      "..hhhssS..",
+      ".hhhssssS.",
+      "hhhssssssS",
+      "hhsssssssS",
+      ".SssssssS.",
+      "..SssssS..",
+      "...SSSS..."
+    ],
+    "ground": [
+      "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+    ]
+  },
+  "effects": {
+    "dust-wave": {
+      "frames": 26,
+      "duration": 60,
+      "seed": 7,
+      "walls": ["bottom"],
+      "buoyancy": 0.05,
+      "vorticity": 0.6,
+      "dissipation": 0.07,
+      "cooling": 0.08,
+      "obstacles": [
+        { "symbol": "ground", "x": 0, "y": 28 },
+        { "symbol": "stone", "x": 27, "y": 0, "keys": [{ "frame": 1, "y": 20, "over": 5 }] }
+      ],
+      "emitters": [
+        {
+          "at": [26, 26],
+          "area": [5, 3],
+          "burst": 1,
+          "start": 6,
+          "density": 1.6,
+          "velocity": [-3.4, -0.8],
+          "noise": 0.6,
+          "carry": { "drag": 0.22, "release": 0.24, "gravity": [0, 0.04] }
+        },
+        {
+          "at": [38, 26],
+          "area": [5, 3],
+          "burst": 1,
+          "start": 6,
+          "density": 1.6,
+          "velocity": [3.4, -0.8],
+          "noise": 0.6,
+          "carry": { "drag": 0.22, "release": 0.24, "gravity": [0, 0.04] }
+        },
+        {
+          "at": [25, 24],
+          "radius": 2,
+          "burst": 1,
+          "start": 6,
+          "density": 0.8,
+          "temperature": 0.6,
+          "velocity": [-1.2, -0.8]
+        },
+        {
+          "at": [39, 24],
+          "radius": 2,
+          "burst": 1,
+          "start": 6,
+          "density": 0.8,
+          "temperature": 0.6,
+          "velocity": [1.2, -0.8]
+        }
+      ],
+      "look": [
+        { "field": "density", "colors": ["d"], "thresholds": [0.1], "dither": 0.2 },
+        { "field": "density", "colors": ["l"], "thresholds": [0.32], "dither": 0.2 },
+        { "field": "light", "colors": ["L"], "thresholds": [0.5], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

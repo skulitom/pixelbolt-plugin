@@ -241,6 +241,361 @@ export function rotateRows(rows, degrees, pivot = [0, 0], { cleanup = true } = {
   return { rows: rowsOf(trimmed, tw, th), pivot: [pivot[0] - originX, pivot[1] - originY], map };
 }
 
+// ---- Structural parts --------------------------------------------------------------------------------------------
+// A bone is drawn in its posed direction, never resampled from a drawing. The compiler validates inputs and supplies
+// a ramp of one-character palette keys. Returned coordinates are symbol-local; pivot is the start joint.
+const CLEAN_DIRECTIONS = (() => {
+  const out = [];
+  for (const [x, y] of [[1, 0], [4, 1], [3, 1], [2, 1], [1, 1]]) {
+    const length = Math.sqrt(x * x + y * y);
+    for (const [a, b, major, minor] of [[x / length, y / length, x, y], [y / length, x / length, y, x]]) {
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        if (!out.some(p => p[0] === a * sx && p[1] === b * sy)) out.push([a * sx, b * sy, major * sx, minor * sy]);
+      }
+    }
+  }
+  return out;
+})();
+const SNAP_COS = cosDeg(4);
+// Mirrors must be exact. A relit mirror draws a flipped part at the negated angle, so the direction of −θ is the
+// direction of θ reflected bit for bit (the polynomials alone differ in the last bit at some angles), and every
+// signed coordinate rounds halves away from zero (Math.round(−2.5) is −2, the mirror of 3).
+const unitAt = angle => {
+  const turn = ((angle % 360) + 360) % 360, folded = turn > 180 ? 360 - turn : turn, y = sinDeg(folded);
+  return [cosDeg(folded), turn > 180 ? -y : y];
+};
+export const roundHalfAway = value => (value < 0 ? -Math.round(-value) : Math.round(value)) + 0; // + 0 turns −0 into 0
+export function boneDirection(angle, snap = true) {
+  let [x, y] = unitAt(angle), snapped = false, stepX = x, stepY = y;
+  if (snap) {
+    let best = SNAP_COS, direction = null;
+    for (const candidate of CLEAN_DIRECTIONS) {
+      const dot = x * candidate[0] + y * candidate[1];
+      if (dot > best || (!direction && dot === best)) { best = dot; direction = candidate; }
+    }
+    if (direction) { [x, y, stepX, stepY] = direction; snapped = true; }
+  }
+  return { x, y, stepX, stepY, snapped };
+}
+function endOfBone(length, direction, flipX) {
+  const sign = flipX ? -1 : 1, ux = direction.x * sign, uy = direction.y * sign;
+  let x = roundHalfAway(ux * length), y = roundHalfAway(uy * length);
+  // At clean ratios, quantize the major-axis length first, then put the endpoint on that exact stepped slope.
+  // Rounding both components independently would create a different slope (and uneven internal runs) on short bones.
+  if (direction.snapped) {
+    if (Math.abs(ux) >= Math.abs(uy)) y = roundHalfAway(x * direction.stepY / direction.stepX);
+    else x = roundHalfAway(y * direction.stepX / direction.stepY);
+  }
+  return [x, y];
+}
+export const boneEnd = (length, angle, snap = true, flipX = false) => endOfBone(length, boneDirection(angle, snap), flipX);
+const widthAt = (widths, t) => {
+  if (widths.length === 2) return widths[0] + (widths[1] - widths[0]) * t;
+  return t < .5 ? widths[0] + (widths[1] - widths[0]) * t * 2 : widths[1] + (widths[2] - widths[1]) * (t * 2 - 1);
+};
+// The same corner criterion as cleanupIds, applied in-place to a fresh part. No change objects or working copy are
+// needed here; checking the second pixel of each arm is enough to know whether both arms are longer than one.
+function cleanPartCorners(codes, mask, edge, spine, w, h, neutral, spans) {
+  // All colour pixels sit inside an empty one-pixel border. Out-of-array reads two steps away are undefined,
+  // which, just like cleanupIds' outside sentinel, cannot match a nonzero colour.
+  const offsets = [-1, 1, -w, w];
+  for (let pass = 0; pass < 4; pass++) {
+    let changed = false;
+    for (let y = 1; y < h - 1; y++) for (let i = y * w + spans[y * 2], end = y * w + spans[y * 2 + 1]; i <= end; i++) {
+      const color = codes[i];
+      if (!color || (!edge[i] && !(spine[i] && color === neutral))) continue;
+      let count = 0, a = 0, b = 0;
+      for (let side = 0; side < 4; side++) {
+        const offset = offsets[side];
+        if (codes[i + offset] !== color) continue;
+        if (count++ === 0) a = offset; else b = offset;
+      }
+      if (count !== 2 || a === -b || codes[i + a + b] === color) continue;
+      if (codes[i + a * 2] === color && codes[i + b * 2] === color) continue;
+      const outside = codes[i - a];
+      if (codes[i - b] !== outside || codes[i - a - b] !== outside) continue;
+      codes[i] = outside;
+      if (!outside) { mask[i] = 0; edge[i] = 0; }
+      changed = true;
+    }
+    if (!changed) break;
+  }
+}
+// Shade from the mask's exposed sides. Thin sections keep their base colour. Keeping the light in world coordinates
+// makes highlights stay on the lit side as a part turns.
+function finishPart(mask, w, h, left, top, { ramp, base, outline, light, thick, socket = () => false, spine = [], spans }) {
+  const codes = new Uint32Array(mask.length), edge = new Uint8Array(mask.length);
+  const lx = cosDeg(light), ly = sinDeg(light), neutral = ramp[base].charCodeAt(0);
+  const line = outline === 'selective' ? ramp[0] : outline;
+  const lineCode = line ? line.charCodeAt(0) : 0;
+  const bright = ramp[Math.min(ramp.length - 1, base + 1)].charCodeAt(0), dark = ramp[Math.max(0, base - 1)].charCodeAt(0);
+  if (!spans) {
+    spans = new Int16Array(h * 2);
+    for (let y = 0; y < h; y++) {
+      let lo = w, hi = -1;
+      for (let x = 0; x < w; x++) if (mask[y * w + x]) { lo = Math.min(lo, x); hi = x; }
+      spans[y * 2] = lo; spans[y * 2 + 1] = hi;
+    }
+  }
+  const painted = new Int16Array(h * 2);
+  for (let y = 0; y < h; y++) {
+    painted[y * 2] = Math.max(1, Math.min(spans[y * 2], spans[(y - 1) * 2] ?? w, spans[(y + 1) * 2] ?? w) - 1);
+    painted[y * 2 + 1] = Math.min(w - 2, Math.max(spans[y * 2 + 1], spans[(y - 1) * 2 + 1] ?? -1, spans[(y + 1) * 2 + 1] ?? -1) + 1);
+  }
+  for (let y = 1; y < h - 1; y++) for (let x = painted[y * 2], end = painted[y * 2 + 1]; x <= end; x++) {
+    const at = y * w + x;
+    if (mask[at]) {
+      codes[at] = neutral;
+      if (thick === true || (thick && thick(left + x, top + y))) {
+        // The analytic masks include a two-pixel empty border, so these neighbours cannot wrap into filled rows.
+        const nx = (mask[at - 1] ? 1 : 0) - (mask[at + 1] ? 1 : 0);
+        const ny = (mask[at - w] ? 1 : 0) - (mask[at + w] ? 1 : 0), facing = nx * lx + ny * ly;
+        if (facing > 1e-9) codes[at] = bright; else if (facing < -1e-9) codes[at] = dark;
+      }
+    } else if (line && (mask[at - 1] || mask[at + 1] || mask[at - w] || mask[at + w])
+      && !socket(left + x, top + y)) {
+      codes[at] = lineCode; edge[at] = 1;
+    }
+  }
+  const spineMask = new Uint8Array(mask.length);
+  for (const [x, y] of spine) spineMask[(y - top) * w + x - left] = 1;
+  // Keep the declared spine tips (including a one-pixel foot) during cleanup.
+  cleanPartCorners(codes, mask, edge, spineMask, w, h, neutral, painted);
+  let x0 = w, y0 = h, x1 = -1, y1 = -1;
+  for (let y = 1; y < h - 1; y++) for (let x = painted[y * 2], end = painted[y * 2 + 1]; x <= end; x++) if (codes[y * w + x]) {
+    x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+  }
+  if (x1 < 0) { x0 = y0 = x1 = y1 = 0; }
+  // A clipped boundary band can leave a lone shade value surrounded by one other colour. Match De-Stray's
+  // in-canvas rule on the final crop, preserving spine pixels and never touching the external outline.
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = y * w + x;
+    if (!mask[i] || spineMask[i]) continue;
+    if ((x > x0 && codes[i - 1] === codes[i]) || (x < x1 && codes[i + 1] === codes[i])
+      || (y > y0 && codes[i - w] === codes[i]) || (y < y1 && codes[i + w] === codes[i])) continue;
+    let shared = -1, uniform = true;
+    for (let ny = Math.max(y0, y - 1); ny <= Math.min(y1, y + 1) && uniform; ny++) {
+      for (let nx = Math.max(x0, x - 1); nx <= Math.min(x1, x + 1); nx++) {
+        if (nx === x && ny === y) continue;
+        const color = codes[ny * w + nx];
+        if (shared < 0) shared = color; else if (shared !== color) { uniform = false; break; }
+      }
+    }
+    if (uniform && shared >= 0 && shared !== codes[i]) { codes[i] = shared; if (!shared) mask[i] = 0; }
+  }
+  const width = x1 - x0 + 1, height = y1 - y0 + 1, rows = [], fill = new Uint8Array(width * height), outlineMask = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const lo = Math.max(0, Math.min(width, painted[(y + y0) * 2] - x0));
+    const hi = Math.min(width - 1, Math.max(lo - 1, painted[(y + y0) * 2 + 1] - x0));
+    let row = '.'.repeat(lo);
+    for (let x = lo; x <= hi; x++) {
+      const from = (y + y0) * w + x + x0, to = y * width + x;
+      row += codes[from] ? String.fromCharCode(codes[from]) : '.';
+      fill[to] = mask[from]; outlineMask[to] = edge[from];
+    }
+    rows.push(row + '.'.repeat(width - hi - 1));
+  }
+  if (!line || outline === 'selective') {
+    // Without a distinct outline the crop edge itself participates in cleanup; selective outlines can also
+    // share a colour with the dark band. Use the public rule on that exact crop, including shaded spine pixels.
+    const cropped = Uint32Array.from(rows.join(''), c => c === '.' ? 0 : c.charCodeAt(0));
+    const keep = new Uint8Array(width * height);
+    for (const [x, y] of spine) keep[(y - top - y0) * width + x - left - x0] = 1;
+    for (let pass = 0; pass < 4; pass++) {
+      const corners = cleanupIds(cropped, width, height, { corners: true, allowed: i => Boolean(outlineMask[i] || keep[i]) });
+      for (const change of corners) { cropped[change.index] = change.id; if (!change.id) { fill[change.index] = 0; outlineMask[change.index] = 0; } }
+      const strays = cleanupIds(cropped, width, height, { strays: true, allowed: i => Boolean(fill[i] && !keep[i]) });
+      for (const change of strays) { cropped[change.index] = change.id; if (!change.id) fill[change.index] = 0; }
+      if (!corners.length && !strays.length) break;
+    }
+    for (let y = 0; y < height; y++) rows[y] = Array.from(cropped.subarray(y * width, (y + 1) * width), c => c ? String.fromCharCode(c) : '.').join('');
+  }
+  return { rows, width, height, fill, outlineMask, pivot: [-left - x0, -top - y0] };
+}
+
+// Repeated compilations reuse immutable drawings; callers always own their arrays. Bound both entries and bytes
+// so a long authoring session cannot accumulate every angle of every skeleton.
+const boneDrawings = new Map();
+let boneDrawingBytes = 0;
+function copyBoneDrawing(part) {
+  return { ...part, rows: part.rows.slice(), fill: part.fill.slice(), outlineMask: part.outlineMask.slice(),
+    pivot: part.pivot.slice(), end: part.end.slice(), spine: part.spine.map(point => point.slice()) };
+}
+export function rasterizeBone(bone, options = {}) {
+  const key = JSON.stringify([bone.length, bone.width, bone.base, bone.outline, bone.caps, bone.snap,
+    options.angle ?? 0, options.flipX ?? false, options.light ?? 225, options.ramp]);
+  let cached = boneDrawings.get(key);
+  if (!cached) {
+    const part = drawBone(bone, options), bytes = part.fill.byteLength + part.outlineMask.byteLength + part.width * part.height * 2 + part.spine.length * 16 + 512;
+    while (boneDrawings.size && (boneDrawings.size >= 128 || boneDrawingBytes + bytes > 1048576)) {
+      const first = boneDrawings.keys().next().value;
+      boneDrawingBytes -= boneDrawings.get(first).bytes; boneDrawings.delete(first);
+    }
+    cached = { part, bytes }; boneDrawings.set(key, cached); boneDrawingBytes += bytes;
+  }
+  return copyBoneDrawing(cached.part);
+}
+
+function drawBone(bone, { angle = 0, flipX = false, light = 225, ramp } = {}) {
+  const direction = boneDirection(angle, bone.snap !== false), sign = flipX ? -1 : 1;
+  const ux = direction.x * sign, uy = direction.y * sign;
+  const [endX, endY] = endOfBone(bone.length, direction, flipX);
+  const distance = Math.sqrt(endX * endX + endY * endY), ax = endX / distance, ay = endY / distance;
+  const widths = bone.width, radius = Math.max(...widths) / 2;
+  const left = Math.floor(Math.min(0, endX) - radius) - 2, top = Math.floor(Math.min(0, endY) - radius) - 2;
+  const right = Math.ceil(Math.max(0, endX) + radius) + 2, bottom = Math.ceil(Math.max(0, endY) + radius) + 2;
+  const w = right - left + 1, h = bottom - top + 1, mask = new Uint8Array(w * h), spine = [];
+  const spans = new Int16Array(h * 2);
+  for (let y = 0; y < h; y++) { spans[y * 2] = w; spans[y * 2 + 1] = -1; }
+  const put = (x, y) => {
+    const row = (y - top) * 2, column = x - left;
+    mask[(y - top) * w + column] = 1;
+    if (column < spans[row]) spans[row] = column;
+    if (column > spans[row + 1]) spans[row + 1] = column;
+  };
+  const caps = bone.caps ?? ['socket', 'round'], steps = Math.max(Math.abs(endX), Math.abs(endY));
+  // Midpoint distribution yields runs differing by at most one, with no orthogonal elbow at a diagonal step.
+  for (let i = 0; i <= steps; i++) {
+    const majorX = Math.abs(endX) >= Math.abs(endY);
+    const x = direction.snapped && !majorX ? roundHalfAway((endY < 0 ? -i : i) * direction.stepX / direction.stepY) : roundHalfAway(endX * i / steps);
+    const y = direction.snapped && majorX ? roundHalfAway((endX < 0 ? -i : i) * direction.stepY / direction.stepX) : roundHalfAway(endY * i / steps);
+    spine.push([x, y]); put(x, y);
+  }
+  const shadow = -uy * cosDeg(light) + ux * sinDeg(light) > 0 ? -1 : 1;
+  const sx = Math.abs(uy) > Math.abs(ux) ? (uy > 0 ? -shadow : shadow) : 0;
+  const sy = sx ? 0 : (ux > 0 ? shadow : -shadow);
+  // Width two has a fixed shadow-side copy rather than alternating pixels on opposite sides.
+  for (let i = 1; i + 1 < spine.length; i++) {
+    const width = widthAt(widths, i / steps);
+    if (width >= 1.5 && width < 3) put(spine[i][0] + sx, spine[i][1] + sy);
+  }
+  if (widths[0] >= 3 && widths.every(width => width === widths[0]) && caps.every(cap => cap === 'round' || cap === 'socket')) {
+    // Constant-width round/socket capsules have one exact filled interval per row. Intersect the central
+    // rectangle with the row, then union its two end discs; this avoids testing every interior pixel.
+    const r = widths[0] / 2, r2 = r * r;
+    for (let py = top; py <= bottom; py++) {
+      let lo = -Infinity, hi = Infinity;
+      for (const [coefficient, offset, minimum, maximum] of [[ax, py * ay, 0, distance], [-ay, py * ax, -r, r]]) {
+        if (!coefficient) { if (offset < minimum || offset > maximum) { lo = Infinity; hi = -Infinity; } }
+        else {
+          const a = (minimum - offset) / coefficient, b = (maximum - offset) / coefficient;
+          lo = Math.max(lo, Math.min(a, b)); hi = Math.min(hi, Math.max(a, b));
+        }
+      }
+      if (lo > hi) { lo = Infinity; hi = -Infinity; }
+      for (const [cx, cy] of [[0, 0], [endX, endY]]) {
+        const squared = r2 - (py - cy) * (py - cy);
+        if (squared >= -1e-9) {
+          const reach = Math.sqrt(Math.max(0, squared));
+          lo = Math.min(lo, cx - reach); hi = Math.max(hi, cx + reach);
+        }
+      }
+      const first = Math.ceil(lo - 1e-9) - left, last = Math.floor(hi + 1e-9) - left, row = py - top;
+      if (first <= last) {
+        mask.fill(1, row * w + first, row * w + last + 1);
+        spans[row * 2] = Math.min(spans[row * 2], first); spans[row * 2 + 1] = Math.max(spans[row * 2 + 1], last);
+      }
+    }
+  } else if (Math.max(...widths) >= 3) {
+    for (let py = top; py <= bottom; py++) {
+      // Every point in the capsule is within radius of the infinite axis. Clip the scanline to that strip.
+      const cross = ay ? py * ax / ay : 0, reach = ay ? radius / Math.abs(ay) : 0;
+      const first = ay ? Math.max(left, Math.ceil(cross - reach - 1e-9)) : left;
+      const last = ay ? Math.min(right, Math.floor(cross + reach + 1e-9)) : right;
+      for (let px = first; px <= last; px++) {
+      const along = px * ax + py * ay, t = Math.max(0, Math.min(1, along / distance));
+      const width = widthAt(widths, t);
+      if (width < 3) continue;
+      let r = width / 2;
+      if (caps[0] === 'point') r *= Math.min(1, Math.max(0, along / (widths[0] / 2)));
+      if (caps[1] === 'point') r *= Math.min(1, Math.max(0, (distance - along) / (widths[widths.length - 1] / 2)));
+      if ((along < 0 && (caps[0] === 'flat' || caps[0] === 'point')) || (along > distance && (caps[1] === 'flat' || caps[1] === 'point'))) continue;
+      const dx = px - endX * t, dy = py - endY * t;
+      if (dx * dx + dy * dy <= r * r + 1e-9) put(px, py);
+      }
+    }
+  }
+  const socket = (x, y) => (caps[0] === 'socket' && x * x + y * y <= (widths[0] / 2 + 1) ** 2)
+    || (caps[1] === 'socket' && (x - endX) ** 2 + (y - endY) ** 2 <= (widths[widths.length - 1] / 2 + 1) ** 2);
+  const result = finishPart(mask, w, h, left, top, {
+    ramp, base: bone.base, outline: bone.outline, light, socket, spine, spans,
+    thick: Math.min(...widths) >= 3 ? true : Math.max(...widths) < 3 ? false
+      : (x, y) => widthAt(widths, Math.max(0, Math.min(1, (x * ax + y * ay) / distance))) >= 3
+  });
+  const [ox, oy] = result.pivot, length = bone.length;
+  return {
+    ...result, snapped: direction.snapped, end: [ox + endX, oy + endY], work: w * h,
+    spine: spine.map(([x, y]) => [x + ox, y + oy]),
+    map: ([along, across]) => [ox + roundHalfAway(endX * along / length - ay * sign * across), oy + roundHalfAway(endY * along / length + ax * sign * across)]
+  };
+}
+
+// Masses are cached like bones. `work` is the drawing's nominal cost in pixels visited, the same whether it was drawn
+// now or served from the cache, so a compiler budget built on it accepts or rejects a source the same way every time.
+const massDrawings = new Map();
+let massDrawingBytes = 0;
+const massMap = ({ pivot: [ox, oy], flipX, squash, cos, sin }) => ([x, y]) => {
+  const along = (flipX ? -x : x) / squash, across = y * squash;
+  return [ox + roundHalfAway(along * cos - across * sin), oy + roundHalfAway(along * sin + across * cos)];
+};
+export function rasterizeMass(mass, options = {}) {
+  const key = JSON.stringify([mass.size, mass.base, mass.outline, options.angle ?? 0, options.flipX ?? false, options.squash ?? 1, options.light ?? 225, options.ramp]);
+  let cached = massDrawings.get(key);
+  if (!cached) {
+    const part = drawMass(mass, options), bytes = part.fill.byteLength + part.outlineMask.byteLength + part.width * part.height * 2 + 512;
+    while (massDrawings.size && (massDrawings.size >= 128 || massDrawingBytes + bytes > 1048576)) {
+      const first = massDrawings.keys().next().value;
+      massDrawingBytes -= massDrawings.get(first).bytes; massDrawings.delete(first);
+    }
+    cached = { part, bytes }; massDrawings.set(key, cached); massDrawingBytes += bytes;
+  }
+  const part = cached.part, copy = { ...part, rows: part.rows.slice(), fill: part.fill.slice(), outlineMask: part.outlineMask.slice(), pivot: part.pivot.slice() };
+  return { ...copy, map: massMap(copy) };
+}
+function drawMass(mass, { angle = 0, flipX = false, squash = 1, light = 225, ramp } = {}) {
+  const [cos, sin] = unitAt(angle), rx = mass.size[0] / squash / 2, ry = mass.size[1] * squash / 2;
+  const reachX = Math.ceil(Math.sqrt(rx * rx * cos * cos + ry * ry * sin * sin)) + 2;
+  const reachY = Math.ceil(Math.sqrt(rx * rx * sin * sin + ry * ry * cos * cos)) + 2;
+  const left = -reachX, top = -reachY, w = reachX * 2 + 1, h = reachY * 2 + 1, candidates = [];
+  for (let y = -reachY + 2; y <= reachY - 2; y++) for (let x = -reachX + 2; x <= reachX - 2; x++) {
+    const u = (x * cos + y * sin) / rx, v = (-x * sin + y * cos) / ry;
+    candidates.push({ at: (y - top) * w + x - left, score: u * u + v * v, u: flipX ? -u : u, v });
+  }
+  candidates.sort((a, b) => a.score - b.score || a.v - b.v || a.u - b.u);
+  let work = candidates.length;
+  const paint = (mask, width, height, x, y, thick) => { work += width * height; return finishPart(mask, width, height, x, y,
+    { ramp, base: mass.base, outline: mass.outline, light, thick }); };
+  const area = part => part.rows.reduce((sum, row) => sum + [...row].filter(c => c !== '.').length, 0);
+  // Pixel area, including the outline, takes precedence over an exact ellipse under squash (owner decision).
+  // Use the unturned, unsquashed ellipse as the area target. Pick the closest ellipse-ranked pixel contour rather
+  // than rounding two diameters independently; this also keeps 2px masses stable at extreme squash.
+  const bx = Math.ceil(mass.size[0] / 2) + 2, by = Math.ceil(mass.size[1] / 2) + 2, bw = bx * 2 + 1, bh = by * 2 + 1;
+  const baseMask = new Uint8Array(bw * bh);
+  for (let y = -by; y <= by; y++) for (let x = -bx; x <= bx; x++) {
+    const u = x * 2 / mass.size[0], v = y * 2 / mass.size[1];
+    if (u * u + v * v <= 1 + 1e-9) baseMask[(y + by) * bw + x + bx] = 1;
+  }
+  const target = area(paint(baseMask, bw, bh, -bx, -by, Math.min(...mass.size) >= 3));
+  const draw = count => {
+    const mask = new Uint8Array(w * h);
+    for (let i = 0; i < count; i++) mask[candidates[i].at] = 1;
+    return paint(mask, w, h, left, top, Math.min(rx, ry) >= 1.5);
+  };
+  let low = 1, high = Math.min(candidates.length, target), result = null, error = Infinity, closest = 1;
+  const consider = count => {
+    const part = draw(count), pixels = area(part), miss = Math.abs(pixels - target);
+    if (miss < error) { result = part; error = miss; closest = count; }
+    return pixels;
+  };
+  while (low <= high) {
+    const count = (low + high) >> 1, pixels = consider(count);
+    if (pixels === target) break;
+    if (pixels < target) low = count + 1; else high = count - 1;
+  }
+  if (error) for (let count = Math.max(1, closest - 2), end = Math.min(candidates.length, closest + 2); count <= end; count++) consider(count);
+  return { ...result, targetArea: target, work, flipX, squash, cos, sin };
+}
+
 // ---- Rewrite rules -----------------------------------------------------------------------------------------------
 // A compiled rule is { w, h, match, replace } with colour ids; match -1 matches anything and replace -1 keeps the
 // pixel. Variants add the 90° turns and/or the horizontal mirror, without duplicates.

@@ -1,7 +1,8 @@
 import { renderProject, buildAtlas, scalePixels, PixelError } from './core.js';
 import { encodePNG, encodeAPNG, crc32 } from './png.js';
-import { readFile, mkdir, writeFile, access } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, access, rm } from 'node:fs/promises';
 import path from 'node:path';
+import { embedRecipe, recipeKind } from './share.js';
 
 const json = value => JSON.stringify(value, null, 2) + '\n';
 // Compact, deterministic JSON for generated recipes: any object or array that fits within `width` columns stays on one
@@ -70,7 +71,8 @@ export async function createBundle(spec) {
   files.set('player.js', await readFile(new URL('./runtime.js', import.meta.url)));
   files.set('preview.html', Buffer.from(previewHTML(project)));
   files.set('README.txt', Buffer.from(`${name} — Pixelbolt export\n\n${name}.png: transparent RGBA sprite sheet\n${name}.atlas.json: TexturePacker-style frames and named animation sequences\n${name}.css: CSS classes with per-frame timing\nframes/: individual PNGs\nanimations/: animated PNGs (APNG)\n${name}.pixel.json: editable source\nplayer.js: dependency-free Canvas player\npreview.html: open directly in a browser, or serve this folder\n\nCanvas: import { SpritePlayer } from './player.js';\nconst player = await SpritePlayer.load(canvas, './${name}.atlas.json');\nplayer.play('${Object.keys(project.animations)[0]}');\n\nCSS: <link rel="stylesheet" href="${name}.css">\n<span class="pf-${name} pf-${name}-${Object.keys(project.animations)[0]}"></span>\n`));
-  return { project, atlas, files };
+  // A forced export over an earlier export of this recipe removes the PNGs of frames and animations it no longer has.
+  return { project, atlas, files, owns: { marker: `${name}.atlas.json`, folders: ['frames', 'animations'], match: /^(?:frames|animations)\/[^/]+\.png$/ } };
 }
 function previewHTML(project) {
   const { name, animations } = project;
@@ -107,18 +109,68 @@ export function createZip(files) {
   end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.size, 8); end.writeUInt16LE(files.size, 10); end.writeUInt32LE(directory.length, 12); end.writeUInt32LE(offset, 16);
   return Buffer.concat([...local, directory, end]);
 }
-export async function writeBundle(bundle, directory, { force = false } = {}) {
+// Opt-in post-pass: keep all existing chunks, and leave a scene's asset passes alone. A video sequence shares one buffer
+// between the frames a pose is held for, so each distinct buffer is embedded once and stays shared.
+export async function embedBundleRecipe(bundle, recipe, version) {
+  const scene = recipeKind(recipe) === 'scene', embedded = new Map();
+  for (const [name, bytes] of bundle.files) {
+    if (!(scene ? name === 'scene.png' || name === 'unlit.png' : name.endsWith('.png'))) continue;
+    if (!embedded.has(bytes)) embedded.set(bytes, await embedRecipe(bytes, recipe, version));
+    bundle.files.set(name, embedded.get(bytes));
+  }
+}
+// Windows and macOS file systems ignore case by default, so `Hero.pixel.json` and `hero.pixel.json` are one file there.
+const fileKey = name => (process.platform === 'win32' || process.platform === 'darwin' ? name.toLowerCase() : name);
+// The bundle files that would land on one of `inputs` (the recipe and the files it references). Even --force never
+// writes over them: `render hero.json --out .` would otherwise replace hero.json with its own inlined copy.
+function inputCollisions(bundle, root, inputs) {
+  const names = new Map([...bundle.files.keys()].map(name => [fileKey(name), name]));
+  return inputs.flatMap(input => {
+    const relative = path.relative(root, path.resolve(input));
+    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return [];
+    const name = names.get(fileKey(relative.split(path.sep).join('/')));
+    return name === undefined ? [] : [name];
+  });
+}
+// What an earlier export of the same thing left in this folder that this one does not write: a longer sequence's
+// later frames, or a renamed frame's or animation's PNG. Only a bundle that declares `owns` has any, and only when the
+// folder holds that bundle's own index file (`owns.marker`), which shows the earlier export was this kind. Nothing
+// outside `owns.folders` that fails `owns.match` is ever listed.
+async function leftovers(bundle, root) {
+  const { owns } = bundle;
+  if (!owns) return [];
+  try { await access(path.join(root, owns.marker)); } catch { return []; }
+  const found = [];
+  for (const folder of owns.folders) {
+    let entries;
+    try { entries = await readdir(path.join(root, folder), { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const name = folder === '.' ? entry.name : `${folder}/${entry.name}`;
+      if (entry.isFile() && owns.match.test(name) && !bundle.files.has(name)) found.push(name);
+    }
+  }
+  return found.sort();
+}
+// Writes a bundle into `directory`. Without `force`, any existing file stops the export before anything is written.
+// With `force`, existing files are replaced and the earlier export's leftovers are removed after the new files are in
+// place; the returned list of written paths then carries `removed`, the paths it deleted. `inputs` are never written.
+export async function writeBundle(bundle, directory, { force = false, inputs = [] } = {}) {
   const root = path.resolve(directory);
+  const collisions = inputCollisions(bundle, root, inputs);
+  if (collisions.length) throw new Error(`The export would replace its own input ${path.join(root, collisions[0])}. Choose another folder.`);
   // Preflight all output collisions before writing any artifact.
   if (!force) for (const filename of bundle.files.keys()) {
     try { await access(path.join(root, filename)); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     throw new Error(`Output already exists: ${path.join(root, filename)}. Choose a new folder or pass --force.`);
   }
+  const stale = force ? await leftovers(bundle, root) : [];
   await mkdir(root, { recursive: true });
   for (const [filename, data] of bundle.files) {
     const target = path.join(root, filename);
     await mkdir(path.dirname(target), { recursive: true });
     await writeFile(target, data, { flag: force ? 'w' : 'wx' });
   }
-  return [...bundle.files.keys()].map(filename => path.join(root, filename));
+  for (const filename of stale) await rm(path.join(root, filename), { force: true });
+  const written = [...bundle.files.keys()].map(filename => path.join(root, filename));
+  return stale.length ? Object.assign(written, { removed: stale.map(filename => path.join(root, filename)) }) : written;
 }

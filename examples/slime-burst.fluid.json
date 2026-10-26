@@ -1,0 +1,48 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "slime-burst",
+  "width": 56,
+  "height": 40,
+  "palette": {
+    "G": "#1f6a3f",
+    "g": "#3fa34d",
+    "l": "#8be36a",
+    "w": "#e6ffc9",
+    "k": "#1f2a24",
+    "r": "#5b5568",
+    "R": "#433e50"
+  },
+  "symbols": {
+    "ground": [
+      "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR",
+      "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"
+    ]
+  },
+  "effects": {
+    "slime-burst": {
+      "kind": "liquid",
+      "frames": 40,
+      "duration": 60,
+      "seed": 9,
+      "substeps": 4,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.25],
+      "yield": 4,
+      "apic": true,
+      "tension": 3.2,
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 36 }],
+      "fill": [{ "at": [28, 17], "radius": 7.5, "burst": { "speed": [1.2, 1.8], "pieces": 5 } }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["g"], "thresholds": [0.5], "dither": 0 },
+        { "field": "shadow", "colors": ["G"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["l", "w"], "thresholds": [0.45, 0.8], "dither": 0 }
+      ],
+      "outline": "k",
+      "cleanup": { "strays": true, "corners": true }
+    }
+  }
+}

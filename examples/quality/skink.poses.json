@@ -31,28 +31,8 @@
         ".rrrrrppppp.",
         "..pppppppp.."
       ],
-      "anchor": [
-        7,
-        5
-      ],
-      "points": {
-        "neck": [
-          10,
-          1
-        ],
-        "grip": [
-          10,
-          4
-        ],
-        "hip": [
-          4,
-          5
-        ],
-        "tail": [
-          0,
-          4
-        ]
-      }
+      "anchor": [7, 5],
+      "points": { "neck": [10, 1], "grip": [10, 4], "hip": [4, 5], "tail": [0, 4] }
     },
     "compressed": {
       "rows": [
@@ -62,28 +42,8 @@
         "rraaaarrrrrpp",
         ".rrrrrpppppp."
       ],
-      "anchor": [
-        7,
-        3
-      ],
-      "points": {
-        "neck": [
-          10,
-          0
-        ],
-        "grip": [
-          11,
-          3
-        ],
-        "hip": [
-          4,
-          3
-        ],
-        "tail": [
-          0,
-          3
-        ]
-      }
+      "anchor": [7, 3],
+      "points": { "neck": [10, 0], "grip": [11, 3], "hip": [4, 3], "tail": [0, 3] }
     },
     "head": {
       "rows": [
@@ -96,16 +56,8 @@
         "...aarr..",
         "....rr..."
       ],
-      "anchor": [
-        2,
-        5
-      ],
-      "points": {
-        "mouth": [
-          7,
-          5
-        ]
-      }
+      "anchor": [2, 5],
+      "points": { "mouth": [7, 5] }
     },
     "blink": {
       "rows": [
@@ -118,16 +70,8 @@
         "...aarr..",
         "....rr..."
       ],
-      "anchor": [
-        2,
-        5
-      ],
-      "points": {
-        "mouth": [
-          7,
-          5
-        ]
-      }
+      "anchor": [2, 5],
+      "points": { "mouth": [7, 5] }
     },
     "crest": {
       "rows": [
@@ -140,16 +84,8 @@
         "...aarr..",
         "....rr..."
       ],
-      "anchor": [
-        2,
-        5
-      ],
-      "points": {
-        "mouth": [
-          7,
-          5
-        ]
-      }
+      "anchor": [2, 5],
+      "points": { "mouth": [7, 5] }
     },
     "tail": {
       "rows": [
@@ -160,10 +96,7 @@
         "rp......",
         "r......."
       ],
-      "anchor": [
-        7,
-        0
-      ]
+      "anchor": [7, 0]
     },
     "tailUp": {
       "rows": [
@@ -174,10 +107,7 @@
         "....rrpp",
         "......rr"
       ],
-      "anchor": [
-        7,
-        5
-      ]
+      "anchor": [7, 5]
     },
     "stand": {
       "rows": [
@@ -186,16 +116,8 @@
         "..rp...rp",
         ".rrp..rrp"
       ],
-      "anchor": [
-        3,
-        0
-      ],
-      "points": {
-        "foot": [
-          2,
-          3
-        ]
-      }
+      "anchor": [3, 0],
+      "points": { "foot": [2, 3] }
     },
     "contactA": {
       "rows": [
@@ -204,16 +126,8 @@
         ".rr.......rr.",
         "rpp.......rpp"
       ],
-      "anchor": [
-        4,
-        0
-      ],
-      "points": {
-        "foot": [
-          10,
-          3
-        ]
-      }
+      "anchor": [4, 0],
+      "points": { "foot": [10, 3] }
     },
     "downA": {
       "rows": [
@@ -222,16 +136,8 @@
         "..rp....rp",
         "..rpp..rpp"
       ],
-      "anchor": [
-        3,
-        0
-      ],
-      "points": {
-        "foot": [
-          7,
-          3
-        ]
-      }
+      "anchor": [3, 0],
+      "points": { "foot": [7, 3] }
     },
     "passA": {
       "rows": [
@@ -240,16 +146,8 @@
         "..rp..ppp",
         ".rpp....."
       ],
-      "anchor": [
-        3,
-        0
-      ],
-      "points": {
-        "foot": [
-          1,
-          3
-        ]
-      }
+      "anchor": [3, 0],
+      "points": { "foot": [1, 3] }
     },
     "contactB": {
       "rows": [
@@ -258,16 +156,8 @@
         ".....rrrr..",
         "....rpp.rpp"
       ],
-      "anchor": [
-        4,
-        0
-      ],
-      "points": {
-        "foot": [
-          8,
-          3
-        ]
-      }
+      "anchor": [4, 0],
+      "points": { "foot": [8, 3] }
     },
     "downB": {
       "rows": [
@@ -276,16 +166,8 @@
         "....rprp..",
         "...rpp.rpp"
       ],
-      "anchor": [
-        3,
-        0
-      ],
-      "points": {
-        "foot": [
-          7,
-          3
-        ]
-      }
+      "anchor": [3, 0],
+      "points": { "foot": [7, 3] }
     },
     "passB": {
       "rows": [
@@ -294,16 +176,8 @@
         ".ppp...rp",
         "......rpp"
       ],
-      "anchor": [
-        3,
-        0
-      ],
-      "points": {
-        "foot": [
-          6,
-          3
-        ]
-      }
+      "anchor": [3, 0],
+      "points": { "foot": [6, 3] }
     },
     "charm": {
       "rows": [
@@ -314,730 +188,171 @@
         "yay",
         ".a."
       ],
-      "anchor": [
-        0,
-        0
-      ],
-      "points": {
-        "light": [
-          1,
-          3
-        ]
-      }
+      "anchor": [0, 0],
+      "points": { "light": [1, 3] }
     }
   },
   "poses": [
     {
       "name": "idle",
       "duration": 880,
-      "origin": [
-        14,
-        15
-      ],
+      "origin": [14, 15],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "stand",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "stand", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "blink",
       "duration": 100,
-      "origin": [
-        14,
-        15
-      ],
+      "origin": [14, 15],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "stand",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "blink",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "stand", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "blink", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "contact-a",
       "duration": 90,
-      "origin": [
-        14,
-        15
-      ],
+      "origin": [14, 15],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "contactA",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "contactA", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "foot-contact",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "foot-contact", "part": "feet", "point": "foot" }]
     },
     {
       "name": "down-a",
       "duration": 80,
-      "origin": [
-        14,
-        16
-      ],
+      "origin": [14, 16],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "compressed"
-        },
-        {
-          "name": "feet",
-          "part": "downA",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "compressed" },
+        { "name": "feet", "part": "downA", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "passing-a",
       "duration": 80,
-      "origin": [
-        14,
-        14
-      ],
+      "origin": [14, 14],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tailUp",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "passA",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tailUp", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "passA", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "contact-b",
       "duration": 90,
-      "origin": [
-        14,
-        15
-      ],
+      "origin": [14, 15],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "contactB",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "contactB", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "foot-contact",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "foot-contact", "part": "feet", "point": "foot" }]
     },
     {
       "name": "down-b",
       "duration": 80,
-      "origin": [
-        14,
-        16
-      ],
+      "origin": [14, 16],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "compressed"
-        },
-        {
-          "name": "feet",
-          "part": "downB",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "compressed" },
+        { "name": "feet", "part": "downB", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "passing-b",
       "duration": 80,
-      "origin": [
-        14,
-        14
-      ],
+      "origin": [14, 14],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "passB",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "passB", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "gather",
       "duration": 220,
-      "origin": [
-        14,
-        16
-      ],
+      "origin": [14, 16],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tailUp",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "compressed"
-        },
-        {
-          "name": "feet",
-          "part": "downA",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "crest",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tailUp", "at": [-7, 0] },
+        { "name": "body", "part": "compressed" },
+        { "name": "feet", "part": "downA", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "crest", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "release",
       "duration": 80,
-      "origin": [
-        14,
-        14
-      ],
+      "origin": [14, 14],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tailUp",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "contactA",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "crest",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tailUp", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "contactA", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "crest", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "spell-release",
-          "part": "head",
-          "point": "mouth"
-        }
-      ]
+      "markers": [{ "name": "spell-release", "part": "head", "point": "mouth" }]
     },
     {
       "name": "recoil",
       "duration": 120,
-      "origin": [
-        14,
-        16
-      ],
+      "origin": [14, 16],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "compressed"
-        },
-        {
-          "name": "feet",
-          "part": "downB",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "blink",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "compressed" },
+        { "name": "feet", "part": "downB", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "blink", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     },
     {
       "name": "recover",
       "duration": 180,
-      "origin": [
-        14,
-        15
-      ],
+      "origin": [14, 15],
       "parts": [
-        {
-          "name": "tail",
-          "part": "tail",
-          "at": [
-            -7,
-            0
-          ]
-        },
-        {
-          "name": "body",
-          "part": "body"
-        },
-        {
-          "name": "feet",
-          "part": "stand",
-          "attach": {
-            "part": "body",
-            "point": "hip"
-          }
-        },
-        {
-          "name": "head",
-          "part": "head",
-          "attach": {
-            "part": "body",
-            "point": "neck"
-          }
-        },
-        {
-          "name": "charm",
-          "part": "charm",
-          "attach": {
-            "part": "body",
-            "point": "grip"
-          },
-          "at": [
-            0,
-            0
-          ]
-        }
+        { "name": "tail", "part": "tail", "at": [-7, 0] },
+        { "name": "body", "part": "body" },
+        { "name": "feet", "part": "stand", "attach": { "part": "body", "point": "hip" } },
+        { "name": "head", "part": "head", "attach": { "part": "body", "point": "neck" } },
+        { "name": "charm", "part": "charm", "attach": { "part": "body", "point": "grip" }, "at": [0, 0] }
       ],
-      "markers": [
-        {
-          "name": "pose",
-          "part": "feet",
-          "point": "foot"
-        }
-      ]
+      "markers": [{ "name": "pose", "part": "feet", "point": "foot" }]
     }
   ],
   "animations": {
-    "idle": {
-      "frames": [
-        "idle",
-        "blink",
-        "idle"
-      ]
-    },
-    "run": {
-      "frames": [
-        "contact-a",
-        "down-a",
-        "passing-a",
-        "contact-b",
-        "down-b",
-        "passing-b"
-      ]
-    },
-    "cast": {
-      "frames": [
-        "gather",
-        "release",
-        "recoil",
-        "recover"
-      ],
-      "loop": false
-    }
+    "idle": { "frames": ["idle", "blink", "idle"] },
+    "run": { "frames": ["contact-a", "down-a", "passing-a", "contact-b", "down-b", "passing-b"] },
+    "cast": { "frames": ["gather", "release", "recoil", "recover"], "loop": false }
   }
 }

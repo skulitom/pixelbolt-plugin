@@ -40,76 +40,38 @@
       "dissipation": 0.14,
       "cooling": 0.34,
       "drag": 0.03,
-      "obstacles": [
-        {
-          "symbol": "torch",
-          "x": 5,
-          "y": 22
-        }
-      ],
+      "obstacles": [{ "symbol": "torch", "x": 5, "y": 22 }],
       "emitters": [
         {
           "name": "flame",
-          "at": [
-            8.5,
-            22.5
-          ],
-          "radius": 4,
+          "at": [8.5, 21],
+          "radius": 3.5,
           "rate": 1,
           "temperature": 1.1,
-          "velocity": [
-            0,
-            -1
-          ],
+          "velocity": [0, -1],
           "noise": 0.8,
           "flicker": 0.35
         },
         {
           "name": "embers",
-          "at": [
-            8.5,
-            15
-          ],
+          "at": [8.5, 15],
           "radius": 1.5,
           "rate": 1,
           "sparks": {
             "count": 0.15,
-            "life": [
-              5,
-              8
-            ],
-            "colors": [
-              "W",
-              "y",
-              "o"
-            ],
+            "life": [5, 8],
+            "colors": ["W", "y", "o"],
             "trail": true,
-            "angle": [
-              255,
-              285
-            ],
-            "speed": [
-              0.3,
-              0.5
-            ]
+            "angle": [255, 285],
+            "speed": [0.3, 0.5]
           }
         }
       ],
       "look": [
         {
           "field": "temperature",
-          "colors": [
-            "r",
-            "o",
-            "y",
-            "W"
-          ],
-          "thresholds": [
-            0.32,
-            0.44,
-            0.64,
-            0.98
-          ],
+          "colors": ["r", "o", "y", "W"],
+          "thresholds": [0.32, 0.44, 0.64, 0.98],
           "dither": 0.5
         }
       ]

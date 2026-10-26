@@ -1,6 +1,6 @@
 {
   "name": "pixelbolt",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Agent-first pixel art and animation toolkit with a CLI, MCP server and local studio. Deterministic JSON recipes to PNG, APNG and sprite atlases; zero dependencies.",
   "homepage": "https://github.com/skulitom/Pixelbolt#readme",
   "repository": { "type": "git", "url": "git+https://github.com/skulitom/Pixelbolt.git" },

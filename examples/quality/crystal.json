@@ -109,14 +109,5 @@
       ]
     }
   ],
-  "animations": {
-    "break": {
-      "frames": [
-        "impact",
-        "split",
-        "fallen"
-      ],
-      "loop": false
-    }
-  }
+  "animations": { "break": { "frames": ["impact", "split", "fallen"], "loop": false } }
 }

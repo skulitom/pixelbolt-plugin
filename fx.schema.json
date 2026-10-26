@@ -94,9 +94,43 @@
                   "maximum": 60000
                 },
                 "maxItems": 256
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "from": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60000,
+                    "description": "Milliseconds of the first frame."
+                  },
+                  "to": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60000,
+                    "description": "Milliseconds of the last frame."
+                  },
+                  "ease": {
+                    "enum": [
+                      "linear",
+                      "hold",
+                      "in",
+                      "out",
+                      "inOut",
+                      "overshoot",
+                      "bounce"
+                    ],
+                    "description": "How durations move from from to to: linear (default), in (quick frames, then a slow settle: impacts), out, inOut, hold, overshoot or bounce."
+                  }
+                },
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "additionalProperties": false
               }
             ],
-            "description": "Milliseconds per frame, or one per frame; default 100."
+            "description": "Milliseconds per frame, one per frame, or {from, to, ease} eased across the frames; default 100."
           },
           "loop": {
             "type": "boolean",
@@ -127,7 +161,7 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Spawn centre [x, y] in canvas pixels."
+                  "description": "Spawn centre [x, y] in canvas pixels. For a child (from), an offset from the parent particle; default [0, 0]."
                 },
                 "area": {
                   "type": "array",
@@ -138,19 +172,93 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Spawn box [w, h] centred on at; default [1, 1]."
+                  "description": "Spawn box [w, h] centred on at; default [1, 1]. Use one of area, ring and line."
+                },
+                "ring": {
+                  "type": "object",
+                  "properties": {
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Distance from at. [min, max] picks per particle."
+                    },
+                    "arc": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -3600,
+                        "maximum": 3600
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[from, to] degrees clockwise (0 right, 90 down) to spawn over, at most 360 apart; default [0, 360]."
+                    },
+                    "even": {
+                      "type": "boolean",
+                      "description": "Space the particles spawned together evenly instead of at random."
+                    },
+                    "outward": {
+                      "type": "boolean",
+                      "description": "Measure angle from each particle's outward direction: 0 straight out (the default angle), 90 clockwise along the ring, 180 inward. Shockwaves and radial bursts."
+                    }
+                  },
+                  "required": [
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Spawn on a circle or arc around at instead of in a box."
+                },
+                "line": {
+                  "type": "object",
+                  "properties": {
+                    "to": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "The other end of the segment (for a child, an offset from the parent particle)."
+                    },
+                    "even": {
+                      "type": "boolean",
+                      "description": "Space the particles spawned together evenly instead of at random."
+                    }
+                  },
+                  "required": [
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Spawn along the segment from at to to instead of in a box."
                 },
                 "burst": {
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 1024,
-                  "description": "Particles spawned at start (each cycle when looping)."
+                  "description": "Particles spawned at start (each cycle when looping); for a child, particles per event."
                 },
                 "rate": {
                   "type": "number",
                   "minimum": 0.001,
                   "maximum": 64,
-                  "description": "Particles per frame from start until end."
+                  "description": "Particles per frame from start until end; for a child with when: life, per frame for each parent particle."
                 },
                 "start": {
                   "type": "integer",
@@ -298,7 +406,7 @@
                   "type": "integer",
                   "minimum": -4096,
                   "maximum": 4096,
-                  "description": "Particles never go below this y."
+                  "description": "Particles never go below this y, sway included."
                 },
                 "bounce": {
                   "type": "number",
@@ -334,7 +442,11 @@
                       "minItems": 1
                     }
                   ],
-                  "description": "Symbol names drawn centred on the particle: one sequence, or a list of sequences with one picked per particle."
+                  "description": "Symbol names drawn centred on the particle: one sequence, or a list of sequences with one picked per particle (or by direction, with face)."
+                },
+                "face": {
+                  "type": "boolean",
+                  "description": "Pick the sequence by direction of travel instead of at random: shapes lists 2–16 sequences, the first facing right and the rest turning clockwise, evenly spaced (with 8: right, down-right, down, down-left, left, up-left, up, up-right). Streaking sparks and debris; a particle at rest keeps its last direction."
                 },
                 "play": {
                   "enum": [
@@ -360,6 +472,24 @@
                   },
                   "maxItems": 64,
                   "description": "Colour variants; each particle picks one."
+                },
+                "tint": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "propertyNames": {
+                      "minLength": 1,
+                      "maxLength": 1
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    },
+                    "description": "Recolor grid characters for this operation only: character → palette name or colour."
+                  },
+                  "maxItems": 64,
+                  "minItems": 1,
+                  "description": "Colour stages over each life, the first at birth, spread like play: life. Each overrides the particle's remap for the characters it names, so a spark cools from white to red without a symbol per colour."
                 },
                 "trail": {
                   "type": "object",
@@ -415,13 +545,52 @@
                     }
                   ],
                   "description": "Dissolve pattern, as for the dither operation: bayer2, bayer4 (default), bayer8, noise (ordered by the effect's seed) or a matrix of ranks, e.g. [[0, 1, 2], [1, 2, 0], [2, 0, 1]] for diagonal stripes."
+                },
+                "from": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Make this a child of the earlier emitter with this (unique) name: it spawns from that emitter's particles at when, instead of on a schedule of its own (no start or end)."
+                },
+                "when": {
+                  "enum": [
+                    "death",
+                    "floor",
+                    "life"
+                  ],
+                  "description": "For a child: death (default; burst particles where a parent particle ends), floor (burst where it first lands on its floor) or life (rate particles per frame from each parent while it lives: trails)."
+                },
+                "inherit": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "For a child: the share of its parent particle's velocity it starts with, added to its own launch; default 0."
+                },
+                "behind": {
+                  "type": "boolean",
+                  "description": "Draw this emitter's particles under every other emitter's (smoke behind sparks, a trail behind its bolt)."
+                },
+                "cue": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Name a point at the spawn centre in each frame this emitter spawns. Frames carry it as a named point, which atlases export for game code (a shake or a pause on impact); the metadata lists every cue."
                 }
               },
               "required": [
-                "at",
                 "shapes"
               ],
-              "additionalProperties": false
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": [
+                    "at"
+                  ]
+                },
+                {
+                  "required": [
+                    "from"
+                  ]
+                }
+              ]
             },
             "maxItems": 16,
             "minItems": 1

@@ -4,13 +4,7 @@
   "name": "smoke-puff",
   "width": 32,
   "height": 32,
-  "palette": {
-    "k": "#121019",
-    "d": "#5d5872",
-    "m": "#9a95ad",
-    "l": "#cfcadb",
-    "w": "#f8f6fc"
-  },
+  "palette": { "k": "#121019", "d": "#5d5872", "m": "#9a95ad", "l": "#cfcadb", "w": "#f8f6fc" },
   "effects": {
     "smoke-puff": {
       "frames": 19,
@@ -22,10 +16,7 @@
       "drag": 0.25,
       "emitters": [
         {
-          "at": [
-            16.5,
-            17.5
-          ],
+          "at": [16.5, 17.5],
           "radius": 4,
           "rate": 1,
           "end": 3,
@@ -36,10 +27,7 @@
           "flicker": 0.2
         },
         {
-          "at": [
-            10.5,
-            19.5
-          ],
+          "at": [10.5, 19.5],
           "radius": 3,
           "rate": 1,
           "start": 1,
@@ -51,10 +39,7 @@
           "flicker": 0.2
         },
         {
-          "at": [
-            22.5,
-            19.5
-          ],
+          "at": [22.5, 19.5],
           "radius": 3.25,
           "rate": 1,
           "start": 1,
@@ -66,10 +51,7 @@
           "flicker": 0.2
         },
         {
-          "at": [
-            12.5,
-            13.5
-          ],
+          "at": [12.5, 13.5],
           "radius": 3,
           "rate": 1,
           "start": 2,
@@ -81,10 +63,7 @@
           "flicker": 0.2
         },
         {
-          "at": [
-            19.5,
-            12.5
-          ],
+          "at": [19.5, 12.5],
           "radius": 3.5,
           "rate": 1,
           "start": 2,
@@ -97,51 +76,13 @@
         }
       ],
       "look": [
-        {
-          "field": "density",
-          "colors": [
-            "m"
-          ],
-          "thresholds": [
-            0.18
-          ],
-          "dither": 0
-        },
-        {
-          "field": "density",
-          "colors": [
-            "l"
-          ],
-          "thresholds": [
-            0.55
-          ],
-          "dither": 0
-        },
-        {
-          "field": "shadow",
-          "colors": [
-            "d"
-          ],
-          "thresholds": [
-            0.5
-          ],
-          "dither": 0
-        },
-        {
-          "field": "light",
-          "colors": [
-            "w"
-          ],
-          "thresholds": [
-            0.5
-          ],
-          "dither": 0
-        }
+        { "field": "density", "colors": ["m"], "thresholds": [0.18], "dither": 0 },
+        { "field": "density", "colors": ["l"], "thresholds": [0.55], "dither": 0 },
+        { "field": "shadow", "colors": ["d"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["w"], "thresholds": [0.5], "dither": 0 }
       ],
       "outline": "k",
-      "cleanup": {
-        "strays": true
-      }
+      "cleanup": { "strays": true }
     }
   }
 }

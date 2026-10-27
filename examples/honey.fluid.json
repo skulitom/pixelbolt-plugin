@@ -9,7 +9,6 @@
     "y": "#f7c948",
     "a": "#e09a1f",
     "A": "#a85f0e",
-    "D": "#6b3a0b",
     "b": "#6e4426",
     "B": "#9c6a3c",
     "n": "#c79a5b",
@@ -62,110 +61,33 @@
       "warmup": 3,
       "seed": 6,
       "iterations": 24,
-      "walls": [
-        "left",
-        "right",
-        "bottom"
-      ],
+      "walls": ["left", "right", "bottom"],
       "viscosity": 10,
       "apic": true,
       "adhesion": 1.5,
       "tension": 0.3,
-      "obstacles": [
-        {
-          "symbol": "dipper",
-          "x": 12,
-          "y": 2
-        },
-        {
-          "symbol": "jar",
-          "x": 7,
-          "y": 26
-        }
-      ],
-      "fill": [
-        {
-          "x": 9,
-          "y": 37,
-          "w": 22,
-          "h": 10
-        }
-      ],
+      "obstacles": [{ "symbol": "dipper", "x": 12, "y": 2 }, { "symbol": "jar", "x": 7, "y": 26 }],
+      "fill": [{ "x": 9, "y": 37, "w": 22, "h": 10 }],
       "emitters": [
         {
           "name": "drizzle",
-          "at": [
-            16.5,
-            13
-          ],
+          "at": [16.5, 13],
           "radius": 2,
           "rate": 1,
-          "velocity": [
-            0,
-            0.8
-          ],
-          "pulse": {
-            "amplitude": 0.3,
-            "period": 12
-          }
+          "velocity": [0, 0.8],
+          "pulse": { "amplitude": 0.15, "period": 12 }
         },
-        {
-          "name": "seep",
-          "at": [
-            20,
-            36.5
-          ],
-          "area": [
-            22,
-            1
-          ],
-          "rate": 1,
-          "density": -0.25
-        }
+        { "name": "seep", "at": [20, 36.5], "area": [22, 1], "rate": 1, "density": -0.25 }
       ],
       "look": [
-        {
-          "field": "density",
-          "colors": [
-            "a"
-          ],
-          "thresholds": [
-            0.5
-          ],
-          "dither": 0
-        },
-        {
-          "field": "speed",
-          "colors": [
-            "a"
-          ],
-          "thresholds": [
-            0.3
-          ],
-          "dither": 0
-        },
-        {
-          "field": "depth",
-          "colors": [
-            "H",
-            "y",
-            "a",
-            "A",
-            "D"
-          ],
-          "thresholds": [
-            1,
-            2,
-            3,
-            7,
-            13
-          ],
-          "dither": 0
-        }
+        { "field": "density", "colors": ["a"], "thresholds": [0.5], "dither": 0 },
+        { "field": "speed", "colors": ["a"], "thresholds": [0.3], "dither": 0 },
+        { "field": "depth", "colors": ["H", "y", "a", "A"], "thresholds": [1, 2, 3, 7], "dither": 0 },
+        { "field": "speed", "colors": ["a"], "thresholds": [0.3], "dither": 0 },
+        { "field": "shadow", "colors": ["A"], "thresholds": [0.65], "dither": 0 },
+        { "field": "light", "colors": ["y", "H"], "thresholds": [0.4, 0.75], "dither": 0 }
       ],
-      "cleanup": {
-        "strays": true
-      }
+      "cleanup": { "strays": true }
     }
   }
 }

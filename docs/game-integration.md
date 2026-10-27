@@ -1,6 +1,6 @@
 # Using Pixelbolt assets in games
 
-The bundle deliberately keeps the interchange format simple: RGBA PNGs plus JSON frame rectangles. By default every frame retains the full canvas and common origin; opt into trimmed packing with `sheet.trim` (below). Frames are never rotated. Use nearest-neighbor filtering and whole-pixel placement for crisp rendering.
+The bundle deliberately keeps the interchange format simple: RGBA PNGs plus JSON frame rectangles. By default every frame retains the full canvas and common origin; opt into trimmed packing with `sheet.trim` (below). Frames are never rotated. Use nearest-neighbor filtering and whole-pixel placement for crisp rendering (the bundled `drawFrame` snaps fractional positions to whole pixels for you).
 
 ## Phaser
 

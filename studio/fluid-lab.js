@@ -4,33 +4,11 @@
 import { compileFluid } from '/fluid.js';
 import { renderProject, buildAtlas } from '/core.js';
 import { animationGIF } from '/gif.js';
+import { FLUID_PRESETS, fluidEffect, fluidSliders, editedSource } from '/fluid-controls.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('canvas'), context = canvas.getContext('2d');
-const PRESETS = [
-  { file: 'campfire', title: 'Campfire', note: 'Gas · loop' }, { file: 'explosion', title: 'Explosion', note: 'Gas · one-shot' },
-  { file: 'smoke-puff', title: 'Smoke puff', note: 'Gas · one-shot' }, { file: 'steam-vent', title: 'Steam vent', note: 'Gas · loop' },
-  { file: 'magic-swirl', title: 'Magic swirl', note: 'Gas · loop' }, { file: 'torch', title: 'Torch', note: 'Gas · loop' },
-  { file: 'splash', title: 'Splash', note: 'Liquid · one-shot' }, { file: 'waterfall', title: 'Waterfall', note: 'Liquid · loop' },
-  { file: 'drip', title: 'Drip', note: 'Liquid · loop' }, { file: 'potion', title: 'Bubbling potion', note: 'Liquid · loop' },
-  { file: 'honey', title: 'Honey', note: 'Viscous liquid · loop' }, { file: 'slime', title: 'Slime', note: 'Yield-stress liquid · one-shot' }
-];
-// Each slider sets one setting of the preset's effect; Strength scales every emitter's rate or burst.
-const strength = { key: 'strength', label: 'Strength', min: 0.25, max: 2, step: 0.05, initial: () => 1, show: v => `× ${v.toFixed(2)}` };
-const SLIDERS = {
-  gas: [strength,
-    { key: 'buoyancy', label: 'Rise (buoyancy)', min: 0, max: 1, step: 0.01, initial: e => e.buoyancy ?? 0.15 },
-    { key: 'vorticity', label: 'Curl (vorticity)', min: 0, max: 1, step: 0.01, initial: e => e.vorticity ?? 0.25 },
-    { key: 'dissipation', label: 'Fade (dissipation)', min: 0, max: 0.4, step: 0.005, initial: e => e.dissipation ?? 0.03 }],
-  liquid: [strength,
-    { key: 'gravity', label: 'Gravity', min: 0, max: 0.6, step: 0.01, initial: e => (e.gravity ?? [0, 0.3])[1] },
-    { key: 'flip', label: 'Liveliness (flip)', min: 0, max: 1, step: 0.01, initial: e => e.flip ?? 0.9 },
-    // Thickness slows spreading and keeps streams whole without slowing a fall; resistance (drag) slows everything,
-    // falling included, as if the liquid moved through something thick.
-    { key: 'viscosity', label: 'Thickness (viscosity)', min: 0, max: 32, step: 0.5, initial: e => e.viscosity ?? 0 },
-    { key: 'yield', label: 'Firmness (yield)', min: 0, max: 8, step: 0.1, initial: e => e.yield ?? 0 },
-    { key: 'drag', label: 'Resistance (drag)', min: 0, max: 0.3, step: 0.005, initial: e => e.drag ?? 0 }]
-};
+const PRESETS = FLUID_PRESETS;
 const HOLD = 600, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const round = value => Math.round(value * 1000) / 1000;
 let preset = null, effectName = '', values = {}, seed = 1, project = null, recipe = null, frames = [], position = 0, nextAt = 0, playing = !reducedMotion, timer, toastTimer, version = 0;
@@ -41,23 +19,10 @@ function download(data, filename, type) {
   const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
-const effectOf = source => Object.values(source.effects)[0];
-const sliders = () => SLIDERS[effectOf(preset.source).kind === 'liquid' ? 'liquid' : 'gas'];
-
-// The preset with the sliders and seed applied; settings left where the preset had them are not written.
-function edited() {
-  const source = structuredClone(preset.source), effect = effectOf(source), original = effectOf(preset.source);
-  for (const slider of sliders()) {
-    const value = values[slider.key];
-    if (value === slider.initial(original)) continue;
-    if (slider.key === 'strength') {
-      for (const emitter of effect.emitters) for (const field of ['rate', 'burst']) if (emitter[field] !== undefined) emitter[field] = round(Math.min(64, Math.max(0.01, emitter[field] * value)));
-    } else if (slider.key === 'gravity') effect.gravity = [(original.gravity ?? [0, 0.3])[0], value];
-    else effect[slider.key] = value;
-  }
-  if (seed !== (original.seed ?? 1)) effect.seed = seed;
-  return source;
-}
+const effectOf = fluidEffect;
+const sliders = () => fluidSliders(preset.source);
+// The preset with the sliders and seed applied (fluid-controls.js).
+const edited = () => editedSource(preset.source, values, seed);
 
 function draw() {
   if (!project) return;

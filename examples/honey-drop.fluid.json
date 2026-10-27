@@ -1,0 +1,66 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "honey-drop",
+  "width": 40,
+  "height": 48,
+  "palette": {
+    "H": "#fff3b0",
+    "y": "#f7c948",
+    "a": "#e09a1f",
+    "A": "#a85f0e",
+    "b": "#6e4426",
+    "B": "#9c6a3c",
+    "n": "#c79a5b",
+    "q": "#c7d6e6",
+    "Q": "#8fa4bd",
+    "k": "#1b1a26"
+  },
+  "symbols": {
+    "spoon": [
+      "...................nnnnnnnnnnn",
+      "nnnnnnnnnnnnnnnnnnBBBBBBBBBBBB",
+      "BBBBBBBBBBBBBBBBBBbBBBBBBBBBBb",
+      "...................bbBBBBBBbb.",
+      ".....................bbbbbb..."
+    ],
+    "bowl": [
+      "qq........................qq",
+      "qq........................qq",
+      ".q........................q.",
+      ".qq......................qq.",
+      "..q......................q..",
+      "..qq....................qq..",
+      "...qq..................qq...",
+      "....QQQ..............QQQ....",
+      "......QQQ..........QQQ......",
+      "........QQQQQQQQQQQQ........"
+    ]
+  },
+  "effects": {
+    "honey-drop": {
+      "kind": "liquid",
+      "frames": 44,
+      "duration": 70,
+      "seed": 6,
+      "iterations": 24,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "viscosity": 64,
+      "apic": true,
+      "adhesion": 4,
+      "tension": 0.3,
+      "keys": [{ "frame": 14, "viscosity": 3, "over": 2 }, { "frame": 30, "viscosity": 16, "over": 6 }],
+      "obstacles": [{ "symbol": "spoon", "x": 2, "y": 6, "surface": "smooth" }, { "symbol": "bowl", "x": 6, "y": 36 }],
+      "fill": [{ "at": [25.5, 13.6], "radius": 3.4 }, { "x": 9, "y": 39, "w": 22, "h": 5 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["a"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["H", "y", "a", "A"], "thresholds": [1, 2, 3, 7], "dither": 0 },
+        { "field": "shadow", "colors": ["A"], "thresholds": [0.65], "dither": 0 },
+        { "field": "light", "colors": ["y", "H"], "thresholds": [0.4, 0.75], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

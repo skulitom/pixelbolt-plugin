@@ -1,0 +1,81 @@
+{
+  "node": "v24.19.0",
+  "platform": "win32 10.0.26200 x64",
+  "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor          ",
+  "memoryGB": 63,
+  "commit": "862de088f3b23c4bef30f96fb0ff0833895ad340",
+  "dirty": false,
+  "warmups": 3,
+  "runs": 15,
+  "cases": {
+    "stamp-skink": {
+      "canvas": [
+        32,
+        26
+      ],
+      "instances": 5,
+      "frames": 12,
+      "compile": {
+        "medianMs": 2.058,
+        "p95Ms": 3.573
+      },
+      "render": {
+        "medianMs": 1.389,
+        "p95Ms": 1.534
+      },
+      "merged": {
+        "medianMs": 0.345,
+        "p95Ms": 0.49
+      },
+      "recipeBytes": 6909,
+      "mergedPixelsIdentical": true
+    },
+    "stamp-64": {
+      "canvas": [
+        64,
+        64
+      ],
+      "instances": 16,
+      "frames": 24,
+      "compile": {
+        "medianMs": 34.215,
+        "p95Ms": 41.259
+      },
+      "render": {
+        "medianMs": 31.96,
+        "p95Ms": 36.807
+      },
+      "merged": {
+        "medianMs": 2.478,
+        "p95Ms": 4.424
+      },
+      "recipeBytes": 32179,
+      "mergedPixelsIdentical": true
+    },
+    "stamp-128": {
+      "canvas": [
+        128,
+        128
+      ],
+      "instances": 32,
+      "frames": 96,
+      "compile": {
+        "medianMs": 972.287,
+        "p95Ms": 984.645
+      },
+      "render": {
+        "medianMs": 968.267,
+        "p95Ms": 1008.677
+      },
+      "merged": {
+        "medianMs": 33.537,
+        "p95Ms": 34.274
+      },
+      "recipeBytes": 254478,
+      "mergedPixelsIdentical": true
+    },
+    "stamp-256": {
+      "error": "project: drawing work exceeds the 67-million-pixel budget; simplify repeated operations"
+    }
+  }
+}

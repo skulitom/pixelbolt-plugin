@@ -947,3 +947,6 @@ dialog code{
     scroll-behavior:auto!important
   }
 }
+.motion-tools:not([hidden]) { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; font-size:12px; }
+.motion-tools input { width:72px; color:inherit; background:#18212b; border:1px solid #506473; border-radius:4px; padding:4px; }
+.motion-summary { margin:0; padding:4px 16px 10px; font-size:12px; color:#c9d8ce; }

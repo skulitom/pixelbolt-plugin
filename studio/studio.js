@@ -1,18 +1,22 @@
 import { renderProject, buildAtlas, parseColor, reviewPixels, onionPixels, animationPosition, animationNeighbors, MAX_REQUEST_BYTES } from '/core.js';
 import { animationGIF } from '/gif.js';
 import { createDraftStore } from '/draft.js';
+import { compilePoses } from '/authoring.js';
+import { inspectMotion } from '/motion.js';
 
 const $ = id => document.getElementById(id);
 const source = $('source'), canvas = $('canvas'), context = canvas.getContext('2d');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let project, spec, atlas, frameImages = [], selected = 0, playing = !reducedMotion, mode = 'animation';
 let position = 0;
+let poseMetadata = null, motionReview = null;
+const compileSource = value => value.format === 'pixelforge-poses' ? compilePoses(value) : { recipe: value, metadata: null };
 let elapsed = 0, lastTime = 0, zoom = 12, dirty = false, valid = false, compileTimer, toastTimer, loadVersion = 0;
 // An unsaved recipe is kept as a draft in this browser. `offer` is a draft found at start-up that the user has not
 // yet restored or discarded; until then new edits do not replace it.
 const drafts = createDraftStore((() => { try { return localStorage; } catch { return null; } })());
 let offer = null, draftTimer, draftWarned = false;
-const examples = [{ file: 'quality/skink', title: 'Lantern skink', type: 'Authored poses · 12 frames' }, { file: 'forest-spirit', title: 'Forest spirit', type: 'Character · 6 frames' }, { file: 'ember', title: 'Campfire', type: 'Effect · 4 frames' }, { file: 'coin', title: 'Golden coin', type: 'Collectible · 6 frames' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light · 2 frames' }, { file: 'caption', title: 'Caption', type: 'Text, for video · 8 frames' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses · 5 frames' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx · 57 frames' }];
+const examples = [{ file: 'forest-spirit', title: 'Forest spirit', type: 'Character · 6 frames' }, { file: 'ember', title: 'Campfire', type: 'Effect · 4 frames' }, { file: 'coin', title: 'Golden coin', type: 'Collectible · 6 frames' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light · 2 frames' }, { file: 'caption', title: 'Caption', type: 'Text, for video · 8 frames' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses · 5 frames' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx · 57 frames' }];
 const title = name => name.replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase());
 function imageCanvas(data, width, height) {
   const c = document.createElement('canvas'); c.width = width; c.height = height;
@@ -28,30 +32,57 @@ function download(data, filename, type = 'application/octet-stream') {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 function playState() { $('play').textContent = playing ? 'Ⅱ' : '▶'; $('play').setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation'); }
+function reviewMotion() {
+  if (motionReview) return motionReview;
+  const speed = $('motion-speed').value, ground = $('motion-ground').value;
+  motionReview = inspectMotion(project, { animation: $('animation').value, metadata: poseMetadata, scale: 1,
+    ...(speed !== '' && { speed: Number(speed) }), ...(ground !== '' && { ground: Number(ground) }) });
+  const names = { slide: 'Foot slide', ground: 'Ground contact', poseSpread: 'Pose changes', loopSeam: 'Loop join' };
+  const report = motionReview.motion, details = {
+    slide: `${Math.max(0, ...report.slide.map(p => p.pixels ?? 0))} px`,
+    ground: `${Math.max(0, ...report.groundErrors.map(p => Math.abs(p.pixels)))} px from ground`,
+    poseSpread: `${Math.round(Math.min(1, ...report.poseSpread.map(p => p.share)) * 100)}% minimum`,
+    loopSeam: `${report.loopSeam.maximum}° maximum`
+  };
+  $('motion-summary').textContent = Object.entries(report.checks).map(([key, pass]) => `${names[key] ?? key}: ${pass === null ? 'unavailable' : `${pass ? 'pass' : 'check'} (${details[key]})`}`).join(' · ');
+  return motionReview;
+}
 function render() {
   if (!project) return;
-  const isSheet = mode === 'sheet';
-  const width = isSheet ? atlas.width : project.width, height = isSheet ? atlas.height : project.height;
+  const isSheet = mode === 'sheet', isMotion = mode === 'motion';
+  let review;
+  try { if (isMotion) review = reviewMotion(); }
+  catch (error) { $('motion-summary').textContent = error.message; return; }
+  const width = isMotion ? review.nativeSheet.width : isSheet ? atlas.width : project.width, height = isMotion ? review.nativeSheet.height : isSheet ? atlas.height : project.height;
   canvas.width = width; canvas.height = height;
   context.imageSmoothingEnabled = false;
   const animation = project.animations[$('animation').value];
-  const pixels = isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
+  const pixels = isMotion ? review.nativeSheet.data : isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
   context.putImageData(new ImageData(new Uint8ClampedArray(reviewPixels(pixels, $('review-view').value)), width, height), 0, 0);
+  if (!isSheet && !isMotion && poseMetadata && $('contacts').getAttribute('aria-pressed') === 'true') {
+    const pose = poseMetadata.poses[project.frames[selected].name], ground = $('motion-ground').value;
+    context.fillStyle = '#506473';
+    if (ground !== '') context.fillRect(0, Number(ground) + 1, width, 1);
+    context.fillStyle = '#ffce53';
+    for (const marker of pose.markers) if (pose.contacts?.includes(marker.name)) context.fillRect(marker.at[0] - 1, marker.at[1] + 1, 3, 1);
+  }
   const native = $('native-canvas'); native.width = project.width; native.height = project.height;
   native.getContext('2d').drawImage(frameImages[selected], 0, 0);
   const fit = Math.max(1, Math.floor(($('artboard').clientWidth - 48) / width));
-  const displayScale = isSheet ? Math.min(zoom, fit) : zoom;
+  const displayScale = isSheet || isMotion ? Math.min(zoom, fit) : zoom;
   canvas.style.width = `${width * displayScale}px`; canvas.style.height = `${height * displayScale}px`;
   $('canvas-wrap').style.setProperty('--pixel-size', `${displayScale}px`);
   $('canvas-wrap').classList.toggle('grid', $('grid').getAttribute('aria-pressed') === 'true');
   $('frame-counter').textContent = `${String(position + 1).padStart(2, '0')} / ${String(animation.frames.length).padStart(2, '0')}`;
   const neighbors = animationNeighbors(animation, position);
   $('onion').title = `Previous (pink): ${neighbors.previous === null ? 'none' : project.frames[animation.frames[neighbors.previous]].name}; next (cyan): ${neighbors.next === null ? 'none' : project.frames[animation.frames[neighbors.next]].name}`;
-  $('canvas').setAttribute('aria-label', isSheet ? `${project.name} sprite sheet` : `${project.name}, frame ${project.frames[selected].name}`);
+  $('canvas').setAttribute('aria-label', isMotion ? `${project.name} motion review` : isSheet ? `${project.name} sprite sheet` : `${project.name}, frame ${project.frames[selected].name}`);
   document.querySelectorAll('.frame').forEach((button, i) => { button.classList.toggle('active', i === position); button.setAttribute('aria-pressed', String(i === position)); });
 }
 function animationChanged() {
   elapsed = 0;
+  motionReview = null;
+  $('motion-speed').value = poseMetadata?.animations[$('animation').value]?.speed ?? '';
   const animation = project.animations[$('animation').value];
   position = 0;
   selected = animation.frames[0];
@@ -80,13 +111,18 @@ function compile() {
   clearTimeout(compileTimer);
   try {
     const nextSpec = JSON.parse(source.value.replace(/^\uFEFF/, ''));
-    const nextProject = renderProject(nextSpec), nextAtlas = buildAtlas(nextProject);
-    spec = nextSpec; project = nextProject; atlas = nextAtlas;
+    const compiled = compileSource(nextSpec), nextProject = renderProject(compiled.recipe), nextAtlas = buildAtlas(nextProject);
+    spec = compiled.recipe; poseMetadata = compiled.metadata; project = nextProject; atlas = nextAtlas;
+    motionReview = null;
+    $('motion-view').disabled = !poseMetadata; $('contacts').disabled = !poseMetadata;
+    $('motion-tools').hidden = !poseMetadata;
+    $('motion-ground').value = poseMetadata?.rig?.ground ?? '';
+    if (!poseMetadata && mode === 'motion') mode = 'animation';
     atlas.image = imageCanvas(atlas.data, atlas.width, atlas.height);
     frameImages = project.frames.map(f => imageCanvas(f.data, project.width, project.height));
     $('project-name').textContent = title(project.name);
     $('dimensions').textContent = `${project.width} × ${project.height} px`;
-    $('source-filename').textContent = `${project.name}.json`;
+    $('source-filename').textContent = `${project.name}${poseMetadata ? '.poses' : ''}.json`;
     $('frame-count').textContent = `${project.frames.length} frames`;
     const oldAnimation = $('animation').value;
     $('animation').replaceChildren(...Object.keys(project.animations).map(key => { const option = document.createElement('option'); option.value = key; option.textContent = title(key); return option; }));
@@ -102,7 +138,8 @@ function compile() {
     }));
     $('error').hidden = true;
     $('compile-status').textContent = project.warnings.length ? project.warnings.join(' ') : '● All pixels accounted for';
-    $('export').disabled = false; valid = true; animationChanged();
+    $('export').disabled = false; valid = true; animationChanged(); setMode(mode);
+    source.dispatchEvent(new CustomEvent('pixelbolt:rendered'));
   } catch (error) {
     valid = false; $('error').textContent = error.message; $('error').hidden = false;
     $('compile-status').textContent = 'Fix the recipe to update the preview'; $('export').disabled = true;
@@ -133,11 +170,12 @@ async function loadExample(example) {
 }
 function setMode(next) {
   mode = next;
-  for (const [id, value] of [['animation-view', 'animation'], ['sheet-view', 'sheet']]) { $(id).classList.toggle('active', value === mode); $(id).setAttribute('aria-pressed', String(value === mode)); }
-  $('artboard-caption').textContent = mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
+  for (const [id, value] of [['animation-view', 'animation'], ['sheet-view', 'sheet'], ['motion-view', 'motion']]) { $(id).classList.toggle('active', value === mode); $(id).setAttribute('aria-pressed', String(value === mode)); }
+  $('motion-summary').hidden = mode !== 'motion';
+  $('artboard-caption').textContent = mode === 'motion' ? 'Movement at left · poses at right · yellow marks planted feet' : mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
   render();
 }
-source.addEventListener('input', () => { dirty = true; valid = false; $('export').disabled = true; clearTimeout(compileTimer); compileTimer = setTimeout(compile, 350); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
+source.addEventListener('input', () => { dirty = true; valid = false; $('export').disabled = true; clearTimeout(compileTimer); compileTimer = setTimeout(compile, 20); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
 // Tab indents, as in any code editor, but must not trap the keyboard: Shift+Tab always moves back, and Escape lets
 // the next Tab move on.
 let leavingEditor = false;
@@ -151,9 +189,11 @@ $('play').addEventListener('click', () => { if (!project) return; playing = !pla
 $('animation').addEventListener('change', animationChanged);
 $('zoom').addEventListener('change', () => { zoom = Number($('zoom').value); render(); });
 $('review-view').addEventListener('change', render);
-for (const id of ['grid', 'onion']) $(id).addEventListener('click', () => { $(id).setAttribute('aria-pressed', String($(id).getAttribute('aria-pressed') !== 'true')); render(); });
+for (const id of ['grid', 'onion', 'contacts']) $(id).addEventListener('click', () => { $(id).setAttribute('aria-pressed', String($(id).getAttribute('aria-pressed') !== 'true')); render(); });
 $('animation-view').addEventListener('click', () => setMode('animation'));
 $('sheet-view').addEventListener('click', () => setMode('sheet'));
+$('motion-view').addEventListener('click', () => setMode('motion'));
+for (const id of ['motion-speed', 'motion-ground']) $(id).addEventListener('change', () => { motionReview = null; render(); });
 $('guide-toggle').addEventListener('click', () => $('guide').showModal());
 $('guide-close').addEventListener('click', () => $('guide').close());
 $('open').addEventListener('click', () => $('file').click());
@@ -161,7 +201,7 @@ $('file').addEventListener('change', async () => {
   const file = $('file').files[0]; if (!file) return;
   try {
     if (file.size > MAX_REQUEST_BYTES) throw new Error(`Choose a project no larger than ${MAX_REQUEST_BYTES / (1024 * 1024)} MiB.`);
-    const value = JSON.parse((await file.text()).replace(/^\uFEFF/, '')); renderProject(value);
+    const value = JSON.parse((await file.text()).replace(/^\uFEFF/, '')); renderProject(compileSource(value).recipe);
     if (dirty && !confirm('Replace your edited recipe? Save JSON first if you want to keep it.')) return;
     setSource(value); toast(`Opened ${file.name}`);
   } catch (error) { toast(error.message); } finally { $('file').value = ''; }
@@ -236,7 +276,7 @@ function tick(time) {
 async function boot() {
   try {
     for (const example of examples) {
-      const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(value);
+      const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value).recipe);
       const button = document.createElement('button'); button.className = 'example'; button.dataset.file = example.file;
       const label = document.createElement('span'), strong = document.createElement('strong'), small = document.createElement('small');
       strong.textContent = example.title; small.textContent = example.type; label.append(strong, small);

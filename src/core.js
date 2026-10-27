@@ -72,7 +72,7 @@ function blend(data, i, color, opacity = 1) {
   for (let c = 0; c < 3; c++) data[i + c] = Math.round((color[c] * a + data[i + c] * old * (1 - a)) / out);
   data[i + 3] = Math.round(out * 255);
 }
-function readRows(rows, path, palette) {
+export function readRows(rows, path, palette) {
   list(rows, path, 256);
   if (!rows.length) fail(path, 'grid must contain at least one row');
   if (typeof rows[0] !== 'string' || rows[0].length < 1 || rows[0].length > 256) fail(`${path}[0]`, 'row must contain 1–256 characters');
@@ -89,18 +89,7 @@ function readRows(rows, path, palette) {
 }
 const round6 = value => Math.round(value * 1e6) / 1e6;
 
-export function renderProject(spec, options = {}) {
-  object(options, 'render', ['layers']);
-  if (options.layers !== undefined) {
-    renderProject(spec); // Validate the complete recipe before hiding any drawing.
-    list(options.layers, 'render.layers', 64);
-    if (!options.layers.length) fail('render.layers', 'select at least one named layer');
-    const known = new Set(spec.frames.flatMap(f => (f.layers ?? []).map(l => l.name).filter(Boolean)));
-    for (const ref of options.layers) if (typeof ref !== 'string' || !known.has(ref)) fail('render.layers', `unknown layer ${JSON.stringify(ref)}`);
-    const isolated = structuredClone(spec); isolated.background = 'transparent';
-    for (const frame of isolated.frames) { delete frame.ops; delete frame.pixels; frame.layers = (frame.layers ?? []).filter(layer => options.layers.includes(layer.name)); }
-    return renderProject(isolated);
-  }
+function readProject(spec) {
   object(spec, 'project', ['$schema', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'background', 'symbols', 'frames', 'animations', 'sheet', 'anchor']);
   if (spec.version !== 1) fail('project.version', 'expected 1');
   const projectName = name(spec.name, 'project.name');
@@ -125,9 +114,6 @@ export function renderProject(spec, options = {}) {
       rampKeys.add(key);
     });
   });
-  // Frames may recolor palette keys for their own drawing; everything else resolves against the project palette.
-  let activePalette = palette;
-  const color = (value, path) => parseColor(value, activePalette, path);
   const background = parseColor(spec.background ?? 'transparent', palette, 'project.background');
   const projectAnchor = spec.anchor === undefined ? null : point(spec.anchor, 'project.anchor');
   const symbols = Object.create(null);
@@ -142,13 +128,40 @@ export function renderProject(spec, options = {}) {
   object(spec.animations ?? {}, 'project.animations');
   const animationCount = spec.animations === undefined ? 1 : Object.keys(spec.animations).length;
   if (7 + spec.frames.length + animationCount > 65535) fail('project.animations', `bundle exceeds the ZIP32 limit of 65,535 files; at most ${65535 - 7 - spec.frames.length} animations fit alongside these frames and 7 support files`);
-  let work = 0, operationCount = 0;
+  return { projectName, width, height, palette, ramps, background, projectAnchor, symbols };
+}
+
+export function renderProject(spec, options = {}) {
+  object(options, 'render', ['layers', 'stats']);
+  if (options.stats !== undefined) boolean(options.stats, 'render.stats');
+  if (options.layers !== undefined) {
+    renderProject(spec); // Validate the complete recipe before hiding any drawing.
+    list(options.layers, 'render.layers', 64);
+    if (!options.layers.length) fail('render.layers', 'select at least one named layer');
+    const known = new Set(spec.frames.flatMap(f => (f.layers ?? []).map(l => l.name).filter(Boolean)));
+    for (const ref of options.layers) if (typeof ref !== 'string' || !known.has(ref)) fail('render.layers', `unknown layer ${JSON.stringify(ref)}`);
+    const isolated = structuredClone(spec); isolated.background = 'transparent';
+    for (const frame of isolated.frames) { delete frame.ops; delete frame.pixels; frame.layers = (frame.layers ?? []).filter(layer => options.layers.includes(layer.name)); }
+    return renderProject(isolated, { ...(options.stats && { stats: true }) });
+  }
+  const { projectName, width, height, palette, ramps, background, projectAnchor, symbols } = readProject(spec);
+  let activePalette = palette;
+  const color = (value, path) => parseColor(value, activePalette, path);
+  let work = 0, operationCount = 0, layerPixels = 0;
   const spend = amount => { work += amount; if (work > 67108864) fail('project', 'drawing work exceeds the 67-million-pixel budget; simplify repeated operations'); };
   // Clipping is counted per source location so an agent can find the operation that overhangs.
   const clipped = new Map();
   const clip = (path, pixels = 1) => clipped.set(path, (clipped.get(path) ?? 0) + pixels);
   const rendered = new Map(), frameNames = new Set();
-  function drawOps(data, ops, path) {
+  function drawOps(data, ops, path, bounds = null) {
+    // Conservative dirty bounds, including writes later erased. Global operations still see the complete buffer.
+    const touch = (x, y) => {
+      if (!bounds) return;
+      if (x < bounds[0]) bounds[0] = x;
+      if (y < bounds[1]) bounds[1] = y;
+      if (x > bounds[2]) bounds[2] = x;
+      if (y > bounds[3]) bounds[3] = y;
+    };
     list(ops, path);
     for (let index = 0; index < ops.length; index++) {
       if (++operationCount > 20000) fail(path, 'project exceeds 20,000 drawing operations');
@@ -176,6 +189,7 @@ export function renderProject(spec, options = {}) {
       const put = (px, py, c, erase = false) => {
         if (px < 0 || py < 0 || px >= width || py >= height) { clip(p); return; }
         const at = (py * width + px) * 4;
+        if (!erase && c[3]) touch(px, py);
         if (erase) data.fill(0, at, at + 4); else blend(data, at, c);
       };
       // Palette characters, optionally remapped to other palette keys or colors for this operation only.
@@ -382,7 +396,10 @@ export function renderProject(spec, options = {}) {
           }
           for (const i of next) { open[i] = 1; paint[i] = 1; }
         }
-        for (let i = 0; i < paint.length; i++) if (paint[i]) blend(data, i * 4, c);
+        for (let i = 0; i < paint.length; i++) if (paint[i]) {
+          if (c[3]) touch(i % width, Math.floor(i / width));
+          blend(data, i * 4, c);
+        }
       } else if (op.op === 'dither') {
         // Ordered dither: draws `color` (or erases) where the canvas-anchored pattern's threshold is below the density.
         const erase = boolean(op.erase ?? false, `${p}.erase`);
@@ -438,11 +455,17 @@ export function renderProject(spec, options = {}) {
         const steps = integer(op.steps ?? 1, `${p}.steps`, 1, 64), seed = integer(op.seed ?? 0, `${p}.seed`, 0, 2147483647);
         const chance = op.chance === undefined ? 1 : number(op.chance, `${p}.chance`, 0, 1), limit = op.limit === undefined ? Infinity : integer(op.limit, `${p}.limit`, 1, 65536);
         const ids = idsOf(data);
-        for (const index of rewriteIds(ids, width, height, rules, { x: rx, y: ry, w: rw, h: rh, steps, chance, limit, seed, spend })) data.set(colorOf(ids[index]), index * 4);
+        for (const index of rewriteIds(ids, width, height, rules, { x: rx, y: ry, w: rw, h: rh, steps, chance, limit, seed, spend })) {
+          touch(index % width, Math.floor(index / width));
+          data.set(colorOf(ids[index]), index * 4);
+        }
       } else if (op.op === 'replace') {
         const from = color(op.from, `${p}.from`), to = color(op.to, `${p}.to`);
         spend(width * height);
-        for (let i = 0; i < data.length; i += 4) if (from.every((c, j) => data[i + j] === c)) data.set(to, i);
+        for (let i = 0; i < data.length; i += 4) if (from.every((c, j) => data[i + j] === c)) {
+          touch(i / 4 % width, Math.floor(i / 4 / width));
+          data.set(to, i);
+        }
       } else if (op.op === 'fill') {
         if (x < 0 || y < 0 || x >= width || y >= height) fail(p, 'fill seed must be inside the canvas');
         const c = color(op.color, `${p}.color`), target = data.slice((y * width + x) * 4, (y * width + x) * 4 + 4);
@@ -455,6 +478,7 @@ export function renderProject(spec, options = {}) {
           if (!target.every((v, j) => data[at * 4 + j] === v)) continue;
           data.set(c, at * 4);
           const px = at % width, py = Math.floor(at / width);
+          touch(px, py);
           if (px > 0) stack.push(at - 1); if (px + 1 < width) stack.push(at + 1);
           if (py > 0) stack.push(at - width); if (py + 1 < height) stack.push(at + width);
         }
@@ -489,7 +513,7 @@ export function renderProject(spec, options = {}) {
     if (frame.from !== undefined) {
       if (typeof frame.from !== 'string' || !rendered.has(frame.from)) fail(`${p}.from`, 'must name an earlier frame');
       data.set(rendered.get(frame.from).data);
-    } else for (let i = 0; i < data.length; i += 4) data.set(background, i);
+    } else if (background.some(Boolean)) for (let i = 0; i < data.length; i += 4) data.set(background, i);
     const translate = frame.translate ?? [0, 0];
     list(translate, `${p}.translate`, 2);
     if (translate.length !== 2) fail(`${p}.translate`, 'expected [x, y]');
@@ -509,6 +533,8 @@ export function renderProject(spec, options = {}) {
     drawOps(data, frame.ops ?? [], `${p}.ops`);
     list(frame.layers ?? [], `${p}.layers`, 64);
     const framePalette = activePalette, layerPalettes = [];
+    // Reuse a layer scratch buffer; clear only dirty rows after compositing. Empty layers allocate nothing extra.
+    const pixels = (frame.layers ?? []).length ? new Uint8ClampedArray(data.length) : null;
     for (const [li, layer] of (frame.layers ?? []).entries()) {
       const lp = `${p}.layers[${li}]`;
       object(layer, lp, ['name', 'visible', 'opacity', 'x', 'y', 'palette', 'ops']);
@@ -529,17 +555,24 @@ export function renderProject(spec, options = {}) {
       const visible = boolean(layer.visible ?? true, `${lp}.visible`), opacity = layer.opacity ?? 1;
       if (typeof opacity !== 'number' || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) fail(`${lp}.opacity`, 'expected a number from 0 to 1');
       const lx = integer(layer.x ?? 0, `${lp}.x`), ly = integer(layer.y ?? 0, `${lp}.y`);
-      const pixels = new Uint8ClampedArray(data.length);
-      drawOps(pixels, layer.ops ?? [], `${lp}.ops`);
+      const bounds = [width, height, -1, -1];
+      drawOps(pixels, layer.ops ?? [], `${lp}.ops`, bounds);
       activePalette = framePalette;
-      if (visible && opacity > 0) {
-        spend(width * height);
-        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      if (visible && opacity > 0 && bounds[2] >= 0) {
+        const area = (bounds[2] - bounds[0] + 1) * (bounds[3] - bounds[1] + 1);
+        layerPixels += area; spend(area);
+        for (let y = bounds[1]; y <= bounds[3]; y++) for (let x = bounds[0]; x <= bounds[2]; x++) {
           const tx = x + lx, ty = y + ly, i = (y * width + x) * 4;
-          if (tx >= 0 && tx < width && ty >= 0 && ty < height) blend(data, (ty * width + tx) * 4, pixels.subarray(i, i + 4), opacity);
-          else if (pixels[i + 3]) clip(lp);
+          if (!pixels[i + 3]) continue;
+          if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
+            const to = (ty * width + tx) * 4;
+            if (pixels[i + 3] === 255 && opacity === 1) {
+              data[to] = pixels[i]; data[to + 1] = pixels[i + 1]; data[to + 2] = pixels[i + 2]; data[to + 3] = 255;
+            } else blend(data, to, pixels.subarray(i, i + 4), opacity);
+          } else clip(lp);
         }
       }
+      for (let y = bounds[1]; y <= bounds[3]; y++) pixels.fill(0, (y * width + bounds[0]) * 4, (y * width + bounds[2] + 1) * 4);
     }
     // Final canvas-space corrections replace RGBA, including transparency, after all layers.
     list(frame.pixels ?? [], `${p}.pixels`, 65536);
@@ -555,6 +588,95 @@ export function renderProject(spec, options = {}) {
     rendered.set(frameName, result);
     return result;
   });
+  const animations = readAnimations(spec, frames);
+  const sheet = readSheet(spec, frames, width, height);
+  const warnings = [], clipping = [...clipped].map(([path, pixels]) => ({ path, pixels }));
+  if (clipping.length) warnings.push(`Some drawing falls outside the canvas and is clipped: ${clipping[0].path} (${clipping[0].pixels} px)${clipping.length > 1 ? ` and ${clipping.length - 1} more location${clipping.length > 2 ? 's' : ''}` : ''}.`);
+  return {
+    name: projectName, width, height, frames, animations, palette, ramps,
+    ...(options.stats && { work: { pixels: work, layerPixels, operations: operationCount } }),
+    sheet,
+    warnings, ...(clipping.length && { clipping: clipping.slice(0, 64), ...(clipping.length > 64 && { clippingOmitted: clipping.length - 64 }) })
+  };
+}
+
+// Compiler-only validation/timing for the stamp subset emitted by compilePoses. It shares header, animation and
+// atlas validation with the renderer, but never allocates or composites a canvas. A stamp cannot erase, so visible
+// symbol bounds suffice to compute the exact trimmed atlas, including flips and canvas clipping.
+export function describeStampRecipe(spec) {
+  const { width, height, palette, symbols } = readProject(spec);
+  if (spec.background !== undefined) fail('project.background', 'compiler stamp recipes omit the background');
+  const frameNames = new Set(), boundsBySymbol = new Map(), boxes = [];
+  let work = 0, operations = 0;
+  const spend = amount => { work += amount; if (work > 67108864) fail('project', 'drawing work exceeds the 67-million-pixel budget; simplify repeated operations'); };
+  const alpha = new Map(Object.keys(palette).map(key => [key, parseColor(key, palette)[3]]));
+  const symbolBounds = symbol => {
+    if (!boundsBySymbol.has(symbol)) {
+      const grid = symbols[symbol], bounds = [grid.width, grid.height, -1, -1];
+      for (let y = 0; y < grid.height; y++) for (let x = 0; x < grid.width; x++) if (alpha.get(grid.rows[y][x])) {
+        bounds[0] = Math.min(bounds[0], x); bounds[1] = Math.min(bounds[1], y);
+        bounds[2] = Math.max(bounds[2], x); bounds[3] = Math.max(bounds[3], y);
+      }
+      boundsBySymbol.set(symbol, bounds);
+    }
+    return boundsBySymbol.get(symbol);
+  };
+  const frames = spec.frames.map((frame, index) => {
+    const p = `project.frames[${index}]`;
+    object(frame, p, ['name', 'duration', 'anchor', 'points', 'layers']);
+    const frameName = name(frame.name, `${p}.name`);
+    if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
+    frameNames.add(frameName.toLowerCase());
+    const duration = integer(frame.duration ?? 100, `${p}.duration`, 1, 60000);
+    if (frame.anchor !== undefined) point(frame.anchor, `${p}.anchor`);
+    if (frame.points !== undefined) {
+      object(frame.points, `${p}.points`);
+      if (Object.keys(frame.points).length > 64) fail(`${p}.points`, 'at most 64 named points per frame');
+      for (const [key, value] of Object.entries(frame.points)) { name(key, `${p}.points.${key}`); point(value, `${p}.points.${key}`); }
+    }
+    let left = width, top = height, right = -1, bottom = -1;
+    list(frame.layers ?? [], `${p}.layers`, 64);
+    for (const [li, layer] of (frame.layers ?? []).entries()) {
+      const lp = `${p}.layers[${li}]`;
+      object(layer, lp, ['name', 'ops']); name(layer.name, `${lp}.name`);
+      list(layer.ops, `${lp}.ops`);
+      if (layer.ops.length !== 1) fail(`${lp}.ops`, 'expected one compiler stamp');
+      if (++operations > 20000) fail(`${lp}.ops`, 'project exceeds 20,000 drawing operations');
+      const op = layer.ops[0], at = `${lp}.ops[0]`;
+      object(op, at, ['op', 'symbol', 'x', 'y', 'flipX']);
+      if (op.op !== 'stamp' || typeof op.symbol !== 'string' || !own(symbols, op.symbol)) fail(`${at}.symbol`, 'expected a known compiler stamp');
+      const x = integer(op.x ?? 0, `${at}.x`), y = integer(op.y ?? 0, `${at}.y`);
+      const flip = boolean(op.flipX ?? false, `${at}.flipX`), grid = symbols[op.symbol], box = symbolBounds(op.symbol);
+      spend(grid.width * grid.height);
+      if (box[2] < 0) continue;
+      let x0 = x + (flip ? grid.width - 1 - box[2] : box[0]), x1 = x + (flip ? grid.width - 1 - box[0] : box[2]);
+      let y0 = y + box[1], y1 = y + box[3];
+      if (x0 < 0 || y0 < 0 || x1 >= width || y1 >= height) {
+        // A cropped symbol may have holes at its edge; intersecting rectangles alone would overestimate its bounds.
+        x0 = width; y0 = height; x1 = -1; y1 = -1;
+        for (let gy = Math.max(0, -y); gy < Math.min(grid.height, height - y); gy++) {
+          for (let dx = Math.max(0, -x); dx < Math.min(grid.width, width - x); dx++) {
+            if (!alpha.get(grid.rows[gy][flip ? grid.width - 1 - dx : dx])) continue;
+            x0 = Math.min(x0, x + dx); x1 = Math.max(x1, x + dx);
+            y0 = Math.min(y0, y + gy); y1 = Math.max(y1, y + gy);
+          }
+        }
+      }
+      if (x1 < 0) continue;
+      spend((x1 - x0 + 1) * (y1 - y0 + 1));
+      left = Math.min(left, x0); right = Math.max(right, x1);
+      top = Math.min(top, y0); bottom = Math.max(bottom, y1);
+    }
+    boxes.push(right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true }
+      : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 });
+    return { name: frameName, duration };
+  });
+  const animations = readAnimations(spec, frames);
+  const sheet = readSheet(spec, frames, width, height, boxes);
+  return { frames, animations, sheet };
+}
+
+function readAnimations(spec, frames) {
   const animations = Object.create(null), animationNames = new Set();
   object(spec.animations ?? {}, 'project.animations');
   for (const [key, animation] of Object.entries(spec.animations ?? { default: { frames: frames.map(f => f.name) } })) {
@@ -565,7 +687,7 @@ export function renderProject(spec, options = {}) {
     object(animation, p, ['frames', 'direction', 'loop']);
     list(animation.frames, `${p}.frames`, 1024);
     if (!animation.frames.length) fail(`${p}.frames`, 'at least one frame is required');
-    const indices = animation.frames.map((ref, i) => { if (!rendered.has(ref)) fail(`${p}.frames[${i}]`, `unknown frame ${JSON.stringify(ref)}`); return frames.findIndex(f => f.name === ref); });
+    const indices = animation.frames.map((ref, i) => { if (!frames.some(frame => frame.name === ref)) fail(`${p}.frames[${i}]`, `unknown frame ${JSON.stringify(ref)}`); return frames.findIndex(f => f.name === ref); });
     const direction = animation.direction ?? 'forward';
     if (!['forward', 'reverse', 'pingpong'].includes(direction)) fail(`${p}.direction`, 'expected forward, reverse or pingpong');
     if (direction === 'reverse') indices.reverse();
@@ -574,21 +696,19 @@ export function renderProject(spec, options = {}) {
     animations[key] = { frames: indices, loop, duration: indices.reduce((sum, i) => sum + frames[i].duration, 0) };
   }
   if (!Object.keys(animations).length) fail('project.animations', 'at least one animation is required; omit this field for a default animation');
+  return animations;
+}
+
+function readSheet(spec, frames, width, height, boxes = null) {
   const sheet = object(spec.sheet ?? {}, 'project.sheet', ['columns', 'padding', 'scale', 'trim']);
   const columns = integer(sheet.columns ?? Math.min(frames.length, 8), 'project.sheet.columns', 1, 256);
   const padding = integer(sheet.padding ?? 0, 'project.sheet.padding', 0, 16);
   const scale = integer(sheet.scale ?? 1, 'project.sheet.scale', 1, 16);
   const trim = boolean(sheet.trim ?? false, 'project.sheet.trim');
-  const layout = trim ? packTrimmed(frames, width, height, padding, scale) : null;
+  const layout = trim ? (boxes ? packBoxes(boxes, padding, scale) : packTrimmed(frames, width, height, padding, scale)) : null;
   const sheetWidth = layout ? layout.width : columns * (width + padding * 2) * scale, sheetHeight = layout ? layout.height : Math.ceil(frames.length / columns) * (height + padding * 2) * scale;
   if (sheetWidth * sheetHeight > 16777216) fail('project.sheet', 'atlas exceeds 16,777,216 pixels; reduce scale or columns');
-  const warnings = [], clipping = [...clipped].map(([path, pixels]) => ({ path, pixels }));
-  if (clipping.length) warnings.push(`Some drawing falls outside the canvas and is clipped: ${clipping[0].path} (${clipping[0].pixels} px)${clipping.length > 1 ? ` and ${clipping.length - 1} more location${clipping.length > 2 ? 's' : ''}` : ''}.`);
-  return {
-    name: projectName, width, height, frames, animations, palette, ramps,
-    sheet: { columns, padding, scale, width: sheetWidth, height: sheetHeight, ...(layout && { trim: true, layout: layout.cells }) },
-    warnings, ...(clipping.length && { clipping: clipping.slice(0, 64), ...(clipping.length > 64 && { clippingOmitted: clipping.length - 64 }) })
-  };
+  return { columns, padding, scale, width: sheetWidth, height: sheetHeight, ...(layout && { trim: true, layout: layout.cells }) };
 }
 
 // Deterministic shelf packing of each frame's visible bounds (tallest first, then recipe order).
@@ -601,6 +721,10 @@ function packTrimmed(frames, width, height, padding, scale) {
     }
     return right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true } : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 };
   });
+  return packBoxes(boxes, padding, scale);
+}
+
+function packBoxes(boxes, padding, scale) {
   const cellWidth = box => (box.w + padding * 2) * scale, cellHeight = box => (box.h + padding * 2) * scale;
   const target = Math.max(...boxes.map(cellWidth), Math.ceil(Math.sqrt(boxes.reduce((sum, box) => sum + cellWidth(box) * cellHeight(box), 0))));
   const cells = new Array(boxes.length);
@@ -780,6 +904,21 @@ export function tileReport(data, width, height) {
   };
 }
 
+// Frame-name patterns: `*` matches any run of characters and `?` exactly one. On a mismatch only the last `*` is
+// retried, one character further on, so a match takes at most pattern × name steps; the regular expression this
+// replaces backtracked through every `*` and a 14-character pattern could take seconds.
+export function wildcard(pattern, text) {
+  let p = 0, t = 0, star = -1, resume = 0;
+  while (t < text.length) {
+    if (p < pattern.length && (pattern[p] === '?' || pattern[p] === text[t])) { p++; t++; }
+    else if (p < pattern.length && pattern[p] === '*') { star = p++; resume = t; }
+    else if (star !== -1) { p = star + 1; t = ++resume; }
+    else return false;
+  }
+  while (pattern[p] === '*') p++;
+  return p === pattern.length;
+}
+
 export function inspectProject(project, options = {}) {
   object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset']);
   const { width, height, frames } = project;
@@ -794,7 +933,7 @@ export function inspectProject(project, options = {}) {
     // A name with * (any run of characters) or ? (one character) selects every matching frame in project order.
     cells = options.frames.flatMap((ref, i) => {
       if (typeof ref === 'string' && /^[a-zA-Z0-9_*?-]+$/.test(ref) && /[*?]/.test(ref)) {
-        const pattern = new RegExp(`^${ref.replaceAll('*', '.*').replaceAll('?', '.')}$`), matches = frames.flatMap((f, index) => (pattern.test(f.name) ? [index] : []));
+        const matches = frames.flatMap((f, index) => (wildcard(ref, f.name) ? [index] : []));
         if (!matches.length) fail(`inspect.frames[${i}]`, `no frame matches ${JSON.stringify(ref)}`);
         return matches;
       }

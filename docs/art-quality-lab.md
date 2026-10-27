@@ -1,5 +1,7 @@
 # The Listening Hollow: an original quality study
 
+> **Archived, 23 October 2026.** This September study no longer shows what Pixelbolt makes, so it is no longer linked from the README, the guides or the studio. Its recipes in `examples/quality/` stay because tests and `node scripts/build-quality-lab.mjs --check` use them. For current scene work, see the [diorama study](../showcase/diorama/README.md) and the [art workflow](art-workflow.md).
+
 This small scene exercises the improved Pixelbolt workflow. Its goal is to make corrections reviewable, preserve intentional pixels and judge assets together. The result is **not claimed to match Animal Well**. It has not passed independent artistic review or the roadmap's equal-budget comparison across several attempts.
 
 ![Revised scene](images/quality/hollow.png)

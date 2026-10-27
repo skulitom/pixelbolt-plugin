@@ -64,99 +64,37 @@
       "duration": 70,
       "loop": true,
       "seed": 8,
-      "walls": [
-        "bottom"
-      ],
-      "gravity": [
-        0,
-        0.25
-      ],
+      "walls": ["bottom"],
+      "gravity": [0, 0.25],
       "flip": 0.8,
       "drag": 0.04,
-      "obstacles": [
-        {
-          "symbol": "flask",
-          "x": 0,
-          "y": 0
-        }
-      ],
-      "fill": [
-        {
-          "at": [
-            15.5,
-            26.5
-          ],
-          "radius": 10.5,
-          "x": 0,
-          "y": 22,
-          "w": 32,
-          "h": 18
-        }
-      ],
+      "obstacles": [{ "symbol": "flask", "x": 0, "y": 0 }],
+      "fill": [{ "at": [15.5, 26.5], "radius": 10.5, "x": 0, "y": 22, "w": 32, "h": 18 }],
       "emitters": [
         {
           "name": "heat",
-          "at": [
-            15.5,
-            34
-          ],
-          "area": [
-            8,
-            2
-          ],
+          "at": [15.5, 34],
+          "area": [8, 2],
           "rate": 1,
           "density": 0,
-          "velocity": [
-            0,
-            -2
-          ],
-          "pulse": {
-            "amplitude": 1,
-            "period": 12
-          }
+          "velocity": [0, -2],
+          "pulse": { "amplitude": 1, "period": 12 }
         },
-        {
-          "name": "boil",
-          "at": [
-            15.5,
-            24
-          ],
-          "area": [
-            18,
-            4
-          ],
-          "rate": 1,
-          "density": 0,
-          "noise": 0.2
-        },
+        { "name": "boil", "at": [15.5, 24], "area": [18, 4], "rate": 1, "density": 0, "noise": 0.2 },
         {
           "name": "bubbles",
-          "at": [
-            15.5,
-            33.5
-          ],
-          "area": [
-            14,
-            3
-          ],
+          "at": [15.5, 33.5],
+          "area": [14, 3],
           "rate": 1,
           "density": 0,
           "sparks": {
             "count": 0.3,
-            "life": [
-              24,
-              32
-            ],
-            "colors": [
-              "w"
-            ],
+            "life": [24, 32],
+            "colors": ["w"],
             "size": 2,
             "angle": 270,
             "speed": 0.8,
-            "gravity": [
-              0,
-              -0.1
-            ],
+            "gravity": [0, -0.1],
             "drag": 0.05,
             "follow": 0.2,
             "pop": true
@@ -164,79 +102,28 @@
         },
         {
           "name": "rock-1",
-          "at": [
-            10,
-            26
-          ],
-          "area": [
-            6,
-            6
-          ],
+          "at": [10, 26],
+          "area": [6, 6],
           "rate": 1,
           "density": 0,
-          "velocity": [
-            0.4,
-            -0.2
-          ],
-          "pulse": {
-            "amplitude": 1,
-            "period": 24
-          }
+          "velocity": [0.4, -0.2],
+          "pulse": { "amplitude": 1, "period": 24 }
         },
         {
           "name": "rock-2",
-          "at": [
-            21,
-            26
-          ],
-          "area": [
-            6,
-            6
-          ],
+          "at": [21, 26],
+          "area": [6, 6],
           "rate": 1,
           "density": 0,
-          "velocity": [
-            -0.4,
-            -0.2
-          ],
-          "pulse": {
-            "amplitude": 1,
-            "period": 24,
-            "phase": 180
-          }
+          "velocity": [-0.4, -0.2],
+          "pulse": { "amplitude": 1, "period": 24, "phase": 180 }
         }
       ],
       "look": [
-        {
-          "field": "density",
-          "colors": [
-            "g"
-          ],
-          "thresholds": [
-            0.5
-          ],
-          "dither": 0
-        },
-        {
-          "field": "depth",
-          "colors": [
-            "w",
-            "l",
-            "g",
-            "G"
-          ],
-          "thresholds": [
-            1,
-            2,
-            4,
-            9
-          ],
-          "dither": 0
-        }
+        { "field": "density", "colors": ["g"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "l", "g", "G"], "thresholds": [1, 2, 4, 9], "dither": 0 }
       ],
-      "cleanup": {
-        "strays": true
-      }
+      "cleanup": { "strays": true }
     }
   }
 }

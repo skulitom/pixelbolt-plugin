@@ -146,883 +146,164 @@
         {
           "name": "idle",
           "duration": 880,
-          "anchor": [
-            14,
-            15
-          ],
-          "points": {
-            "pose": [
-              10,
-              18
-            ]
-          },
+          "anchor": [14, 15],
+          "points": { "pose": [10, 18] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 10
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "stand",
-                  "x": 8,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 6
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 14
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 15 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 10 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "stand", "x": 8, "y": 15 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 6 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 14 }] }
           ]
         },
         {
           "name": "blink",
           "duration": 100,
-          "anchor": [
-            14,
-            15
-          ],
-          "points": {
-            "pose": [
-              10,
-              18
-            ]
-          },
+          "anchor": [14, 15],
+          "points": { "pose": [10, 18] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 10
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "stand",
-                  "x": 8,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "blink",
-                  "x": 15,
-                  "y": 6
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 14
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 15 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 10 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "stand", "x": 8, "y": 15 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "blink", "x": 15, "y": 6 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 14 }] }
           ]
         },
         {
           "name": "contact-a",
           "duration": 90,
-          "anchor": [
-            14,
-            15
-          ],
-          "points": {
-            "foot-contact": [
-              17,
-              18
-            ]
-          },
+          "anchor": [14, 15],
+          "points": { "foot-contact": [17, 18] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 10
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "contactA",
-                  "x": 7,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 6
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 14
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 15 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 10 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "contactA", "x": 7, "y": 15 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 6 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 14 }] }
           ]
         },
         {
           "name": "down-a",
           "duration": 80,
-          "anchor": [
-            14,
-            16
-          ],
-          "points": {
-            "pose": [
-              15,
-              19
-            ]
-          },
+          "anchor": [14, 16],
+          "points": { "pose": [15, 19] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "compressed",
-                  "x": 7,
-                  "y": 13
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "downA",
-                  "x": 8,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 8
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 18,
-                  "y": 16
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 16 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "compressed", "x": 7, "y": 13 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "downA", "x": 8, "y": 16 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 8 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 18, "y": 16 }] }
           ]
         },
         {
           "name": "passing-a",
           "duration": 80,
-          "anchor": [
-            14,
-            14
-          ],
-          "points": {
-            "pose": [
-              9,
-              17
-            ]
-          },
+          "anchor": [14, 14],
+          "points": { "pose": [9, 17] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tailUp",
-                  "x": 0,
-                  "y": 9
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 9
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "passA",
-                  "x": 8,
-                  "y": 14
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 5
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 13
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tailUp", "x": 0, "y": 9 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 9 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "passA", "x": 8, "y": 14 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 5 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 13 }] }
           ]
         },
         {
           "name": "contact-b",
           "duration": 90,
-          "anchor": [
-            14,
-            15
-          ],
-          "points": {
-            "foot-contact": [
-              15,
-              18
-            ]
-          },
+          "anchor": [14, 15],
+          "points": { "foot-contact": [15, 18] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 10
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "contactB",
-                  "x": 7,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 6
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 14
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 15 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 10 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "contactB", "x": 7, "y": 15 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 6 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 14 }] }
           ]
         },
         {
           "name": "down-b",
           "duration": 80,
-          "anchor": [
-            14,
-            16
-          ],
-          "points": {
-            "pose": [
-              15,
-              19
-            ]
-          },
+          "anchor": [14, 16],
+          "points": { "pose": [15, 19] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "compressed",
-                  "x": 7,
-                  "y": 13
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "downB",
-                  "x": 8,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 8
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 18,
-                  "y": 16
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 16 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "compressed", "x": 7, "y": 13 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "downB", "x": 8, "y": 16 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 8 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 18, "y": 16 }] }
           ]
         },
         {
           "name": "passing-b",
           "duration": 80,
-          "anchor": [
-            14,
-            14
-          ],
-          "points": {
-            "pose": [
-              14,
-              17
-            ]
-          },
+          "anchor": [14, 14],
+          "points": { "pose": [14, 17] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 14
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 9
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "passB",
-                  "x": 8,
-                  "y": 14
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 5
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 13
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 14 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 9 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "passB", "x": 8, "y": 14 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 5 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 13 }] }
           ]
         },
         {
           "name": "gather",
           "duration": 220,
-          "anchor": [
-            14,
-            16
-          ],
-          "points": {
-            "pose": [
-              15,
-              19
-            ]
-          },
+          "anchor": [14, 16],
+          "points": { "pose": [15, 19] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tailUp",
-                  "x": 0,
-                  "y": 11
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "compressed",
-                  "x": 7,
-                  "y": 13
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "downA",
-                  "x": 8,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "crest",
-                  "x": 15,
-                  "y": 8
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 18,
-                  "y": 16
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tailUp", "x": 0, "y": 11 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "compressed", "x": 7, "y": 13 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "downA", "x": 8, "y": 16 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "crest", "x": 15, "y": 8 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 18, "y": 16 }] }
           ]
         },
         {
           "name": "release",
           "duration": 80,
-          "anchor": [
-            14,
-            14
-          ],
-          "points": {
-            "spell-release": [
-              22,
-              10
-            ]
-          },
+          "anchor": [14, 14],
+          "points": { "spell-release": [22, 10] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tailUp",
-                  "x": 0,
-                  "y": 9
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 9
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "contactA",
-                  "x": 7,
-                  "y": 14
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "crest",
-                  "x": 15,
-                  "y": 5
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 13
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tailUp", "x": 0, "y": 9 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 9 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "contactA", "x": 7, "y": 14 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "crest", "x": 15, "y": 5 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 13 }] }
           ]
         },
         {
           "name": "recoil",
           "duration": 120,
-          "anchor": [
-            14,
-            16
-          ],
-          "points": {
-            "pose": [
-              15,
-              19
-            ]
-          },
+          "anchor": [14, 16],
+          "points": { "pose": [15, 19] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "compressed",
-                  "x": 7,
-                  "y": 13
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "downB",
-                  "x": 8,
-                  "y": 16
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "blink",
-                  "x": 15,
-                  "y": 8
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 18,
-                  "y": 16
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 16 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "compressed", "x": 7, "y": 13 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "downB", "x": 8, "y": 16 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "blink", "x": 15, "y": 8 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 18, "y": 16 }] }
           ]
         },
         {
           "name": "recover",
           "duration": 180,
-          "anchor": [
-            14,
-            15
-          ],
-          "points": {
-            "pose": [
-              10,
-              18
-            ]
-          },
+          "anchor": [14, 15],
+          "points": { "pose": [10, 18] },
           "layers": [
-            {
-              "name": "tail",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "tail",
-                  "x": 0,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "body",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "body",
-                  "x": 7,
-                  "y": 10
-                }
-              ]
-            },
-            {
-              "name": "feet",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "stand",
-                  "x": 8,
-                  "y": 15
-                }
-              ]
-            },
-            {
-              "name": "head",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "head",
-                  "x": 15,
-                  "y": 6
-                }
-              ]
-            },
-            {
-              "name": "charm",
-              "ops": [
-                {
-                  "op": "stamp",
-                  "symbol": "charm",
-                  "x": 17,
-                  "y": 14
-                }
-              ]
-            }
+            { "name": "tail", "ops": [{ "op": "stamp", "symbol": "tail", "x": 0, "y": 15 }] },
+            { "name": "body", "ops": [{ "op": "stamp", "symbol": "body", "x": 7, "y": 10 }] },
+            { "name": "feet", "ops": [{ "op": "stamp", "symbol": "stand", "x": 8, "y": 15 }] },
+            { "name": "head", "ops": [{ "op": "stamp", "symbol": "head", "x": 15, "y": 6 }] },
+            { "name": "charm", "ops": [{ "op": "stamp", "symbol": "charm", "x": 17, "y": 14 }] }
           ]
         }
       ],
       "animations": {
-        "idle": {
-          "frames": [
-            "idle",
-            "blink",
-            "idle"
-          ]
-        },
-        "run": {
-          "frames": [
-            "contact-a",
-            "down-a",
-            "passing-a",
-            "contact-b",
-            "down-b",
-            "passing-b"
-          ]
-        },
-        "cast": {
-          "frames": [
-            "gather",
-            "release",
-            "recoil",
-            "recover"
-          ],
-          "loop": false
-        }
+        "idle": { "frames": ["idle", "blink", "idle"] },
+        "run": { "frames": ["contact-a", "down-a", "passing-a", "contact-b", "down-b", "passing-b"] },
+        "cast": { "frames": ["gather", "release", "recoil", "recover"], "loop": false }
       }
     },
     "ground": {
@@ -1080,41 +361,12 @@
     }
   },
   "instances": [
-    {
-      "asset": "ground",
-      "at": [
-        0,
-        48
-      ],
-      "frame": "a",
-      "repeat": [
-        6,
-        1
-      ]
-    },
+    { "asset": "ground", "at": [0, 48], "frame": "a", "repeat": [6, 1] },
     {
       "asset": "skink",
-      "at": [
-        20,
-        30
-      ],
+      "at": [20, 30],
       "animation": "run",
-      "trajectory": [
-        {
-          "time": 0,
-          "at": [
-            20,
-            30
-          ]
-        },
-        {
-          "time": 3000,
-          "at": [
-            116,
-            30
-          ]
-        }
-      ]
+      "trajectory": [{ "time": 0, "at": [20, 30] }, { "time": 3000, "at": [116, 30] }]
     }
   ]
 }

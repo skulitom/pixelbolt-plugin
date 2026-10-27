@@ -1,0 +1,279 @@
+{
+  "node": "v24.19.0",
+  "platform": "win32 10.0.26200 x64",
+  "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor          ",
+  "memoryGB": 63,
+  "commit": "d5f4500e2ccd752bd890c9231b5ebd8898dc6dd7",
+  "dirty": true,
+  "warmups": 3,
+  "runs": 15,
+  "boneFirstCallMs": 0.585,
+  "boneCache": "Warm repeated calls copy an immutable cached drawing. The cache is bounded to 128 entries / 1 MiB; first-call time is reported separately.",
+  "boneBeforeWorkflow": {
+    "medianMs": 0.005,
+    "p95Ms": 0.035
+  },
+  "cases": {
+    "stamp-skink": {
+      "canvas": [
+        32,
+        26
+      ],
+      "instances": 5,
+      "frames": 12,
+      "compile": {
+        "medianMs": 0.558,
+        "p95Ms": 1.042
+      },
+      "render": {
+        "medianMs": 0.428,
+        "p95Ms": 1.202
+      },
+      "merged": {
+        "medianMs": 0.354,
+        "p95Ms": 0.694
+      },
+      "recipeBytes": 6909,
+      "work": {
+        "pixels": 5936,
+        "layerPixels": 2860,
+        "operations": 60
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-64": {
+      "canvas": [
+        64,
+        64
+      ],
+      "instances": 16,
+      "frames": 24,
+      "compile": {
+        "medianMs": 1.871,
+        "p95Ms": 2.596
+      },
+      "render": {
+        "medianMs": 1.756,
+        "p95Ms": 2.164
+      },
+      "merged": {
+        "medianMs": 1.027,
+        "p95Ms": 2.032
+      },
+      "recipeBytes": 32179,
+      "work": {
+        "pixels": 23040,
+        "layerPixels": 11520,
+        "operations": 384
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-128": {
+      "canvas": [
+        128,
+        128
+      ],
+      "instances": 32,
+      "frames": 96,
+      "compile": {
+        "medianMs": 12.843,
+        "p95Ms": 17.042
+      },
+      "render": {
+        "medianMs": 13.786,
+        "p95Ms": 15.616
+      },
+      "merged": {
+        "medianMs": 9.197,
+        "p95Ms": 9.98
+      },
+      "recipeBytes": 254478,
+      "work": {
+        "pixels": 184320,
+        "layerPixels": 92160,
+        "operations": 3072
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-256": {
+      "canvas": [
+        256,
+        256
+      ],
+      "instances": 64,
+      "frames": 32,
+      "compile": {
+        "medianMs": 7.685,
+        "p95Ms": 8.891
+      },
+      "render": {
+        "medianMs": 11.108,
+        "p95Ms": 19.105
+      },
+      "merged": {
+        "medianMs": 6.618,
+        "p95Ms": 8.437
+      },
+      "recipeBytes": 170532,
+      "work": {
+        "pixels": 122880,
+        "layerPixels": 61440,
+        "operations": 2048
+      },
+      "mergedPixelsIdentical": true
+    },
+    "structural-parts-M1": {
+      "canvas": [
+        48,
+        48
+      ],
+      "instances": 1,
+      "frames": 101,
+      "compile": {
+        "medianMs": 2.739,
+        "p95Ms": 4.071
+      },
+      "render": {
+        "medianMs": 1.901,
+        "p95Ms": 2.445
+      },
+      "merged": {
+        "medianMs": 1.48,
+        "p95Ms": 9.391
+      },
+      "recipeBytes": 31391,
+      "work": {
+        "pixels": 28380,
+        "layerPixels": 14190,
+        "operations": 101
+      },
+      "mergedPixelsIdentical": true
+    },
+    "R1-skink": {
+      "canvas": [
+        32,
+        26
+      ],
+      "instances": 15,
+      "frames": 12,
+      "compile": {
+        "medianMs": 4.238,
+        "p95Ms": 6.282
+      },
+      "render": {
+        "medianMs": 0.783,
+        "p95Ms": 1.07
+      },
+      "merged": {
+        "medianMs": 0.565,
+        "p95Ms": 0.858
+      },
+      "recipeBytes": 24005,
+      "work": {
+        "pixels": 12177,
+        "layerPixels": 5981,
+        "operations": 180
+      },
+      "mergedPixelsIdentical": true,
+      "motionReview": {
+        "medianMs": 2.709,
+        "p95Ms": 4.042
+      }
+    },
+    "R2-hero": {
+      "canvas": [
+        48,
+        48
+      ],
+      "instances": 18,
+      "frames": 40,
+      "compile": {
+        "medianMs": 13.296,
+        "p95Ms": 16.384
+      },
+      "render": {
+        "medianMs": 3.693,
+        "p95Ms": 4.664
+      },
+      "merged": {
+        "medianMs": 2.536,
+        "p95Ms": 2.807
+      },
+      "recipeBytes": 73801,
+      "work": {
+        "pixels": 67719,
+        "layerPixels": 33712,
+        "operations": 720
+      },
+      "mergedPixelsIdentical": true,
+      "motionReview": {
+        "medianMs": 7.345,
+        "p95Ms": 10.245
+      },
+      "expansion": {
+        "medianMs": 1.599,
+        "p95Ms": 1.97
+      }
+    },
+    "R3-boss": {
+      "canvas": [
+        128,
+        128
+      ],
+      "instances": 32,
+      "frames": 96,
+      "compile": {
+        "medianMs": 61.558,
+        "p95Ms": 81.409
+      },
+      "render": {
+        "medianMs": 32.859,
+        "p95Ms": 35.039
+      },
+      "merged": {
+        "medianMs": 24.148,
+        "p95Ms": 26.057
+      },
+      "recipeBytes": 335737,
+      "work": {
+        "pixels": 926140,
+        "layerPixels": 462379,
+        "operations": 3072
+      },
+      "mergedPixelsIdentical": true,
+      "motionReview": {
+        "medianMs": 45.545,
+        "p95Ms": 56.906
+      },
+      "expansion": {
+        "medianMs": 5.526,
+        "p95Ms": 8.928
+      }
+    }
+  },
+  "primitives": {
+    "bone": {
+      "medianMs": 0.002,
+      "p95Ms": 0.003
+    },
+    "boneOblique": {
+      "medianMs": 0.006,
+      "p95Ms": 0.015
+    },
+    "mass": {
+      "medianMs": 0.078,
+      "p95Ms": 0.15
+    },
+    "reach": {
+      "medianMs": 0.087,
+      "p95Ms": 0.343
+    }
+  },
+  "R3Heap": {
+    "peakHeapUpperBoundBytes": 62914560,
+    "beforeBytes": 5980376,
+    "afterBytes": 18600904,
+    "frames": 96,
+    "note": "Whole-process V8 heap ceiling, including fixture construction; typed-array backing stores are external memory, not JS heap."
+  }
+}

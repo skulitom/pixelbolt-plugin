@@ -99,13 +99,5 @@
       "duration": 480
     }
   ],
-  "animations": {
-    "breathe": {
-      "frames": [
-        "still",
-        "lean"
-      ],
-      "direction": "pingpong"
-    }
-  }
+  "animations": { "breathe": { "frames": ["still", "lean"], "direction": "pingpong" } }
 }

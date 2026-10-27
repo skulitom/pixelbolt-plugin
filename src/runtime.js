@@ -31,6 +31,8 @@ export function frameAt(atlas, animation, time) {
  * Draws one atlas frame into any 2D context, for games that draw many sprites into one canvas.
  * (x, y) is the frame's anchor when the atlas has one (pass anchor: false to ignore it), otherwise the top-left of
  * the full source canvas. Trimmed frames are offset back into place; flipX mirrors around the source canvas.
+ * Positions snap to the nearest whole pixel of the context, so a sprite moving by fractions of a pixel stays crisp:
+ * a canvas blends the edges of an image drawn between pixels, even with smoothing off.
  */
 export function drawFrame(context, sheet, name, x, y, { scale = 1, flipX = false, anchor = true } = {}) {
   if (!Number.isInteger(scale) || scale < 1 || scale > 32) throw new Error('Draw scale must be an integer from 1 to 32');
@@ -38,7 +40,7 @@ export function drawFrame(context, sheet, name, x, y, { scale = 1, flipX = false
   const entry = sheet.atlas.frames[name], { frame } = entry;
   const source = entry.sourceSize ?? { w: frame.w, h: frame.h }, offset = entry.spriteSourceSize ?? { x: 0, y: 0, w: frame.w, h: frame.h };
   const origin = anchor && entry.anchor ? entry.anchor : { x: 0, y: 0 };
-  const left = x - (flipX ? source.w - origin.x : origin.x) * scale, top = y - origin.y * scale;
+  const left = Math.round(x) - (flipX ? source.w - origin.x : origin.x) * scale, top = Math.round(y) - origin.y * scale;
   const dx = flipX ? source.w - offset.x - offset.w : offset.x;
   context.imageSmoothingEnabled = false;
   if (!flipX) { context.drawImage(sheet.image, frame.x, frame.y, frame.w, frame.h, left + dx * scale, top + offset.y * scale, frame.w * scale, frame.h * scale); return; }

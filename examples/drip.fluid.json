@@ -37,189 +37,59 @@
       "loop": true,
       "seed": 2,
       "warmup": 3,
-      "walls": [
-        "left",
-        "right",
-        "bottom"
-      ],
-      "gravity": [
-        0,
-        0.4
-      ],
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.4],
       "flip": 0,
       "drag": 0.04,
       "tension": 2,
-      "obstacles": [
-        {
-          "symbol": "rock",
-          "x": 0,
-          "y": 0
-        },
-        {
-          "symbol": "ground",
-          "x": 0,
-          "y": 29
-        }
-      ],
-      "fill": [
-        {
-          "x": 1,
-          "y": 25,
-          "w": 14,
-          "h": 4
-        }
-      ],
+      "obstacles": [{ "symbol": "rock", "x": 0, "y": 0 }, { "symbol": "ground", "x": 0, "y": 29 }],
+      "fill": [{ "x": 1, "y": 25, "w": 14, "h": 4 }],
       "emitters": [
-        {
-          "name": "bead",
-          "at": [
-            8,
-            7.5
-          ],
-          "radius": 1.4,
-          "rate": 1,
-          "end": 8,
-          "velocity": [
-            0,
-            0
-          ]
-        },
-        {
-          "name": "swell",
-          "at": [
-            8,
-            8
-          ],
-          "radius": 1.5,
-          "rate": 1,
-          "start": 4,
-          "end": 8,
-          "velocity": [
-            0,
-            0
-          ]
-        },
+        { "name": "bead", "at": [8, 7.5], "radius": 1.4, "rate": 1, "end": 8, "velocity": [0, 0] },
+        { "name": "swell", "at": [8, 8], "radius": 1.5, "rate": 1, "start": 4, "end": 8, "velocity": [0, 0] },
         {
           "name": "spray-left",
-          "at": [
-            6.5,
-            25.5
-          ],
-          "area": [
-            2,
-            1
-          ],
+          "at": [6.5, 25.5],
+          "area": [2, 1],
           "burst": 1,
           "start": 18,
           "density": 0,
           "sparks": {
             "count": 2,
-            "life": [
-              8,
-              14
-            ],
-            "colors": [
-              "w",
-              "w",
-              "c"
-            ],
-            "angle": [
-              220,
-              250
-            ],
-            "speed": [
-              1.3,
-              2
-            ],
-            "gravity": [
-              0,
-              0.5
-            ],
+            "life": [8, 14],
+            "colors": ["w", "w", "c"],
+            "angle": [220, 250],
+            "speed": [1.3, 2],
+            "gravity": [0, 0.5],
             "drag": 0.02,
             "follow": 0
           }
         },
-        {
-          "name": "soak",
-          "at": [
-            8,
-            26
-          ],
-          "area": [
-            14,
-            2
-          ],
-          "rate": 1,
-          "density": -0.1
-        },
+        { "name": "soak", "at": [8, 26], "area": [14, 2], "rate": 1, "density": -0.1 },
         {
           "name": "spray-right",
-          "at": [
-            9.5,
-            25.5
-          ],
-          "area": [
-            2,
-            1
-          ],
+          "at": [9.5, 25.5],
+          "area": [2, 1],
           "burst": 1,
           "start": 18,
           "density": 0,
           "sparks": {
             "count": 2,
-            "life": [
-              8,
-              14
-            ],
-            "colors": [
-              "w",
-              "w",
-              "c"
-            ],
-            "angle": [
-              290,
-              320
-            ],
-            "speed": [
-              1.3,
-              2
-            ],
-            "gravity": [
-              0,
-              0.5
-            ],
+            "life": [8, 14],
+            "colors": ["w", "w", "c"],
+            "angle": [290, 320],
+            "speed": [1.3, 2],
+            "gravity": [0, 0.5],
             "drag": 0.02,
             "follow": 0
           }
         }
       ],
       "look": [
-        {
-          "field": "density",
-          "colors": [
-            "b"
-          ],
-          "thresholds": [
-            0.5
-          ],
-          "dither": 0
-        },
-        {
-          "field": "depth",
-          "colors": [
-            "w",
-            "c"
-          ],
-          "thresholds": [
-            1,
-            2
-          ],
-          "dither": 0
-        }
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c"], "thresholds": [1, 2], "dither": 0 }
       ],
-      "cleanup": {
-        "strays": true
-      }
+      "cleanup": { "strays": true }
     }
   }
 }

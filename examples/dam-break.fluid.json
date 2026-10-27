@@ -1,0 +1,85 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "dam-break",
+  "width": 64,
+  "height": 36,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "p": "#8a5a36",
+    "P": "#5a3825",
+    "n": "#c79a5b",
+    "g": "#4a4a5e",
+    "G": "#33334a"
+  },
+  "symbols": {
+    "plank": [
+      "PnP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PnP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PnP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PpP",
+      "PnP",
+      "PpP",
+      "PpP",
+      "PpP"
+    ],
+    "basin": [
+      "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+    ],
+    "rock": [
+      ".........",
+      "..ggggg..",
+      ".GGGGGGG.",
+      "GGGGGGGGG",
+      "GGGGGGGGG"
+    ]
+  },
+  "effects": {
+    "dam-break": {
+      "kind": "liquid",
+      "frames": 70,
+      "duration": 60,
+      "seed": 5,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "apic": true,
+      "obstacles": [
+        { "symbol": "basin", "x": 0, "y": 30 },
+        { "symbol": "rock", "x": 40, "y": 25 },
+        { "symbol": "plank", "x": 20, "y": 8, "keys": [{ "frame": 14, "show": false }] }
+      ],
+      "fill": [{ "x": 0, "y": 10, "w": 20, "h": 20 }],
+      "emitters": [],
+      "whitewater": [
+        { "impact": 1.2, "chance": 0.35, "throw": 0.6, "spread": 30, "colors": ["w", "c"], "life": [6, 12] }
+      ],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 5, 9], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

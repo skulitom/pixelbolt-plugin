@@ -1,12 +1,14 @@
 // Optional authoring compilers. All output is ordinary, editable version-1 recipe data.
-import { PixelError, parseColor, renderProject } from './core.js';
+import { PixelError, parseColor, renderProject, describeStampRecipe, readRows } from './core.js';
 import { BLOB_MASKS, CARDINAL_MASKS } from './autotile.js';
-import { EASINGS, ease, rotateRows } from './craft.js';
+import { EASINGS, ease, rotateRows, rasterizeBone, rasterizeMass } from './craft.js';
+import { turn, angleDelta, solveReach } from './pose-geometry.js';
+import { expandMotions, validateRig, MOTION_TEMPLATES } from './motions.js';
 
 const fail = (path, message) => { throw new PixelError(path, message); };
-export function fields(value, keys, path) {
+export function fields(value, keys, path, nullable = []) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'expected an object');
-  for (const key of Object.keys(value)) if (!keys.includes(key) || value[key] === null) fail(`${path}.${key}`, 'unknown or null field');
+  for (const key of Object.keys(value)) if (!keys.includes(key) || (value[key] === null && !nullable.includes(key))) fail(`${path}.${key}`, 'unknown or null field');
 }
 export function point(value, path, bound = 4096) {
   if (!Array.isArray(value) || value.length !== 2 || value.some(v => !Number.isInteger(v) || Math.abs(v) > bound)) fail(path, `expected two integer coordinates within ±${bound}`);
@@ -19,30 +21,122 @@ const identifier = (value, path) => {
 // Compiled output is plain JSON data (null-prototype maps are only used while compiling).
 const plain = value => JSON.parse(JSON.stringify(value));
 
-export function compilePoses(source) {
-  fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'parts', 'poses', 'animations', 'sheet'], 'poses');
+function structuralPart(part, source, path) {
+  const kind = part.bone !== undefined ? 'bone' : 'mass', shape = part[kind], p = `${path}.${kind}`;
+  fields(shape, kind === 'bone' ? ['length', 'width', 'ramp', 'base', 'outline', 'caps', 'snap'] : ['size', 'ramp', 'base', 'outline'], p, ['outline']);
+  const integer = (value, at, low, high) => {
+    if (!Number.isInteger(value) || value < low || value > high) fail(at, `expected an integer from ${low} to ${high}`);
+  };
+  if (kind === 'bone') {
+    integer(shape.length, `${p}.length`, 1, 64);
+    if (!Array.isArray(shape.width) || ![2, 3].includes(shape.width.length)) fail(`${p}.width`, 'expected [start, end] or [start, middle, end]');
+    shape.width.forEach((value, i) => integer(value, `${p}.width[${i}]`, 1, 16));
+    if (shape.snap !== undefined && typeof shape.snap !== 'boolean') fail(`${p}.snap`, 'expected a boolean');
+    if (shape.caps !== undefined && (!Array.isArray(shape.caps) || shape.caps.length !== 2 || shape.caps.some(cap => !['round', 'flat', 'point', 'socket'].includes(cap)))) fail(`${p}.caps`, 'expected two round, flat, point or socket caps');
+  } else {
+    if (!Array.isArray(shape.size) || shape.size.length !== 2) fail(`${p}.size`, 'expected [width, height]');
+    shape.size.forEach((value, i) => integer(value, `${p}.size[${i}]`, 2, 64));
+  }
+  integer(shape.ramp, `${p}.ramp`, 0, (source.ramps?.length ?? 0) - 1);
+  const ramp = source.ramps[shape.ramp];
+  if (!Array.isArray(ramp) || ramp.length < 2 || ramp.length > 32) fail(`poses.ramps[${shape.ramp}]`, 'expected 2–32 palette keys from dark to light');
+  for (const [i, key] of ramp.entries()) {
+    if (typeof key !== 'string' || key.length !== 1 || !Object.hasOwn(source.palette ?? {}, key) || key === '.' || key === ' ') fail(`poses.ramps[${shape.ramp}][${i}]`, 'structural parts need one-character palette keys');
+  }
+  integer(shape.base, `${p}.base`, 0, ramp.length - 1);
+  if (shape.outline !== undefined && shape.outline !== null && shape.outline !== 'selective'
+    && (typeof shape.outline !== 'string' || shape.outline.length !== 1 || !Object.hasOwn(source.palette ?? {}, shape.outline) || ['.', ' '].includes(shape.outline))) fail(`${p}.outline`, 'expected a one-character palette key, selective, or null');
+  if (part.anchor !== undefined) fail(`${path}.anchor`, 'bones anchor at the start joint; masses anchor at their centre');
+}
+
+// Templates check planted-foot reach on many single poses; they need resolved joints, not a validated recipe. The
+// probe mode is private to this module (a symbol nobody else holds), so compilePoses' public contract is unchanged.
+const PROBE = Symbol('pose probe');
+export function expandPoses(source) { return expandMotions(source, compilePoses, probe => compilePoses(probe, PROBE)); }
+// Nominal pixels visited while drawing distinct bone and mass shapes in one compile (see rasterizeMass). Real rigs use
+// a few percent of it; a source that would draw for seconds fails fast with a path instead of blocking the caller.
+export const RASTER_BUDGET = 8388608;
+
+export function compilePoses(source, mode) {
+  if (source?.motions !== undefined) source = expandPoses(source);
+  fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
   if (source.format !== 'pixelforge-poses' || source.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
+  if (source.light !== undefined && (!Number.isInteger(source.light) || source.light < 0 || source.light > 359)) fail('poses.light', 'expected whole degrees from 0 to 359');
+  if (source.ramps !== undefined && (!Array.isArray(source.ramps) || source.ramps.length > 64)) fail('poses.ramps', 'expected at most 64 colour ramps');
+  if (source.rig !== undefined) validateRig(source.rig, source.height);
   if (!source.parts || Array.isArray(source.parts) || typeof source.parts !== 'object' || Object.keys(source.parts).length > 256) fail('poses.parts', 'expected at most 256 part definitions');
   const symbols = Object.create(null);
   for (const [name, part] of Object.entries(source.parts)) {
     identifier(name, `poses.parts.${name}`);
-    fields(part, ['rows', 'anchor', 'points'], `poses.parts.${name}`);
+    fields(part, ['rows', 'bone', 'mass', 'anchor', 'points', 'views'], `poses.parts.${name}`);
+    if (['rows', 'bone', 'mass'].filter(key => part[key] !== undefined).length !== 1) fail(`poses.parts.${name}`, 'choose exactly one of rows, bone or mass');
+    const structural = part.bone !== undefined || part.mass !== undefined;
+    if (structural) structuralPart(part, source, `poses.parts.${name}`);
     point(part.anchor ?? [0, 0], `poses.parts.${name}.anchor`);
     if (part.points !== undefined && (!part.points || typeof part.points !== 'object' || Array.isArray(part.points))) fail(`poses.parts.${name}.points`, 'expected named attachment points');
-    for (const [key, value] of Object.entries(part.points ?? {})) { identifier(key, `poses.parts.${name}.points`); point(value, `poses.parts.${name}.points.${key}`); }
-    if (!Array.isArray(part.rows) || !part.rows.length || typeof part.rows[0] !== 'string') fail(`poses.parts.${name}.rows`, 'expected equal-width text rows');
-    symbols[name] = part.rows;
+    for (const [key, value] of Object.entries(part.points ?? {})) {
+      identifier(key, `poses.parts.${name}.points`);
+      if (value !== 'end' || !part.bone) point(value, `poses.parts.${name}.points.${key}`, structural ? 64 : 4096);
+    }
+    if (!structural) {
+      if (!Array.isArray(part.rows) || !part.rows.length || typeof part.rows[0] !== 'string') fail(`poses.parts.${name}.rows`, 'expected equal-width text rows');
+      symbols[name] = part.rows;
+    }
+    if (part.views !== undefined) {
+      const vp = `poses.parts.${name}.views`;
+      if (structural) fail(vp, 'authored views belong to grid parts');
+      if (!part.views || typeof part.views !== 'object' || Array.isArray(part.views) || !Object.keys(part.views).length || Object.keys(part.views).length > 16) fail(vp, 'expected 1–16 drawings keyed by whole degrees from 0 to 359');
+      for (const [angle, view] of Object.entries(part.views)) {
+        if (!/^(0|[1-9][0-9]{0,2})$/.test(angle) || Number(angle) > 359) fail(`${vp}.${angle}`, 'expected whole degrees from 0 to 359');
+        fields(view, ['rows', 'anchor', 'points'], `${vp}.${angle}`);
+        readRows(view.rows, `${vp}.${angle}.rows`, source.palette ?? {});
+        point(view.anchor, `${vp}.${angle}.anchor`);
+        if (view.points !== undefined) fields(view.points, Object.keys(part.points ?? {}), `${vp}.${angle}.points`);
+        for (const key of Object.keys(part.points ?? {})) point(view.points?.[key], `${vp}.${angle}.points.${key}`);
+      }
+    }
   }
   if (!Array.isArray(source.poses) || !source.poses.length || source.poses.length > 256) fail('poses.poses', 'expected 1–256 authored key poses');
   const metadata = { format: 'pixelforge-pose-metadata', version: 1, coordinates: 'unscaled source pixels; top-left origin; positive y down; marker times are milliseconds before playback-rate adjustment', poses: Object.create(null), animations: Object.create(null) };
-  const compiled = Object.create(null), shapes = new Map();
+  if (source.rig !== undefined) metadata.rig = { ...source.rig };
+  const compiled = Object.create(null), shapes = new Map(), warnings = [];
+  let rasterWork = 0;
   // The drawn shape of a part instance. Flips alone stay a stamp flag; a rotation (after any flip) is baked into a new
   // editable symbol named <part>-r<degrees> (-fr when flipped, -raw without cleanup) around the part's anchor pixel.
-  const shapeOf = (name, flipX, rotate, cleanup, where) => {
-    const definition = source.parts[name], width = definition.rows[0].length, anchor = definition.anchor ?? [0, 0];
-    const local = ([x, y]) => [flipX ? width - 1 - x : x, y];
+  const shapeOf = (name, flipX, rotate, cleanup, where, squash = 1) => {
+    const definition = source.parts[name];
     const angle = ((rotate % 360) + 360) % 360;
-    if (!angle) return { symbol: name, width, flipX, anchor: local(anchor), point: local };
+    if (definition.bone || definition.mass) {
+      const key = `${name}\nbone\n${flipX}\n${angle}\n${squash}`;
+      if (!shapes.has(key)) {
+        const symbol = `${name}-${flipX ? 'f' : ''}b${angle}${definition.mass && squash !== 1 ? `s${Math.round(squash * 100)}` : ''}`;
+        if (Object.hasOwn(source.parts, symbol) || symbol.length > 64) fail(where, `a structural part needs the symbol name ${symbol}; rename that part definition or shorten ${name}`);
+        const shape = definition.bone ?? definition.mass;
+        const options = { angle, flipX, squash, light: source.light ?? 225, ramp: source.ramps[shape.ramp] };
+        const raster = definition.bone ? rasterizeBone(shape, options) : rasterizeMass(shape, options);
+        // Each distinct drawing is charged once per compile, by its nominal cost, so the verdict never depends on caches.
+        rasterWork += raster.work;
+        if (rasterWork > RASTER_BUDGET) fail(where, `drawing bone and mass parts exceeds the 8,388,608-pixel budget; reuse angles and squash values, or use smaller masses`);
+        symbols[symbol] = raster.rows;
+        shapes.set(key, { symbol, width: raster.width, height: raster.height, fill: raster.fill, outline: raster.outlineMask,
+          flipX: false, anchor: raster.pivot, end: raster.end, point: p => p === 'end' ? raster.end : raster.map(p) });
+      }
+      return shapes.get(key);
+    }
+    const width = definition.rows[0].length, anchor = definition.anchor ?? [0, 0];
+    const local = ([x, y]) => [flipX ? width - 1 - x : x, y];
+    if (definition.views) {
+      const facing = flipX ? turn(-angle) : angle;
+      const nearest = Object.keys(definition.views).map(Number).sort((a, b) => Math.abs(angleDelta(facing, a)) - Math.abs(angleDelta(facing, b)) || a - b)[0];
+      if (Math.abs(angleDelta(facing, nearest)) <= 22.5) {
+        const view = definition.views[nearest], symbol = `${name}-v${nearest}`, viewWidth = view.rows[0].length;
+        if (Object.hasOwn(source.parts, symbol) || symbol.length > 64) fail(where, `an authored view needs symbol ${symbol}; rename or shorten its part`);
+        symbols[symbol] = view.rows;
+        const map = ([x, y]) => [flipX ? viewWidth - 1 - x : x, y];
+        return { symbol, flipX, anchor: map(view.anchor), view: nearest, point: (p, key) => map(view.points[key]) };
+      }
+    }
+    if (!angle) return { symbol: name, flipX, anchor: local(anchor), point: local };
     const tidy = cleanup && angle % 90 !== 0, key = `${name}\n${flipX}\n${angle}\n${tidy}`;
     if (!shapes.has(key)) {
       const symbol = `${name}-${flipX ? 'f' : ''}r${angle}${tidy || angle % 90 === 0 ? '' : '-raw'}`;
@@ -51,36 +145,63 @@ export function compilePoses(source) {
       const turned = rotateRows(rows, angle, local(anchor), { cleanup: tidy });
       if (turned.rows.length > 256 || turned.rows[0].length > 256) fail(where, `rotating ${name} by ${angle}° exceeds 256×256 pixels`);
       symbols[symbol] = turned.rows;
-      shapes.set(key, { symbol, width: turned.rows[0].length, flipX: false, anchor: turned.pivot, point: p => turned.map(local(p)) });
+      shapes.set(key, { symbol, flipX: false, anchor: turned.pivot, point: p => turned.map(local(p)) });
     }
     return shapes.get(key);
   };
+  const reflectInputs = from => {
+    const reflect = x => 2 * from.origin[0] - 1 - x, authored = (from.inputs ?? from.mirrorInputs).parts;
+    return { origin: from.origin, parts: authored.map(p => ({
+      name: p.name, part: p.part, at: [p.attach ? -p.at[0] : -p.at[0] - 1, p.at[1]],
+      ...(p.attach && { attach: p.attach }), flipX: !p.flipX,
+      ...(p.reach ? { reach: [reflect(p.reach[0]), p.reach[1]], bend: (p.bend ?? 'forward') === 'forward' ? 'back' : 'forward' }
+        : p.angle !== undefined ? { angle: -p.angle } : { rotate: -(p.rotate ?? 0) }),
+      ...(p.cleanup === false && { cleanup: false }), ...(p.squash !== undefined && { squash: p.squash })
+    })) };
+  };
   const frames = source.poses.map((pose, index) => {
     const path = `poses.poses[${index}]`;
-    fields(pose, ['name', 'duration', 'origin', 'parts', 'markers', 'mirror', 'tween'], path);
+    fields(pose, ['name', 'duration', 'origin', 'parts', 'markers', 'contacts', 'mirror', 'relight', 'tween'], path);
     identifier(pose.name, `${path}.name`);
     if (Object.hasOwn(compiled, pose.name)) fail(`${path}.name`, 'duplicate pose');
-    let origin, placed, layers, markers, inputs = null, tween = null;
+    let origin, placed, layers, markers, inputs = null, mirrorInputs = null, tween = null;
+    if (pose.relight !== undefined && (typeof pose.relight !== 'boolean' || pose.mirror === undefined)) fail(`${path}.relight`, 'expected a boolean on a mirror pose');
+    let mirroredFrom;
     if (pose.mirror !== undefined) {
+      for (const key of ['parts', 'markers', 'contacts', 'origin', 'tween']) if (pose[key] !== undefined) fail(`${path}.${key}`, 'mirrored poses reuse the source pose, its markers, contacts and its origin');
+      identifier(pose.mirror, `${path}.mirror`);
+      mirroredFrom = compiled[pose.mirror];
+      if (!mirroredFrom) fail(`${path}.mirror`, 'must name an earlier pose');
+    }
+    if (pose.mirror !== undefined && !pose.relight) {
       // A horizontal mirror of an earlier pose around its origin, the anchor corner between pixel columns originX - 1
       // and originX: pixel column c maps to 2 * originX - 1 - c. This is the same reflection as drawFrame's flipX and
       // engines that flip around the atlas pivot, so a compiled mirror and a runtime flip draw identical pixels.
-      for (const key of ['parts', 'markers', 'origin', 'tween']) if (pose[key] !== undefined) fail(`${path}.${key}`, 'mirrored poses reuse the source pose, its markers and its origin');
-      identifier(pose.mirror, `${path}.mirror`);
-      const from = compiled[pose.mirror];
-      if (!from) fail(`${path}.mirror`, 'must name an earlier pose');
+      const from = mirroredFrom;
       origin = from.origin;
+      mirrorInputs = reflectInputs(from);
       const reflect = x => 2 * origin[0] - 1 - x;
       placed = Object.create(null); layers = [];
       for (const layer of from.layers) {
         const instance = from.placed[layer.name], stamp = layer.ops[0], width = symbols[stamp.symbol][0].length;
         const x = reflect(stamp.x + width - 1), y = stamp.y, flipX = !instance.flipX;
-        placed[layer.name] = { definition: instance.definition, ...(instance.symbol && { symbol: instance.symbol }), ...(flipX && { flipX }), ...(instance.rotate && { rotate: -instance.rotate }), topLeft: [x, y], anchor: [reflect(instance.anchor[0]), instance.anchor[1]], points: Object.fromEntries(Object.entries(instance.points).map(([key, p]) => [key, [reflect(p[0]), p[1]]])) };
+        placed[layer.name] = { definition: instance.definition, ...(instance.symbol && { symbol: instance.symbol }), ...(flipX && { flipX }), ...(instance.rotate && { rotate: -instance.rotate }),
+          ...(instance.angle !== undefined && { angle: -instance.angle }), ...(instance.worldAngle !== undefined && { worldAngle: turn(-instance.worldAngle) }),
+          ...(instance.joints && { joints: Object.fromEntries(Object.entries(instance.joints).map(([key, p]) => [key, [reflect(p[0]), p[1]]])) }),
+          ...(instance.reach && { reach: { ...instance.reach, target: [reflect(instance.reach.target[0]), instance.reach.target[1]] } }),
+          ...(instance.view !== undefined && { view: instance.view }),
+          ...(instance.squash !== undefined && { squash: instance.squash }),
+          topLeft: [x, y], anchor: [reflect(instance.anchor[0]), instance.anchor[1]], points: Object.fromEntries(Object.entries(instance.points).map(([key, p]) => [key, [reflect(p[0]), p[1]]])) };
         layers.push({ name: layer.name, ops: [{ op: 'stamp', symbol: stamp.symbol, x, y, ...(!stamp.flipX && { flipX: true }) }] });
       }
       markers = from.markers.map(marker => ({ ...marker, at: [reflect(marker.at[0]), marker.at[1]] }));
     } else {
       let spec = pose, partsPath = `${path}.parts`;
+      if (pose.relight) {
+        // Keep the original attachment graph when available, so rerasterized parent joints drive children.
+        spec = reflectInputs(mirroredFrom);
+        partsPath = `${path}.mirror`;
+      }
       if (pose.tween !== undefined) {
         // An in-between: origin, offsets and angles interpolate (then round to whole pixels and degrees); part
         // definitions and flips switch at the eased halfway point. Attachments must match, so held items follow.
@@ -101,69 +222,194 @@ export function compilePoses(source) {
         spec = { origin: a.origin.map((v, axis) => mix(v, b.origin[axis])), parts: a.parts.map((p, i) => {
           const q = b.parts[i], near = e < 0.5 ? p : q, rotate = mix(p.rotate, q.rotate);
           if ((p.attach?.part ?? null) !== (q.attach?.part ?? null) || (p.attach?.point ?? null) !== (q.attach?.point ?? null)) fail(`${path}.tween`, `part ${p.name} must attach the same way in both poses`);
-          return { name: p.name, part: near.part, ...(p.attach && { attach: p.attach }), at: p.at.map((v, axis) => mix(v, q.at[axis])), ...(near.flipX && { flipX: true }), ...(rotate && { rotate }), ...(!near.cleanup && { cleanup: false }) };
+          const squash = Math.max(.5, Math.min(2, Math.round(((p.squash ?? 1) + ((q.squash ?? 1) - (p.squash ?? 1)) * e) * 20) / 20));
+          if ((p.angle !== undefined) !== (q.angle !== undefined) || Boolean(p.reach) !== Boolean(q.reach)) fail(`${path}.tween`, `part ${p.name} must use the same angle or reach mode in both poses`);
+          const angle = p.angle !== undefined ? angleDelta(0, Math.round(p.angle + angleDelta(p.angle, q.angle) * e)) : undefined;
+          return { name: p.name, part: near.part, ...(p.attach && { attach: p.attach }), at: p.at.map((v, axis) => mix(v, q.at[axis])),
+            ...(near.flipX && { flipX: true }), ...(angle !== undefined ? { angle } : rotate ? { rotate } : {}),
+            ...(p.reach && { reach: p.reach.map((v, axis) => mix(v, q.reach[axis])), ...(near.bend && { bend: near.bend }) }),
+            ...(!near.cleanup && { cleanup: false }), ...(source.parts[near.part].mass && { squash }) };
         }) };
         partsPath = `${path}.tween`; tween = { from: pose.tween.from, to: pose.tween.to, t, ...(pose.tween.ease !== undefined && { ease: easing }) };
       }
       origin = point(spec.origin ?? [0, 0], `${path}.origin`); placed = Object.create(null);
       if (!Array.isArray(spec.parts) || spec.parts.length > 64) fail(partsPath, 'expected at most 64 parts in back-to-front order');
       inputs = { origin, parts: [] };
-      layers = spec.parts.map((instance, i) => {
-        const ip = spec === pose ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
-        fields(instance, ['name', 'part', 'at', 'attach', 'flipX', 'rotate', 'cleanup'], ip);
+      const instances = new Map(), owners = new Map(), worldAngles = new Map(), solved = new Map(), resolvedShapes = new Map();
+      const instancePath = (instance, i) => spec === pose ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
+      spec.parts.forEach((instance, i) => {
+        const ip = instancePath(instance, i);
+        fields(instance, ['name', 'part', 'at', 'attach', 'flipX', 'rotate', 'angle', 'reach', 'bend', 'cleanup', 'squash'], ip);
         identifier(instance.name, `${ip}.name`);
-        if (Object.hasOwn(placed, instance.name)) fail(`${ip}.name`, 'duplicate part instance');
-        if (typeof instance.part !== 'string' || !Object.hasOwn(source.parts, instance.part)) fail(`${ip}.part`, 'unknown part definition');
-        for (const key of ['flipX', 'cleanup']) if (instance[key] !== undefined && typeof instance[key] !== 'boolean') fail(`${ip}.${key}`, 'expected a boolean');
-        if (instance.rotate !== undefined && (!Number.isInteger(instance.rotate) || Math.abs(instance.rotate) > 360)) fail(`${ip}.rotate`, 'expected whole degrees from -360 to 360, clockwise');
-        const definition = source.parts[instance.part], flipX = instance.flipX === true, rotate = instance.rotate ?? 0, cleanup = instance.cleanup !== false;
-        // A flipped part mirrors its own grid, anchor and points inside the part's width; a rotated one turns around
-        // its anchor pixel, carrying its points along.
-        const shape = shapeOf(instance.part, flipX, rotate, cleanup, ip);
-        let parent = origin;
+        if (instances.has(instance.name)) fail(`${ip}.name`, 'duplicate part instance');
+        instances.set(instance.name, i);
+      });
+      // Resolve the whole attachment graph independently of paint order. A cycle reports every source path.
+      const checkGraph = (i, done, stack = []) => {
+        if (done.has(i)) return;
+        const instance = spec.parts[i], ip = instancePath(instance, i), cycle = stack.indexOf(i);
+        if (cycle >= 0) fail(`${ip}.attach`, `attachment cycle: ${[...stack.slice(cycle), i].map(j => instancePath(spec.parts[j], j)).join(' -> ')}`);
         if (instance.attach !== undefined) {
           fields(instance.attach, ['part', 'point'], `${ip}.attach`);
           identifier(instance.attach.part, `${ip}.attach.part`); identifier(instance.attach.point, `${ip}.attach.point`);
-          const part = placed[instance.attach.part];
-          if (!part || !Object.hasOwn(part.points, instance.attach.point)) fail(`${ip}.attach`, 'attachment must name a point on an earlier part in this pose');
-          parent = part.points[instance.attach.point];
+          if (!instances.has(instance.attach.part)) fail(`${ip}.attach`, 'attachment must name a point on a part in this pose');
+          checkGraph(instances.get(instance.attach.part), done, [...stack, i]);
         }
-        const at = point(instance.at ?? [0, 0], `${ip}.at`), x = parent[0] + at[0] - shape.anchor[0], y = parent[1] + at[1] - shape.anchor[1];
-        inputs.parts.push({ name: instance.name, part: instance.part, ...(instance.attach && { attach: { part: instance.attach.part, point: instance.attach.point } }), at, flipX, rotate, cleanup });
-        placed[instance.name] = { definition: instance.part, ...(shape.symbol !== instance.part && { symbol: shape.symbol }), ...(flipX && { flipX }), ...(rotate && { rotate }), topLeft: [x, y], anchor: [x + shape.anchor[0], y + shape.anchor[1]], points: Object.fromEntries(Object.entries(definition.points ?? {}).map(([key, p]) => { const [px, py] = shape.point(p); return [key, [x + px, y + py]]; })) };
-        return { name: instance.name, ops: [{ op: 'stamp', symbol: shape.symbol, x, y, ...(shape.flipX && { flipX: true }) }] };
+        done.add(i);
+      };
+      const checked = new Set(); spec.parts.forEach((_, i) => checkGraph(i, checked));
+      spec.parts.forEach((instance, i) => {
+        const ip = instancePath(instance, i);
+        if (instance.bend !== undefined && (!instance.reach || !['forward', 'back'].includes(instance.bend))) fail(`${ip}.bend`, 'expected forward or back on a reach chain');
+        if (instance.reach === undefined) return;
+        point(instance.reach, `${ip}.reach`);
+        if (instance.rotate !== undefined || instance.angle !== undefined) fail(`${ip}.reach`, 'reach replaces the last bone angle');
+        const parent = spec.parts[instances.get(instance.attach?.part)], first = source.parts[parent?.part], second = source.parts[instance.part];
+        if (!first?.bone || !second?.bone || first.points?.[instance.attach?.point] !== 'end') fail(`${ip}.reach`, 'reach needs a bone attached to the end point of another bone');
+        if (instance.at !== undefined && point(instance.at, `${ip}.at`).some(Boolean)) fail(`${ip}.at`, 'a reach chain must meet at its shared joint; omit at or use [0, 0]');
+        if (owners.has(parent.name) || parent.reach !== undefined) fail(`${ip}.reach`, 'reach chains cannot overlap or share their first bone');
+        owners.set(parent.name, instance);
       });
-      if (pose.markers !== undefined && (!Array.isArray(pose.markers) || pose.markers.length > 64)) fail(`${path}.markers`, 'expected at most 64 markers');
+      const resolve = i => {
+        const instance = spec.parts[i];
+        if (Object.hasOwn(placed, instance.name)) return;
+        const ip = spec === pose ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
+        if (typeof instance.part !== 'string' || !Object.hasOwn(source.parts, instance.part)) fail(`${ip}.part`, 'unknown part definition');
+        for (const key of ['flipX', 'cleanup']) if (instance[key] !== undefined && typeof instance[key] !== 'boolean') fail(`${ip}.${key}`, 'expected a boolean');
+        for (const key of ['rotate', 'angle']) if (instance[key] !== undefined && (!Number.isInteger(instance[key]) || Math.abs(instance[key]) > 360)) fail(`${ip}.${key}`, 'expected whole degrees from -360 to 360, clockwise');
+        if (instance.angle !== undefined && instance.rotate !== undefined) fail(`${ip}.angle`, 'choose relative angle or absolute rotate, not both');
+        const definition = source.parts[instance.part], flipX = instance.flipX === true, cleanup = instance.cleanup !== false;
+        const squash = instance.squash ?? 1;
+        if (instance.squash !== undefined && (!definition.mass || typeof squash !== 'number' || !Number.isFinite(squash) || squash < .5 || squash > 2 || Math.abs(squash * 20 - Math.round(squash * 20)) > 1e-9)) fail(`${ip}.squash`, 'mass parts take squash from 0.5 to 2 in steps of 0.05');
+        if (!cleanup && (definition.bone || definition.mass)) fail(`${ip}.cleanup`, 'structural parts always use pixel-craft cleanup');
+        // A flipped part mirrors its own grid, anchor and points inside the part's width; a rotated one turns around
+        // its anchor pixel, carrying its points along.
+        let parent = origin, parentAngle = 0;
+        if (instance.attach !== undefined) {
+          resolve(instances.get(instance.attach.part));
+          const part = placed[instance.attach.part];
+          if (!part || !Object.hasOwn(part.points, instance.attach.point)) fail(`${ip}.attach`, 'attachment must name a point on a part in this pose');
+          parent = part.points[instance.attach.point];
+          parentAngle = worldAngles.get(instance.attach.part);
+        }
+        const at = point(instance.at ?? [0, 0], `${ip}.at`), anchor = [parent[0] + at[0], parent[1] + at[1]];
+        let rotate = instance.angle !== undefined ? turn(parentAngle + instance.angle) : instance.rotate ?? 0;
+        if (owners.has(instance.name)) {
+          const child = owners.get(instance.name);
+          const solution = solveReach(definition.bone, source.parts[child.part].bone, child.reach.map((v, axis) => v - anchor[axis]),
+            { rest: [rotate, 0], flip: [flipX, child.flipX === true], bend: child.bend ?? 'forward' });
+          rotate = solution.angles[0]; solved.set(child.name, solution);
+          if (solution.unreachable) warnings.push({ path: `${instancePath(child, instances.get(child.name))}.reach`, message: `Target is out of reach by ${Math.round(solution.error * 1000) / 1000} px; the chain uses its closest ${solution.straightened ? 'straight' : 'folded'} pose.`, error: solution.error });
+        }
+        if (solved.has(instance.name)) rotate = solved.get(instance.name).angles[1];
+        worldAngles.set(instance.name, rotate);
+        const shape = shapeOf(instance.part, flipX, rotate, cleanup, ip, squash), x = anchor[0] - shape.anchor[0], y = anchor[1] - shape.anchor[1];
+        resolvedShapes.set(instance.name, shape);
+        inputs.parts[i] = { name: instance.name, part: instance.part, ...(instance.attach && { attach: { part: instance.attach.part, point: instance.attach.point } }),
+          at, flipX, rotate: instance.rotate ?? 0, ...(instance.angle !== undefined && { angle: instance.angle }), ...(instance.reach && { reach: instance.reach, ...(instance.bend && { bend: instance.bend }) }), cleanup, ...(definition.mass && { squash }) };
+        placed[instance.name] = { definition: instance.part, ...(shape.symbol !== instance.part && { symbol: shape.symbol }), ...(flipX && { flipX }), ...(rotate && { rotate }),
+          ...(instance.angle !== undefined && { angle: instance.angle }), ...(definition.bone && { worldAngle: turn(rotate), joints: { start: anchor, end: [x + shape.end[0], y + shape.end[1]] } }),
+          ...(instance.reach && { reach: { target: instance.reach, error: solved.get(instance.name).error, unreachable: solved.get(instance.name).unreachable } }),
+          ...(shape.view !== undefined && { view: shape.view }),
+          ...(definition.mass && { squash }),
+          topLeft: [x, y], anchor, points: Object.fromEntries(Object.entries(definition.points ?? {}).map(([key, p]) => { const [px, py] = shape.point(p, key); return [key, [x + px, y + py]]; })) };
+      };
+      spec.parts.forEach((_, i) => resolve(i));
+      // Metadata and layers follow authored order even when resolution visited a later parent first.
+      placed = Object.fromEntries(spec.parts.map(instance => [instance.name, placed[instance.name]]));
+      layers = spec.parts.map((instance, index) => {
+        const part = placed[instance.name], shape = resolvedShapes.get(instance.name);
+        let symbol = shape.symbol;
+        const parent = placed[instance.attach?.part], parentShape = resolvedShapes.get(instance.attach?.part);
+        // A socket may overlap a bent parent's filled area beyond the small cap radius. The child's exterior
+        // outline must not paint a seam through that union. Keep authored layer order and only open this socket.
+        if (shape.outline && parentShape?.fill && instances.get(instance.attach.part) < index
+          && source.parts[instance.part].bone && (source.parts[instance.part].bone.caps?.[0] ?? 'socket') === 'socket') {
+          const rows = symbols[symbol].map(row => [...row]);
+          let changed = false, fingerprint = 2166136261;
+          for (let y = 0; y < shape.height; y++) for (let x = 0; x < shape.width; x++) {
+            const at = y * shape.width + x;
+            if (!shape.outline[at]) continue;
+            const px = part.topLeft[0] + x - parent.topLeft[0], py = part.topLeft[1] + y - parent.topLeft[1];
+            if (px >= 0 && py >= 0 && px < parentShape.width && py < parentShape.height && parentShape.fill[py * parentShape.width + px]) {
+              rows[y][x] = '.'; changed = true; fingerprint = Math.imul(fingerprint ^ at, 16777619) >>> 0;
+            }
+          }
+          if (changed) {
+            symbol = `${shape.symbol}-j${fingerprint.toString(36)}`;
+            const joined = rows.map(row => row.join(''));
+            if (symbol.length > 64 || Object.hasOwn(source.parts, symbol) || (symbols[symbol] && JSON.stringify(symbols[symbol]) !== JSON.stringify(joined))) fail(partsPath, `socket symbol ${symbol} collides or is too long; shorten or rename the part`);
+            symbols[symbol] = joined; part.symbol = symbol;
+          }
+        }
+        return { name: instance.name, ops: [{ op: 'stamp', symbol, x: part.topLeft[0], y: part.topLeft[1], ...(shape.flipX && { flipX: true }) }] };
+      });
+      const markerSpecs = pose.relight ? mirroredFrom.markers.map(({ name, part, point }) => ({ name, part, point })) : pose.markers;
+      if (markerSpecs !== undefined && (!Array.isArray(markerSpecs) || markerSpecs.length > 64)) fail(`${path}.markers`, 'expected at most 64 markers');
       const seen = new Set();
-      markers = (pose.markers ?? []).map((marker, i) => {
+      markers = (markerSpecs ?? []).map((marker, i) => {
         fields(marker, ['name', 'part', 'point'], `${path}.markers[${i}]`);
         identifier(marker.name, `${path}.markers[${i}].name`);
         if (seen.has(marker.name)) fail(`${path}.markers[${i}].name`, 'marker names are unique within a pose');
         seen.add(marker.name);
         identifier(marker.part, `${path}.markers[${i}].part`); identifier(marker.point, `${path}.markers[${i}].point`);
-        const part = placed[marker.part];
+        // `placed` is an ordinary object here, so look up own keys only: "toString" must not find Object.prototype.
+        const part = Object.hasOwn(placed, marker.part) ? placed[marker.part] : undefined;
         if (!part || !Object.hasOwn(part.points, marker.point)) fail(`${path}.markers[${i}]`, 'marker must name a placed attachment point');
         return { name: marker.name, part: marker.part, point: marker.point, at: part.points[marker.point] };
       });
     }
     const duration = pose.duration ?? (pose.mirror !== undefined ? compiled[pose.mirror].duration : undefined);
-    compiled[pose.name] = { origin, placed, layers, markers, duration, inputs };
-    metadata.poses[pose.name] = { origin, ...(pose.mirror !== undefined && { mirror: pose.mirror }), ...(tween && { tween }), parts: placed, markers };
+    const contacts = pose.mirror !== undefined ? mirroredFrom.contacts : pose.contacts;
+    if (contacts !== undefined && (!Array.isArray(contacts) || contacts.length > 64 || new Set(contacts).size !== contacts.length || contacts.some(name => !markers.some(marker => marker.name === name)))) fail(`${path}.contacts`, 'expected up to 64 unique marker names from this pose');
+    compiled[pose.name] = { origin, placed, layers, markers, contacts, duration, inputs, mirrorInputs };
+    metadata.poses[pose.name] = { origin, ...(pose.mirror !== undefined && { mirror: pose.mirror }), ...(pose.relight !== undefined && { relight: pose.relight }), ...(tween && { tween }), parts: placed, markers, ...(contacts !== undefined && { contacts }) };
     // The pose origin becomes the frame anchor; marker positions become named frame points in the atlas.
     return { name: pose.name, ...(duration !== undefined && { duration }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers };
   });
+  if (mode === PROBE) return { metadata: { poses: metadata.poses } };
   // When every pose shares one origin, it is declared once as the recipe anchor.
   const shared = frames.every(frame => frame.anchor[0] === frames[0].anchor[0] && frame.anchor[1] === frames[0].anchor[1]);
   if (shared) for (const frame of frames) delete frame.anchor;
-  const recipe = { version: 1, name: source.name, width: source.width, height: source.height, palette: source.palette ?? {}, ...(shared && { anchor: compiled[source.poses[0].name].origin }), symbols, frames, ...(source.animations !== undefined && { animations: source.animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
-  const project = renderProject(recipe);
+  const recipe = { version: 1, name: source.name, width: source.width, height: source.height, palette: source.palette ?? {}, ...(source.ramps !== undefined && { ramps: source.ramps }), ...(shared && { anchor: compiled[source.poses[0].name].origin }), symbols, frames, ...(source.animations !== undefined && { animations: source.animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
+  if (source.rig?.rest !== undefined) {
+    const rest = compiled[source.rig.rest];
+    if (!rest) fail('poses.rig.rest', 'unknown rest pose');
+    for (const name of [source.rig.body, source.rig.head, ...(source.rig.legs ?? []).flat(), ...(source.rig.arms ?? []).flat(), ...(source.rig.tail ?? [])].filter(n => n !== undefined)) if (!Object.hasOwn(rest.placed, name)) fail('poses.rig', `unknown rest-pose instance ${name}`);
+    // Rig output keeps only used, distinct drawings. Lexical selection is independent of cache insertion order.
+    const used = [...new Set(frames.flatMap(frame => frame.layers.map(layer => layer.ops[0].symbol)))].sort();
+    const canonical = new Map(), aliases = new Map(), unique = {};
+    for (const name of used) {
+      const rows = symbols[name], key = JSON.stringify(rows);
+      if (!canonical.has(key)) { canonical.set(key, name); unique[name] = rows; }
+      aliases.set(name, canonical.get(key));
+    }
+    for (const frame of frames) for (const layer of frame.layers) {
+      const stamp = layer.ops[0], before = stamp.symbol; stamp.symbol = aliases.get(before);
+      const part = metadata.poses[frame.name].parts[layer.name];
+      if (part.symbol || before !== stamp.symbol) part.symbol = stamp.symbol;
+    }
+    recipe.symbols = unique;
+  }
+  const project = describeStampRecipe(recipe);
+  if (source.motionInfo !== undefined) {
+    fields(source.motionInfo, Object.keys(project.animations), 'poses.motionInfo');
+    for (const [name, info] of Object.entries(source.motionInfo)) {
+      const path = `poses.motionInfo.${name}`; fields(info, ['template', 'speed', 'keyPoses'], path);
+      if (!MOTION_TEMPLATES.includes(info.template)) fail(`${path}.template`, 'expected a motion template name');
+      if (typeof info.speed !== 'number' || !Number.isFinite(info.speed) || Math.abs(info.speed) > 1024) fail(`${path}.speed`, 'expected pixels per second within ±1024');
+      const names = new Set(project.animations[name].frames.map(index => project.frames[index].name));
+      if (!Array.isArray(info.keyPoses) || !info.keyPoses.length || info.keyPoses.length > 256 || new Set(info.keyPoses).size !== info.keyPoses.length || info.keyPoses.some(pose => !names.has(pose))) fail(`${path}.keyPoses`, 'expected unique key-pose names from this animation');
+    }
+  }
   for (const [name, animation] of Object.entries(project.animations)) {
     let start = 0;
-    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, entries: animation.frames.map((index, position) => {
-      const frame = project.frames[index], entry = { position, frame: frame.name, start, duration: frame.duration, markers: metadata.poses[frame.name].markers };
+    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, ...(source.motionInfo?.[name] && source.motionInfo[name]), entries: animation.frames.map((index, position) => {
+      const frame = project.frames[index], pose = metadata.poses[frame.name], entry = { position, frame: frame.name, start, duration: frame.duration, markers: pose.markers, ...(pose.contacts !== undefined && { contacts: pose.contacts }) };
       start += frame.duration; return entry;
     }) };
   }
+  if (warnings.length) metadata.warnings = warnings;
   return plain({ recipe, metadata });
 }
 

@@ -59,26 +59,10 @@
       ],
       "duration": 720,
       "pixels": [
-        {
-          "x": 16,
-          "y": 2,
-          "color": "h"
-        },
-        {
-          "x": 16,
-          "y": 3,
-          "color": "h"
-        },
-        {
-          "x": 15,
-          "y": 4,
-          "color": "h"
-        },
-        {
-          "x": 16,
-          "y": 4,
-          "color": "g"
-        }
+        { "x": 16, "y": 2, "color": "h" },
+        { "x": 16, "y": 3, "color": "h" },
+        { "x": 15, "y": 4, "color": "h" },
+        { "x": 16, "y": 4, "color": "g" }
       ]
     },
     {
@@ -121,13 +105,5 @@
       "duration": 480
     }
   ],
-  "animations": {
-    "breathe": {
-      "frames": [
-        "still",
-        "lean"
-      ],
-      "direction": "pingpong"
-    }
-  }
+  "animations": { "breathe": { "frames": ["still", "lean"], "direction": "pingpong" } }
 }

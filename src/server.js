@@ -2,10 +2,13 @@ import http from 'node:http';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { resolveReferences } from './resolve.js';
 import { createBundle, createZip } from './export.js';
 import { renderProject, MAX_REQUEST_BYTES, PixelError } from './core.js';
 import { createSequence } from './sequence.js';
 import { prepareScene } from './scene.js';
+import { compilePoses } from './authoring.js';
 
 const routes = new Map([
   ['/', ['../studio/index.html', 'text/html; charset=utf-8']],
@@ -17,6 +20,9 @@ const routes = new Map([
   ['/gif.js', ['./gif.js', 'text/javascript; charset=utf-8']],
   ['/draft.js', ['../studio/draft.js', 'text/javascript; charset=utf-8']],
   ['/authoring.js', ['./authoring.js', 'text/javascript; charset=utf-8']],
+  ['/pose-geometry.js', ['./pose-geometry.js', 'text/javascript; charset=utf-8']],
+  ['/motions.js', ['./motions.js', 'text/javascript; charset=utf-8']],
+  ['/motion.js', ['./motion.js', 'text/javascript; charset=utf-8']],
   ['/autotile.js', ['./autotile.js', 'text/javascript; charset=utf-8']],
   ['/scene.js', ['./scene.js', 'text/javascript; charset=utf-8']],
   ['/scene-player.js', ['../studio/scene-player.js', 'text/javascript; charset=utf-8']],
@@ -25,12 +31,12 @@ const routes = new Map([
   ['/fluid.html', ['../studio/fluid.html', 'text/html; charset=utf-8']],
   ['/fluid.css', ['../studio/fluid.css', 'text/css; charset=utf-8']],
   ['/fluid-lab.js', ['../studio/fluid-lab.js', 'text/javascript; charset=utf-8']],
+  ['/fluid-controls.js', ['../studio/fluid-controls.js', 'text/javascript; charset=utf-8']],
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
-  ['/examples/quality/skink.json', ['../examples/quality/skink.json', 'application/json']],
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
-  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
+  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
 export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/project.json'];
@@ -53,7 +59,10 @@ export function openBrowser(url) {
 // recovery lives in browser storage, which browsers keep per address: a draft is only found again on the same port.
 export async function startStudio({ port = STUDIO_PORT, fallback = false, project, quiet = false } = {}) {
   const scene = project?.format === 'pixelforge-scene';
-  if (project) { if (scene) prepareScene(project); else renderProject(project); }
+  if (project) {
+    if (scene) prepareScene(project);
+    else renderProject(project.format === 'pixelforge-poses' ? compilePoses(project).recipe : project);
+  }
   const server = http.createServer(async (req, res) => {
     const address = server.address(), hosts = [`127.0.0.1:${address.port}`, `localhost:${address.port}`];
     const reply = (status, type, body) => { res.writeHead(status, { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'" }); res.end(body); };
@@ -85,7 +94,11 @@ export async function startStudio({ port = STUDIO_PORT, fallback = false, projec
       if (req.method !== 'GET') { reply(405, 'text/plain', 'Method not allowed'); return; }
       if (scene && url.pathname === '/') { reply(200, 'text/html; charset=utf-8', await readFile(new URL('../studio/scene.html', import.meta.url))); return; }
       if (scene && url.pathname === '/scene.json') { reply(200, 'application/json', JSON.stringify(project)); return; }
-      if (url.pathname === '/scene.json') { reply(200, 'application/json', await readFile(new URL('../examples/quality/hollow.scene.json', import.meta.url))); return; }
+      // Without a scene of its own, the scene page shows the lit forest spirit, its recipe files resolved here.
+      if (url.pathname === '/scene.json') {
+        const file = fileURLToPath(new URL('../examples/forest-spirit-lit.scene.json', import.meta.url)), { document } = await resolveReferences(JSON.parse(await readFile(file, 'utf8')), { baseDir: path.dirname(file) });
+        reply(200, 'application/json', JSON.stringify(document)); return;
+      }
       if (url.pathname === '/project.json') { reply(200, 'application/json', JSON.stringify(project ?? null)); return; }
       if (!routes.has(url.pathname)) { reply(404, 'text/plain', 'Not found'); return; }
       const [file, type] = routes.get(url.pathname);

@@ -642,6 +642,10 @@
               "legend"
             ],
             "additionalProperties": false
+          },
+          "lit": {
+            "type": "boolean",
+            "description": "false keeps this placement's authored colours under scene lighting: fires, lamps, glows and other light sources. Default true."
           }
         },
         "required": [
@@ -699,27 +703,145 @@
                 },
                 "maxItems": 2,
                 "minItems": 2,
-                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                "description": "Where the light is; with follow, an offset from what it follows (default [0, 0])."
               },
               "height": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 256
+                "maximum": 256,
+                "description": "Pixels above the scene; default 24."
               },
               "radius": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 512
+                "maximum": 512,
+                "description": "How far it reaches; default 96."
               },
               "color": {
                 "type": "string",
                 "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "strength": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "Brightness multiplier; default 1. Above 1, ramp lighting can lift colours past their authored shade (a flash); multiply lighting never brightens past the authored colour. 0 is off."
+              },
+              "follow": {
+                "type": "object",
+                "properties": {
+                  "instance": {
+                    "type": "string",
+                    "description": "Name of a uniquely named placement that is not a tilemap."
+                  },
+                  "point": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                    "description": "A named frame point of that placement (a torch flame, a blade tip); default: the placement point itself."
+                  }
+                },
+                "required": [
+                  "instance"
+                ],
+                "additionalProperties": false,
+                "description": "Ride a placement as it moves, animates and attaches. The light is off while the placement is hidden or its current frame has no such point."
+              },
+              "flicker": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How far it swings either way: 0.3 makes the strength vary from 70% to 130% of its own and the reach by up to 15% either way, so on average it is as bright as a steady light."
+                  },
+                  "every": {
+                    "type": "integer",
+                    "minimum": 10,
+                    "maximum": 10000,
+                    "description": "About how often the flicker changes, in milliseconds; default 80."
+                  },
+                  "seed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647,
+                    "description": "Reorders the flicker; default 0. Each light flickers on its own even with the same seed."
+                  }
+                },
+                "required": [
+                  "amount"
+                ],
+                "additionalProperties": false,
+                "description": "Seeded, deterministic flicker that repeats once per scene duration, so a looping scene has no seam."
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "time": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 60000
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}([+-][0-9]{1,5})?$"
+                        }
+                      ],
+                      "description": "Milliseconds or a named cue such as \"strike+70\"."
+                    },
+                    "strength": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 8,
+                      "description": "Default: the light's strength."
+                    },
+                    "radius": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 512,
+                      "description": "Default: the light's radius."
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "hold",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "Shape of the change from this key to the next: linear (default), hold (jump at the end), in, out, inOut, overshoot or bounce."
+                    }
+                  },
+                  "required": [
+                    "time"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "description": "Strength and radius over time, held before the first key and after the last: a flash on a hit, a lamp that lights later. Times increase strictly."
               }
             },
-            "required": [
-              "at"
-            ],
-            "additionalProperties": false
+            "required": [],
+            "additionalProperties": false,
+            "anyOf": [
+              {
+                "required": [
+                  "at"
+                ]
+              },
+              {
+                "required": [
+                  "follow"
+                ]
+              }
+            ]
           },
           "maxItems": 8
         }

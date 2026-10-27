@@ -1,0 +1,200 @@
+{
+  "node": "v24.19.0",
+  "platform": "win32 10.0.26200 x64",
+  "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor          ",
+  "memoryGB": 63,
+  "commit": "431a03352bec718b04f96287480dc15f323da65d",
+  "dirty": true,
+  "warmups": 3,
+  "runs": 15,
+  "boneBeforeWorkflow": {
+    "medianMs": 0.28,
+    "p95Ms": 1.262
+  },
+  "cases": {
+    "stamp-skink": {
+      "canvas": [
+        32,
+        26
+      ],
+      "instances": 5,
+      "frames": 12,
+      "compile": {
+        "medianMs": 0.496,
+        "p95Ms": 0.796
+      },
+      "render": {
+        "medianMs": 0.37,
+        "p95Ms": 0.823
+      },
+      "merged": {
+        "medianMs": 0.205,
+        "p95Ms": 0.461
+      },
+      "recipeBytes": 6909,
+      "work": {
+        "pixels": 5936,
+        "layerPixels": 2860,
+        "operations": 60
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-64": {
+      "canvas": [
+        64,
+        64
+      ],
+      "instances": 16,
+      "frames": 24,
+      "compile": {
+        "medianMs": 1.445,
+        "p95Ms": 1.892
+      },
+      "render": {
+        "medianMs": 1.327,
+        "p95Ms": 1.65
+      },
+      "merged": {
+        "medianMs": 0.925,
+        "p95Ms": 1.19
+      },
+      "recipeBytes": 32179,
+      "work": {
+        "pixels": 23040,
+        "layerPixels": 11520,
+        "operations": 384
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-128": {
+      "canvas": [
+        128,
+        128
+      ],
+      "instances": 32,
+      "frames": 96,
+      "compile": {
+        "medianMs": 10.322,
+        "p95Ms": 11.221
+      },
+      "render": {
+        "medianMs": 12.216,
+        "p95Ms": 13.306
+      },
+      "merged": {
+        "medianMs": 8.734,
+        "p95Ms": 9.468
+      },
+      "recipeBytes": 254478,
+      "work": {
+        "pixels": 184320,
+        "layerPixels": 92160,
+        "operations": 3072
+      },
+      "mergedPixelsIdentical": true
+    },
+    "stamp-256": {
+      "canvas": [
+        256,
+        256
+      ],
+      "instances": 64,
+      "frames": 32,
+      "compile": {
+        "medianMs": 7.298,
+        "p95Ms": 10.214
+      },
+      "render": {
+        "medianMs": 9.184,
+        "p95Ms": 14.634
+      },
+      "merged": {
+        "medianMs": 5.881,
+        "p95Ms": 7.207
+      },
+      "recipeBytes": 170532,
+      "work": {
+        "pixels": 122880,
+        "layerPixels": 61440,
+        "operations": 2048
+      },
+      "mergedPixelsIdentical": true
+    },
+    "structural-parts-M1": {
+      "canvas": [
+        48,
+        48
+      ],
+      "instances": 1,
+      "frames": 101,
+      "compile": {
+        "medianMs": 3.417,
+        "p95Ms": 4.409
+      },
+      "render": {
+        "medianMs": 1.582,
+        "p95Ms": 1.968
+      },
+      "merged": {
+        "medianMs": 1.121,
+        "p95Ms": 1.235
+      },
+      "recipeBytes": 31391,
+      "work": {
+        "pixels": 28380,
+        "layerPixels": 14190,
+        "operations": 101
+      },
+      "mergedPixelsIdentical": true
+    },
+    "R1-skink": {
+      "canvas": [
+        32,
+        26
+      ],
+      "instances": 15,
+      "frames": 12,
+      "compile": {
+        "medianMs": 3.351,
+        "p95Ms": 3.975
+      },
+      "render": {
+        "medianMs": 0.602,
+        "p95Ms": 0.678
+      },
+      "merged": {
+        "medianMs": 0.503,
+        "p95Ms": 0.566
+      },
+      "recipeBytes": 24005,
+      "work": {
+        "pixels": 12177,
+        "layerPixels": 5981,
+        "operations": 180
+      },
+      "mergedPixelsIdentical": true,
+      "motionReview": {
+        "medianMs": 16.317,
+        "p95Ms": 17.829
+      }
+    }
+  },
+  "primitives": {
+    "bone": {
+      "medianMs": 0.045,
+      "p95Ms": 0.074
+    },
+    "boneOblique": {
+      "medianMs": 0.101,
+      "p95Ms": 0.122
+    },
+    "mass": {
+      "medianMs": 0.093,
+      "p95Ms": 0.182
+    },
+    "reach": {
+      "medianMs": 0.125,
+      "p95Ms": 0.222
+    }
+  }
+}

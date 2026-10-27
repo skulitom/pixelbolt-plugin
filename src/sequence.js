@@ -174,10 +174,15 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
     width: place.width, height: place.height, alpha: background ? 'none: opaque background' : 'straight (unpremultiplied)',
     pattern, first: 1, digits, differentFrames: encoded.size,
     placement: { scale: place.scale, x: place.x, y: place.y, width: place.spriteWidth, height: place.spriteHeight, source: [sourceWidth, sourceHeight], ...(place.fit && { fit: place.fit, cropped: place.cropped, visible }) },
-    // Run these in the sequence folder. Nothing in Pixelbolt runs them; ffmpeg is a separate program.
+    // Run these in the sequence folder. Nothing in Pixelbolt runs them; ffmpeg is a separate program. H.264 usually
+    // stores colour once for each 2 × 2 pixels (4:2:0), which smears every sprite pixel's colour into its neighbours at
+    // any scale and placement once a player interpolates it, so `h264` is lossless 4:4:4: every colour stays within a
+    // level of YUV rounding, in a file no larger for pixel art. QuickTime, Safari and Windows' own players may not play
+    // 4:4:4; `h264Compatible` is 4:2:0 for them, which needs an even canvas.
     commands: {
       prores4444: `ffmpeg ${input} -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le -vf "scale=out_color_matrix=bt709:flags=neighbor" -colorspace bt709 -color_primaries bt709 -color_trc bt709 "${name}.mov"`,
-      ...(background && even && { h264: `ffmpeg ${input} -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -vf "scale=out_color_matrix=bt709:flags=neighbor" -colorspace bt709 -color_primaries bt709 -color_trc bt709 "${name}.mp4"` })
+      ...(background && { h264: `ffmpeg ${input} -c:v libx264 -preset slow -qp 0 -pix_fmt yuv444p -vf "scale=out_color_matrix=bt709:flags=neighbor" -colorspace bt709 -color_primaries bt709 -color_trc bt709 "${name}.mp4"` }),
+      ...(background && even && { h264Compatible: `ffmpeg ${input} -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -vf "scale=out_color_matrix=bt709:flags=neighbor" -colorspace bt709 -color_primaries bt709 -color_trc bt709 "${name}-yuv420.mp4"` })
     }
   };
   return { info, files, place };
@@ -198,7 +203,9 @@ would blur them.
 To make one video file with ffmpeg (a separate program), run this in this folder:
 
   ${info.commands.prores4444}
-${info.commands.h264 ? `\nor, without alpha:\n\n  ${info.commands.h264}\n` : ''}
+${info.commands.h264 ? `\nor, without alpha, an H.264 .mp4 that keeps every colour (lossless 4:4:4; players built on ffmpeg, such as VLC
+and mpv, play it, but QuickTime, Safari and Windows' own players may not):\n\n  ${info.commands.h264}\n` : ''}${info.commands.h264Compatible ? `\nor an H.264 .mp4 in 4:2:0 for any player, which shares colour between each 2 x 2 pixels and so softens
+every pixel's edge:\n\n  ${info.commands.h264Compatible}\n` : ''}
 In a Windows batch file, write %% for each % in the file pattern.
 ${info.notes.length ? `\nNotes\n${info.notes.map(note => `- ${note}`).join('\n')}\n` : ''}
 sequence.json holds the same facts for programs, with the timing of every pose.
@@ -207,7 +214,9 @@ function finish(sequence, notes) {
   sequence.info.notes = notes;
   sequence.files.set('sequence.json', Buffer.from(JSON.stringify(sequence.info, null, 2) + '\n'));
   sequence.files.set('README.txt', Buffer.from(readme(sequence.info)));
-  return { info: sequence.info, files: sequence.files };
+  // A forced export over an earlier sequence of the same name removes the frames this one no longer has.
+  const name = sequence.info.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return { info: sequence.info, files: sequence.files, owns: { marker: 'sequence.json', folders: ['.'], match: new RegExp(`^${name}_\\d{4,}\\.png$`) } };
 }
 const KEYS = ['fps', 'animation', 'size', 'scale', 'fit', 'align', 'offset', 'background', 'loops', 'seconds', 'step'];
 function common(options, allowed) {

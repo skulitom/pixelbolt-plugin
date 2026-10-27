@@ -1,11 +1,29 @@
 // Bounded scene review, not a game engine. In-memory recipes only; no filesystem or network access.
 import { PixelError, renderProject, parseColor, animationPosition, tileRepeat, tileReport, rampShifter } from './core.js';
-import { EASINGS, ease, pixelId } from './craft.js';
+import { EASINGS, ease, pixelId, random } from './craft.js';
 import { fields, point } from './authoring.js';
 import { expandTilemap } from './autotile.js';
 
 const fail = (path, message) => { throw new PixelError(path, message); };
 const int = (v, min, max, path) => { if (!Number.isInteger(v) || v < min || v > max) fail(path, `expected an integer from ${min} to ${max}`); return v; };
+const num = (v, min, max, path) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail(path, `expected a number from ${min} to ${max}`); return v; };
+const smooth = t => t * t * (3 - 2 * t);
+// A light's flicker at `time`: seeded value noise from 0 to 1 over `steps` evenly spaced points per scene duration,
+// eased between them, wrapping at the duration so a looping scene flickers without a seam.
+function flickerAt({ steps, seed }, light, time, duration) {
+  const u = (time % duration) / duration * steps, k = Math.floor(u), a = random(seed, light, k % steps), b = random(seed, light, (k + 1) % steps);
+  return a + (b - a) * smooth(u - k);
+}
+// A light's strength and radius at `time` from its keys: held before the first and after the last, and eased between
+// neighbours by the earlier key's ease, as trajectories are.
+function keyedAt(keys, time) {
+  if (time <= keys[0].time) return keys[0];
+  for (let k = 1; k < keys.length; k++) {
+    const a = keys[k - 1], b = keys[k];
+    if (time < b.time) { const f = ease(a.ease, (time - a.time) / (b.time - a.time)); return { strength: a.strength + (b.strength - a.strength) * f, radius: a.radius + (b.radius - a.radius) * f }; }
+  }
+  return keys.at(-1);
+}
 const alphaOver = (target, at, color) => {
   if (color[3] === 255) { target.set(color, at); return; }
   const alpha = color[3] / 255; if (!alpha) return;
@@ -106,8 +124,12 @@ export function prepareScene(source) {
   source.instances.forEach((instance, i) => { if (typeof instance?.name === 'string') named.set(instance.name, named.has(instance.name) ? null : i); });
   const instances = source.instances.map((instance, i) => {
     const path = `scene.instances[${i}]`;
-    fields(instance, ['name', 'asset', 'at', 'anchor', 'scale', 'frame', 'animation', 'hidden', 'repeat', 'step', 'sequence', 'trajectory', 'attach', 'sort', 'shade', 'tilemap'], path);
+    fields(instance, ['name', 'asset', 'at', 'anchor', 'scale', 'frame', 'animation', 'hidden', 'repeat', 'step', 'sequence', 'trajectory', 'attach', 'sort', 'shade', 'tilemap', 'lit'], path);
     if (instance.name !== undefined && typeof instance.name !== 'string') fail(`${path}.name`, 'expected a string label');
+    // `lit: false` keeps a placement's authored colours under scene lighting: a fire, a lamp or a glow is a light
+    // source, not something the scene's lights fall on.
+    if (instance.lit !== undefined && typeof instance.lit !== 'boolean') fail(`${path}.lit`, 'expected a boolean');
+    if (instance.lit === false && instance.shade !== undefined) fail(`${path}.lit`, 'a shade placement draws no colours of its own to keep');
     if (typeof instance.asset !== 'string' || !Object.hasOwn(assets, instance.asset)) fail(`${path}.asset`, 'unknown asset');
     const project = assets[instance.asset].recipe;
     // `anchor: "frame"` places every drawn frame by its own atlas anchor (per-frame or recipe-level), so an animated
@@ -203,8 +225,44 @@ export function prepareScene(source) {
     const steps = int(source.lighting.steps ?? 2, 1, 8, 'scene.lighting.steps');
     if (!Array.isArray(lights) || lights.length > 8) fail('scene.lighting.lights', 'expected at most 8 lights');
     lighting = { ambient, bands, scope, mode, steps, lights: lights.map((light, i) => {
-      fields(light, ['at', 'height', 'radius', 'color'], `scene.lighting.lights[${i}]`);
-      return { at: point(light.at, 'light.at'), height: int(light.height ?? 24, 1, 256, 'light.height'), radius: int(light.radius ?? 96, 1, 512, 'light.radius'), color: parseColor(light.color ?? '#fff') };
+      const lp = `scene.lighting.lights[${i}]`;
+      fields(light, ['at', 'height', 'radius', 'color', 'strength', 'follow', 'flicker', 'keys'], lp);
+      // A following light rides a placement (where it stands) or one of its frame points; `at` is then an offset. It is
+      // off while that placement is hidden or its current frame has no such point.
+      let follow = null;
+      if (light.follow !== undefined) {
+        fields(light.follow, ['instance', 'point'], `${lp}.follow`);
+        const index = named.get(light.follow.instance), target = source.instances[index];
+        if (typeof light.follow.instance !== 'string' || index === undefined || index === null || target.tilemap !== undefined) fail(`${lp}.follow.instance`, 'expected the name of a uniquely named placement that is not a tilemap');
+        if (light.follow.point !== undefined && (typeof light.follow.point !== 'string' || !assets[target.asset].recipe.frames.some(frame => frame.points && Object.hasOwn(frame.points, light.follow.point)))) fail(`${lp}.follow.point`, `no frame of ${target.asset} has a point named ${JSON.stringify(light.follow.point)}`);
+        follow = { index, point: light.follow.point ?? null };
+      }
+      const at = follow && light.at === undefined ? [0, 0] : point(light.at, `${lp}.at`);
+      const radius = int(light.radius ?? 96, 1, 512, `${lp}.radius`), strength = num(light.strength ?? 1, 0, 8, `${lp}.strength`);
+      // Flicker raises or lowers a light's strength by up to `amount` of it and its reach by up to half that, along seeded
+      // noise that changes about every `every` ms and repeats once per scene duration.
+      let flicker = null;
+      if (light.flicker !== undefined) {
+        fields(light.flicker, ['amount', 'every', 'seed'], `${lp}.flicker`);
+        const every = int(light.flicker.every ?? 80, 10, 10000, `${lp}.flicker.every`);
+        flicker = { amount: num(light.flicker.amount, 0, 1, `${lp}.flicker.amount`), steps: Math.max(1, Math.round(duration / every)), seed: int(light.flicker.seed ?? 0, 0, 2147483647, `${lp}.flicker.seed`) };
+      }
+      // Keys set strength and radius over time, at milliseconds or cue times ("strike+70"): a flash, a lamp lit later.
+      let keys = null;
+      if (light.keys !== undefined) {
+        if (!Array.isArray(light.keys) || !light.keys.length || light.keys.length > 64) fail(`${lp}.keys`, 'expected 1–64 timed keys');
+        let prior = -1;
+        keys = light.keys.map((key, j) => {
+          const kp = `${lp}.keys[${j}]`;
+          fields(key, ['time', 'strength', 'radius', 'ease'], kp);
+          const time = when(key.time, `${kp}.time`, duration);
+          if (time <= prior) fail(`${lp}.keys`, 'key times must increase strictly');
+          prior = time;
+          if (key.ease !== undefined && !EASINGS.includes(key.ease)) fail(`${kp}.ease`, `expected one of ${EASINGS.join(', ')}`);
+          return { time, strength: key.strength === undefined ? strength : num(key.strength, 0, 8, `${kp}.strength`), radius: key.radius === undefined ? radius : int(key.radius, 1, 512, `${kp}.radius`), ease: key.ease ?? 'linear' };
+        });
+      }
+      return { at, height: int(light.height ?? 24, 1, 256, `${lp}.height`), radius, color: parseColor(light.color ?? '#fff', {}, `${lp}.color`), strength, follow, flicker, keys };
     }) };
     if (mode === 'ramp' && !Object.keys(shifts).length) warnings.push('Ramp lighting needs ramps in the recipes it lights; no asset declares any, so nothing is lit.');
   }
@@ -220,10 +278,13 @@ export function renderScene(scene, { time = 0, lit = true, density = false } = {
     const animation = selection.animation === undefined ? null : project.animations[selection.animation];
     return animation ? animation.frames[animationPosition(project, animation, time - start)] : selection.frame ? project.frames.findIndex(f => f.name === selection.frame) : 0;
   };
-  const drawFrame = (id, index, left, top, s, label, shade = null) => {
+  // The lights as they are at this time (where they are, how strong, how far they reach), once the placements they
+  // follow are known.
+  let lights = [];
+  const drawFrame = (id, index, left, top, s, label, shade = null, unlit = false) => {
     const asset = assets[id], shift = shifts[id], project = asset.recipe, frame = project.frames[index];
     const normal = asset.normal?.frames[index].data, emission = asset.emissive?.frames[index].data;
-    const light = !shade && lit && lighting && (normal || emission || lighting.scope === 'all') && (lighting.mode === 'multiply' || shift);
+    const light = !shade && !unlit && lit && lighting && (normal || emission || lighting.scope === 'all') && (lighting.mode === 'multiply' || shift);
     const rgba = new Uint8ClampedArray(4);
     for (let y = 0; y < project.height; y++) for (let x = 0; x < project.width; x++) {
       const at = (y * project.width + x) * 4;
@@ -233,13 +294,15 @@ export function renderScene(scene, { time = 0, lit = true, density = false } = {
         let nx = 0, ny = 0, nz = 1;
         if (normal?.[at + 3]) { nx = normal[at] / 127.5 - 1; ny = normal[at + 1] / 127.5 - 1; nz = normal[at + 2] / 127.5 - 1; }
         const norm = Math.hypot(nx, ny, nz) || 1, intensity = [lighting.ambient, lighting.ambient, lighting.ambient];
-        for (const source of lighting.lights) {
+        for (const source of lights) {
+          if (!source.strength) continue;
           const dx = source.at[0] - (left + x * s), dy = source.at[1] - (top + y * s), dz = source.height;
           const distance = Math.hypot(dx, dy, dz), diffuse = Math.max(0, (nx * dx + ny * dy + nz * dz) / norm / distance) * Math.max(0, 1 - Math.hypot(dx, dy) / source.radius);
           // Band the light's brightness once, then tint it: banding each channel separately made a coloured light
-          // change band at different distances per channel, painting rainbow rings.
+          // change band at different distances per channel, painting rainbow rings. Strength scales the banded light,
+          // so above 1 a flash can lift ramp-lit colours past their authored shade.
           const band = Math.round(Math.min(1, diffuse) * (lighting.bands - 1)) / (lighting.bands - 1);
-          for (let c = 0; c < 3; c++) intensity[c] += band * source.color[c] / 255;
+          for (let c = 0; c < 3; c++) intensity[c] += band * source.strength * source.color[c] / 255;
         }
         if (lighting.mode === 'ramp') {
           // Brightness 1 keeps the authored colour; each `steps`-th of darkness (or of light above 1, up to double) is one
@@ -284,20 +347,33 @@ export function renderScene(scene, { time = 0, lit = true, density = false } = {
     }
     states[i] = { hidden, index, frame, position, left: position[0] - anchor[0] * instance.scale, top: position[1] - anchor[1] * instance.scale, scale: instance.scale };
   }
+  if (lighting && lit) lights = lighting.lights.map((light, i) => {
+    let at = light.at, on = true, { strength, radius } = light.keys ? keyedAt(light.keys, time) : light;
+    if (light.follow) {
+      const target = states[light.follow.index], spot = target && !target.hidden ? (light.follow.point ? target.frame.points?.[light.follow.point] : null) : undefined;
+      if (!target || target.hidden || spot === undefined) on = false;
+      else if (spot) at = [target.left + spot[0] * target.scale + light.at[0], target.top + spot[1] * target.scale + light.at[1]];
+      else at = [target.position[0] + light.at[0], target.position[1] + light.at[1]];
+    }
+    // Flicker swings either way around the light's own strength, so a flickering light is as bright on average as a steady one.
+    if (light.flicker) { const swing = light.flicker.amount * (1 - 2 * flickerAt(light.flicker, i, time, scene.duration)); strength *= 1 + swing; radius *= 1 + swing / 2; }
+    return { at, height: light.height, radius, color: light.color, strength: on ? strength : 0 };
+  });
   // Drawing order is list order, except that placements with sort "ground" are drawn together, where the first of
   // them is listed, ordered by their ground line (the y of their placement point), as a game draws actors and props.
+  // Every placement draws each of its repeat copies, row by row; a tilemap draws once.
   const order = [], sorted = scene.instances.flatMap((instance, i) => instance.sort === 'ground' ? [i] : []);
+  const copies = j => { const [columns, rows] = scene.instances[j].repeat ?? [1, 1]; return Array.from({ length: columns * rows }, (_, k) => [j, k % columns, Math.floor(k / columns)]); };
   for (const [i, instance] of scene.instances.entries()) {
-    if (instance.sort !== 'ground') { order.push([i, 0, 0]); continue; }
+    if (instance.sort !== 'ground') { order.push(...copies(i)); continue; }
     if (i !== sorted[0]) continue;
-    const copies = sorted.flatMap(j => { const one = scene.instances[j]; return Array.from({ length: one.repeat[0] * one.repeat[1] }, (_, k) => [j, k % one.repeat[0], Math.floor(k / one.repeat[0])]); });
-    order.push(...copies.map(([j, rx, ry], n) => ({ n, entry: [j, rx, ry], ground: states[j].position[1] + ry * scene.instances[j].step[1] })).sort((a, b) => a.ground - b.ground || a.n - b.n).map(item => item.entry));
+    order.push(...sorted.flatMap(copies).map(([j, rx, ry], n) => ({ n, entry: [j, rx, ry], ground: states[j].position[1] + ry * scene.instances[j].step[1] })).sort((a, b) => a.ground - b.ground || a.n - b.n).map(item => item.entry));
   }
   for (const [i, rx, ry] of order) {
     const instance = scene.instances[i], asset = assets[instance.asset], project = asset.recipe, s = instance.scale, label = instance.name ?? `${instance.asset}#${i}`;
     if (instance.tilemap) {
       const { tilemap } = instance, left = instance.at[0] - instance.anchor[0] * s, top = instance.at[1] - instance.anchor[1] * s;
-      for (const cell of tilemap.cells) drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade);
+      for (const cell of tilemap.cells) drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false);
       placements.push({ name: label, tilemap: true, x: left, y: top, w: tilemap.columns * tilemap.tile[0] * s, h: tilemap.rows * tilemap.tile[1] * s, tiles: tilemap.cells.length, scale: s });
       continue;
     }
@@ -305,7 +381,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false } = {
     if (state.hidden) continue;
     const left = state.left + rx * instance.step[0], top = state.top + ry * instance.step[1];
     placements.push({ name: instance.name ?? instance.asset, frame: state.frame.name, x: left, y: top, w: project.width * s, h: project.height * s, scale: s, ...(instance.shade && { shade: instance.shade }) });
-    drawFrame(instance.asset, state.index, left, top, s, label, instance.shade);
+    drawFrame(instance.asset, state.index, left, top, s, label, instance.shade, instance.lit === false);
   }
   if (density) for (const box of placements) {
     const color = box.scale === 1 ? [65, 201, 240, 180] : [255, 70, 100, 255];
@@ -315,7 +391,10 @@ export function renderScene(scene, { time = 0, lit = true, density = false } = {
   }
   const total = [...clipped.values()].reduce((sum, n) => sum + n, 0), named = [...clipped].sort((a, b) => b[1] - a[1]);
   const clipWarning = total ? [`${total} drawn pixels clipped at scene bounds (${named.slice(0, 4).map(([name, n]) => `${name} ${n}`).join(', ')}${named.length > 4 ? `, ${named.length - 4} more` : ''}).`] : [];
-  return { data, width, height, placements, warnings: [...scene.warnings, ...clipWarning], ...(total && { clipped: Object.fromEntries(named) }) };
+  // Where each light was and how strong, rounded for reading; viewers draw their markers from it.
+  const round = v => Math.round(v * 100) / 100;
+  const lightsNow = lights.map(light => ({ at: light.at.map(round), radius: round(light.radius), strength: round(light.strength) }));
+  return { data, width, height, placements, warnings: [...scene.warnings, ...clipWarning], ...(total && { clipped: Object.fromEntries(named) }), ...(lightsNow.length && { lights: lightsNow }) };
 }
 // Kept for compatibility: the 3x3 repeat plus the same advisory seam evidence as `inspect --view tile`.
 export function inspectTile(project, frameName = project.frames[0].name) {

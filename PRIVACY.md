@@ -6,7 +6,9 @@ network access, and neither sends your files to the developer or to any other se
 - **What it reads:** the pixel-art recipes (JSON) and PNG files you ask Claude to work with, inside the folder you
   opened in Claude Code. These are usually game art, but they can contain whatever you drew or imported.
 - **What it stores:** recipe revisions and exports (PNG, GIF, APNG, atlases, frame sequences), written as new files
-  under `output/` in that folder (revisions in `output/.revisions/`), until you delete them.
+  under `output/` in that folder (revisions in `output/.revisions/`), until you delete them. When asked, it also
+  saves copies of an export (PNG, GIF, JSON or Godot `.tres` files) at paths named inside that folder, and replaces
+  an existing file there only when asked to overwrite it.
 - **What it sends:** nothing. What Claude itself sends to Anthropic while it works is covered by Anthropic's own
   privacy policy, not this one.
 

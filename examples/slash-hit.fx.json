@@ -1,0 +1,80 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "slash-hit",
+  "width": 80,
+  "height": 64,
+  "palette": {
+    "k": "#16182e",
+    "b": "#2f4fb3",
+    "c": "#4fa3f7",
+    "p": "#aee6ff",
+    "W": "#ffffff",
+    "y": "#ffe066",
+    "o": "#ff9a3c"
+  },
+  "symbols": { "spark": ["W"], "spark-y": ["y"], "spark-o": ["o"] },
+  "effects": {
+    "slash-hit": {
+      "frames": 9,
+      "duration": { "from": 40, "to": 90, "ease": "in" },
+      "seed": 3,
+      "looks": {
+        "steel": { "colors": ["b", "c", "p", "W"], "thresholds": [0.15, 0.4, 0.65, 0.88] },
+        "flash": { "colors": ["o", "y", "W"], "thresholds": [0.2, 0.5, 0.8] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "slash",
+          "look": "steel",
+          "at": [38, 42],
+          "frames": [0, 8],
+          "radius": 32,
+          "width": [15, 11],
+          "arc": [195, 345],
+          "squash": [1, 0.68],
+          "tilt": -16,
+          "reveal": 0.3
+        },
+        {
+          "kind": "star",
+          "look": "flash",
+          "at": [64, 27],
+          "frames": [1, 6],
+          "radius": [18, 5],
+          "width": [3, 1],
+          "points": 8,
+          "ratio": 0.5,
+          "power": [1.3, 0.6],
+          "cue": "hit"
+        },
+        {
+          "kind": "ring",
+          "look": "flash",
+          "at": [64, 27],
+          "frames": [2, 7],
+          "radius": [4, 13],
+          "width": [4, 3, 2],
+          "noise": 0.85,
+          "scale": 4,
+          "power": [1.2, 0.9, 0.3]
+        }
+      ],
+      "emitters": [
+        {
+          "at": [64, 27],
+          "burst": 12,
+          "start": 2,
+          "angle": [150, 390],
+          "speed": [1.5, 3.2],
+          "gravity": [0, 0.25],
+          "drag": 0.05,
+          "life": [4, 7],
+          "shapes": ["spark", "spark-y", "spark-o"],
+          "trail": { "color": "o", "length": 1 }
+        }
+      ]
+    }
+  }
+}

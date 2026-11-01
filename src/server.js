@@ -9,6 +9,7 @@ import { renderProject, MAX_REQUEST_BYTES, PixelError } from './core.js';
 import { createSequence } from './sequence.js';
 import { prepareScene } from './scene.js';
 import { compilePoses } from './authoring.js';
+import { compileWaves } from './wave.js';
 
 const routes = new Map([
   ['/', ['../studio/index.html', 'text/html; charset=utf-8']],
@@ -33,13 +34,15 @@ const routes = new Map([
   ['/fluid-lab.js', ['../studio/fluid-lab.js', 'text/javascript; charset=utf-8']],
   ['/fluid-controls.js', ['../studio/fluid-controls.js', 'text/javascript; charset=utf-8']],
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
+  ['/wave.js', ['./wave.js', 'text/javascript; charset=utf-8']],
+  ...['interference', 'portal'].map(name => [`/examples/${name}.wave.json`, [`../examples/${name}.wave.json`, 'application/json']]),
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
   ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
-export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/project.json'];
+export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/scene-source.json', '/project.json', '/shared-palette.json'];
 export const STUDIO_PORT = 4747;
 // The most the studio sends back as one ZIP of frames; longer or larger clips belong on the command line.
 const SEQUENCE_ZIP_BYTES = 512 * 1048576;
@@ -57,11 +60,15 @@ export function openBrowser(url) {
 }
 // `fallback` takes any free port when `port` is in use, so a second studio still starts. The studio's unsaved-draft
 // recovery lives in browser storage, which browsers keep per address: a draft is only found again on the same port.
-export async function startStudio({ port = STUDIO_PORT, fallback = false, project, quiet = false } = {}) {
+// `project` has its file references resolved and `source` is the document as written. The scene page saves a scene's
+// light settings into its source; the studio's editor shows a recipe's source, which Save JSON writes, so a palette
+// that links a shared file keeps `{ "$ref": … }`. The page draws that recipe with `sharedPalette`, the one file it links
+// as read here (`{ $ref, palette, ramps }`).
+export async function startStudio({ port = STUDIO_PORT, fallback = false, project, source = project, sharedPalette = null, quiet = false } = {}) {
   const scene = project?.format === 'pixelforge-scene';
   if (project) {
     if (scene) prepareScene(project);
-    else renderProject(project.format === 'pixelforge-poses' ? compilePoses(project).recipe : project);
+    else renderProject(project.format === 'pixelforge-poses' ? compilePoses(project).recipe : project.format === 'pixelforge-wave' ? compileWaves(project).recipe : project);
   }
   const server = http.createServer(async (req, res) => {
     const address = server.address(), hosts = [`127.0.0.1:${address.port}`, `localhost:${address.port}`];
@@ -93,13 +100,24 @@ export async function startStudio({ port = STUDIO_PORT, fallback = false, projec
       }
       if (req.method !== 'GET') { reply(405, 'text/plain', 'Method not allowed'); return; }
       if (scene && url.pathname === '/') { reply(200, 'text/html; charset=utf-8', await readFile(new URL('../studio/scene.html', import.meta.url))); return; }
-      if (scene && url.pathname === '/scene.json') { reply(200, 'application/json', JSON.stringify(project)); return; }
-      // Without a scene of its own, the scene page shows the lit forest spirit, its recipe files resolved here.
-      if (url.pathname === '/scene.json') {
-        const file = fileURLToPath(new URL('../examples/forest-spirit-lit.scene.json', import.meta.url)), { document } = await resolveReferences(JSON.parse(await readFile(file, 'utf8')), { baseDir: path.dirname(file) });
-        reply(200, 'application/json', JSON.stringify(document)); return;
+      // The scene page draws the scene with its files resolved (/scene.json) and saves its light settings into the scene
+      // as written (/scene-source.json), so a saved scene keeps the file references it had. Without a scene of its own the
+      // page shows the lit forest spirit. Both are only read.
+      if (url.pathname === '/scene.json' || url.pathname === '/scene-source.json') {
+        const drawn = url.pathname === '/scene.json';
+        let body = drawn ? project : source;
+        if (!scene) {
+          const file = fileURLToPath(new URL('../examples/forest-spirit-lit.scene.json', import.meta.url)), written = JSON.parse(await readFile(file, 'utf8'));
+          body = drawn ? (await resolveReferences(written, { baseDir: path.dirname(file) })).document : written;
+        }
+        // An exported scene's folder has only its resolved scene.json; this header tells the page that a source is here too.
+        if (drawn) res.setHeader('X-Pixelbolt-Scene-Source', 'scene-source.json');
+        reply(200, 'application/json', JSON.stringify(body)); return;
       }
-      if (url.pathname === '/project.json') { reply(200, 'application/json', JSON.stringify(project ?? null)); return; }
+      // The recipe as written, and the shared palette file it links (null for none). Both are only read, and the page
+      // asks for no other file: a recipe that links another is not drawn.
+      if (url.pathname === '/project.json') { reply(200, 'application/json', JSON.stringify(source ?? null)); return; }
+      if (url.pathname === '/shared-palette.json') { reply(200, 'application/json', JSON.stringify(sharedPalette)); return; }
       if (!routes.has(url.pathname)) { reply(404, 'text/plain', 'Not found'); return; }
       const [file, type] = routes.get(url.pathname);
       reply(200, type, await readFile(new URL(file, import.meta.url)));

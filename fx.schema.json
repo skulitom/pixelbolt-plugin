@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt particle effects",
-  "description": "Seeded particle emitters compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), drawn with stamp, grid and line operations on these symbols. Deterministic for a given seed.",
+  "description": "Seeded particle emitters and shape layers (shockwave rings, slashes, beams, lightning, magic circles, impact stars, fireballs, streams of water) compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…). Shapes draw as one grid per frame between behind particles and the rest; particles draw with stamp, grid and line operations on these symbols. Deterministic for a given seed.",
   "type": "object",
   "properties": {
     "format": {
@@ -48,8 +48,66 @@
         "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
       },
       "additionalProperties": {
-        "$ref": "#/$defs/rows"
-      }
+        "oneOf": [
+          {
+            "$ref": "#/$defs/rows"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "recipe": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A recipe or pose source file, relative to this source (CLI and MCP)."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "revision": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "revision"
+                    ],
+                    "additionalProperties": false,
+                    "description": "A saved MCP revision."
+                  },
+                  {
+                    "type": "object",
+                    "description": "An inline recipe or pixelforge-poses source."
+                  }
+                ]
+              },
+              "frame": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The frame to take; default the first."
+              },
+              "animation": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Take every frame of this animation instead, in playing order: a sprite or aura then shows its frame i in the effect's frame i (holding the last; round again in a loop). Not a particle shape."
+              }
+            },
+            "required": [
+              "recipe"
+            ],
+            "additionalProperties": false,
+            "not": {
+              "required": [
+                "frame",
+                "animation"
+              ]
+            },
+            "description": "A frame (or an animation) of a recipe or pose source, over its whole canvas (so it keeps the source's coordinates). Its colours join the palette under their own keys, or spare letters where the effect already uses a key for another colour."
+          }
+        ]
+      },
+      "description": "Particle drawings and sprites; may be left out when no effect has emitters or auras."
     },
     "anchor": {
       "type": "array",
@@ -134,7 +192,7 @@
           },
           "loop": {
             "type": "boolean",
-            "description": "Seamless loop: the simulation warms up so particles in flight at frame 0 are those alive at the end. Needs a finite life."
+            "description": "Seamless loop: the simulation warms up so particles in flight at frame 0 are those alive at the end (needs a finite life), and layers spanning every frame cycle, so their last frame runs into their first."
           },
           "seed": {
             "type": "integer",
@@ -161,7 +219,7 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Spawn centre [x, y] in canvas pixels. For a child (from), an offset from the parent particle; default [0, 0]."
+                  "description": "Spawn centre [x, y] in canvas pixels. For a child (from), an offset from the parent particle; default [0, 0]. For a sprite emitter, the sprite's top-left corner, in whole pixels."
                 },
                 "area": {
                   "type": "array",
@@ -476,20 +534,28 @@
                 "tint": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "propertyNames": {
-                      "minLength": 1,
-                      "maxLength": 1
-                    },
-                    "additionalProperties": {
-                      "type": "string",
-                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
-                    },
-                    "description": "Recolor grid characters for this operation only: character → palette name or colour."
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "minLength": 1,
+                          "maxLength": 1
+                        },
+                        "additionalProperties": {
+                          "type": "string",
+                          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                        },
+                        "description": "Recolor grid characters for this operation only: character → palette name or colour."
+                      },
+                      {
+                        "type": "string",
+                        "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                      }
+                    ]
                   },
                   "maxItems": 64,
                   "minItems": 1,
-                  "description": "Colour stages over each life, the first at birth, spread like play: life. Each overrides the particle's remap for the characters it names, so a spark cools from white to red without a symbol per colour."
+                  "description": "Colour stages over each life, the first at birth, spread like play: life. A remap overrides the particle's remap for the characters it names, so a spark cools from white to red without a symbol per colour; one colour turns the whole particle that colour (a sprite's pixels flying off as light)."
                 },
                 "trail": {
                   "type": "object",
@@ -573,34 +639,1667 @@
                   "type": "string",
                   "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
                   "description": "Name a point at the spawn centre in each frame this emitter spawns. Frames carry it as a named point, which atlases export for game code (a shake or a pause on impact); the metadata lists every cue."
+                },
+                "sprite": {
+                  "type": "object",
+                  "properties": {
+                    "symbol": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                      "description": "The symbol whose pixels the particles spawn from: rows, or a frame or animation of a recipe or pose source (see symbols); an animation shows its frame i in frame i."
+                    },
+                    "pixels": {
+                      "enum": [
+                        "all",
+                        "edge",
+                        "outline"
+                      ],
+                      "description": "all (default): every visible pixel; edge: the visible pixels beside an empty one; outline: the empty pixels just outside the sprite (particles from there need shapes or a blob)."
+                    },
+                    "draw": {
+                      "type": "boolean",
+                      "description": "Draw the sprite itself under its particles: what is left of it during a release (the default there), or all of it every frame with burst or rate (default false, for an overlay the game draws over its own sprite). With no burst, rate or release, the emitter only draws the sprite: a character under its trail or aura."
+                    }
+                  },
+                  "required": [
+                    "symbol"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Spawn on a symbol's pixels, its top-left corner at at, instead of around at. Without shapes or a blob each particle is its own pixel, in its colour: dissolves, teleports, sprites that shatter. With rate on the outline: sparkles round a figure."
+                },
+                "release": {
+                  "type": "object",
+                  "properties": {
+                    "sweep": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Direction the release travels across the sprite, in degrees clockwise (270 up: the lowest pixels leave first). Default none: a seeded random order."
+                    },
+                    "jitter": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "How much each pixel's turn strays from the sweep; default 0.3."
+                    },
+                    "share": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the leaving pixels that become particles; the rest just vanish on their turn. Default 1."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false,
+                  "description": "With a sprite, in place of burst or rate: every pixel leaves once, between start and end, while what is left of the sprite stays drawn. Not in a loop; reverse the animation to put a sprite together."
+                },
+                "blob": {
+                  "type": "object",
+                  "properties": {
+                    "look": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                      "description": "The look it is drawn into; may be left out when the effect has one look."
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 64
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 64
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels: a number, or 2–8 keys spread over each particle's life (shrinking drops). Default 3."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false,
+                  "description": "Draw each particle as a soft disc, (1 − d²/r²)², added to a look's field instead of stamping a symbol: touching drops merge into one body of water that stretches, pinches and splits, banded, lit and outlined by the look. Replaces shapes, face, play, remaps, tint, trail, dissolve, pattern and behind."
                 }
               },
-              "required": [
-                "shapes"
-              ],
+              "required": [],
               "additionalProperties": false,
-              "anyOf": [
+              "allOf": [
                 {
-                  "required": [
-                    "at"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "at"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "from"
+                      ]
+                    }
                   ]
                 },
                 {
-                  "required": [
-                    "from"
+                  "anyOf": [
+                    {
+                      "required": [
+                        "shapes"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "blob"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "sprite"
+                      ]
+                    }
                   ]
+                },
+                {
+                  "not": {
+                    "required": [
+                      "shapes",
+                      "blob"
+                    ]
+                  }
                 }
               ]
             },
             "maxItems": 16,
-            "minItems": 1
+            "minItems": 1,
+            "description": "Particle emitters; may be left out when the effect has layers. Blob emitters draw into the looks."
+          },
+          "looks": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 8,
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "additionalProperties": {
+              "$ref": "#/$defs/shape-look"
+            },
+            "description": "Named colour ramps for the layers and blob particles, drawn in this order (later over earlier)."
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "ring"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 512
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 512
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels to the leading edge. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 256
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Band thickness behind the edge; default 3. Ending at 2 or more, with noise, breaks a fading ring up instead of thinning it to an outline. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "fill": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Glow inside the band, as a share; default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded breaks along the ring; default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 6."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A shockwave: a crisp leading edge at radius, fading inward over width."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "slash"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 512
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 512
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels to the outer edge. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 256
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Thickest point, inward from the edge; default 6. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "arc": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -3600,
+                        "maximum": 3600
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[from, to] degrees clockwise (0 right, 90 down), at most 360 apart; the slash sweeps from the first to the second."
+                    },
+                    "reveal": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.95,
+                      "description": "Share of the window the shape takes to draw on; default 0.35 (0 for a layer spanning a looping effect)."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "radius",
+                    "arc"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A crescent: a crisp outer arc at radius, thickest mid-arc and pointed at both ends; the head sweeps arc during reveal and the tail chases it."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "beam"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "to": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "The far end."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 256
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels across; default 5. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "reveal": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.95,
+                      "description": "Share of the window the shape takes to draw on; default 0.15 (0 for a layer spanning a looping effect)."
+                    },
+                    "wobble": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share by which the width ripples; default 0.15."
+                    },
+                    "wavelength": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 512,
+                      "description": "Pixels between ripples; default 12."
+                    },
+                    "waves": {
+                      "type": "number",
+                      "minimum": -64,
+                      "maximum": 64,
+                      "description": "Ripples that pass over the window; negative runs back toward at. Default 3."
+                    },
+                    "fade": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share by which it dims toward to (a pillar of light); default 0."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A straight beam from at to to, brightest on its axis, with travelling ripples."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "bolt"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "to": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Where it strikes."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 9
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 9
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Core thickness in pixels; default 1. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "glow": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 4
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Glow in pixels around the core; default 1. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "jag": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "How far the path strays; default 0.35."
+                    },
+                    "branches": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 8,
+                      "description": "Default 2."
+                    },
+                    "reroll": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 256,
+                      "description": "Frames per new path; 0 keeps one. Default 2."
+                    },
+                    "segment": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 64,
+                      "description": "Pixels per straight piece; default 4."
+                    },
+                    "reveal": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.95,
+                      "description": "Share of the window the shape takes to draw on; default 0."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Lightning from at to to: a jagged one-pixel core with a glow and seeded branches, re-rolled every reroll frames."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "glyph"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 2,
+                          "maximum": 512
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 2,
+                            "maximum": 512
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Outer ring radius. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "inner": {
+                      "type": "number",
+                      "minimum": 0.2,
+                      "maximum": 0.95,
+                      "description": "Inner ring as a share of radius; default 0.72."
+                    },
+                    "points": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 12,
+                      "description": "Star corners on the inner ring: 0 for none (default 5)."
+                    },
+                    "step": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 6,
+                      "description": "Corners each star line skips to, fewer than points: 1 a polygon, 2 a pentagram from 5. Default the largest below half the corners: 1 for 3 or 4, 2 for 5 or 6, 3 for 7 or 8."
+                    },
+                    "runes": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 48,
+                      "description": "Default 12."
+                    },
+                    "double": {
+                      "type": "boolean",
+                      "description": "A second outer ring two pixels inside the first."
+                    },
+                    "spin": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -3600,
+                          "maximum": 3600
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -3600,
+                            "maximum": 3600
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees the runes travel round (the star turns the other way); default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "reveal": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.95,
+                      "description": "Share of the window the shape takes to draw on; default 0.3 (0 for a layer spanning a looping effect)."
+                    },
+                    "glow": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 4
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 4
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Glow in pixels around the ink; default 1. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "fill": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Glow inside the outer ring; default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A magic circle in one-pixel ink: an outer ring (doubled on request), an inner ring, upright seeded runes between them and an optional star polygon; it draws on clockwise from the top."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "star"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 512
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 512
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Length of the long spikes. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "points": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 16,
+                      "description": "Default 8."
+                    },
+                    "ratio": {
+                      "type": "number",
+                      "minimum": 0.05,
+                      "maximum": 1,
+                      "description": "Length of the short spikes; default 0.55."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 64
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 64
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Half-width at the base; default 2.5. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "core": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 128
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 128
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Core radius; default 1.2 × width. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "angle": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Direction of the first spike; default 0 (right)."
+                    },
+                    "spin": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -3600,
+                          "maximum": 3600
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -3600,
+                            "maximum": 3600
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees turned over the window; default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "jitter": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded variation in spike length; default 0."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "An impact star: points spikes, every other one ratio as long, tapering to one-pixel tips around a bright core."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "burst"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "tilt": {
+                      "$ref": "#/$defs/layer-tilt"
+                    },
+                    "squash": {
+                      "$ref": "#/$defs/layer-squash"
+                    },
+                    "radius": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 512
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 512
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "hole": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Burnt-out centre as a share of radius; default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Default 0.4."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    },
+                    "boil": {
+                      "type": "number",
+                      "minimum": -512,
+                      "maximum": 512,
+                      "description": "Pixels the noise moves outward over the window (each cycle, at a steady pace, for a layer spanning a looping effect); default half the largest radius."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A fireball or puff: a disc broken by seeded smooth noise that boils outward, hottest in the middle, with an optional hole opening from the centre."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "stream"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "through": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "maxItems": 2,
+                        "minItems": 2
+                      },
+                      "maxItems": 7,
+                      "minItems": 1,
+                      "description": "More [x, y] points; the curve passes through at and each of them."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 256
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels across at the widest; default 6. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "taper": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 2
+                      },
+                      "maxItems": 8,
+                      "minItems": 2,
+                      "description": "Width shares spread along the drawn part, from tail to head; default [0, 1, 0], pointed at both ends."
+                    },
+                    "head": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Share of the curve the front has reached; default 1. Counts to the end of each frame, as reveals do. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "tail": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Share of the curve the back has left behind; default 0. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "sway": {
+                      "type": "number",
+                      "minimum": -64,
+                      "maximum": 64,
+                      "description": "Pixels it swings sideways at the far end, less toward at; default 0."
+                    },
+                    "wavelength": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 512,
+                      "description": "Pixels between sway waves; default 16."
+                    },
+                    "waves": {
+                      "type": "number",
+                      "minimum": -64,
+                      "maximum": 64,
+                      "description": "Sway waves that pass over the window; default 1."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "through"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A tapered body of water (or anything that flows) along a smooth curve from at through 1–7 more points, brightest on its centre line: the part between tail and head is drawn, narrowing by taper, swaying in travelling waves. Geyser spikes, whips, spirals, wave curls."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "aura"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "symbol": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                      "description": "The symbol it hugs: rows, or a frame or animation of a recipe or pose source (see symbols); an animation is hugged frame for frame."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 32
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 32
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels the glow reaches beside and below the sprite; default 3. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "rise": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 4,
+                      "description": "How many times further it reaches upward; default 2."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "How far the noise moves the edge in and out and breaks up the bands; default 0.5."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels, stretched upright by rise; default 3."
+                    },
+                    "boil": {
+                      "type": "number",
+                      "minimum": -512,
+                      "maximum": 512,
+                      "description": "Pixels the noise rises over the window (each cycle, at a steady pace, for a layer spanning a looping effect); default 2 × width × rise."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "symbol"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A glow hugging a sprite (its top-left corner at at): brightest on it, banded outward to nothing about width pixels away and rise times as far upward, its edge licking up in flames as seeded noise rises. Power-ups, spirit auras, burning, a holy glow; draw the sprite over it."
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "trail"
+                    },
+                    "look": {
+                      "$ref": "#/$defs/layer-look"
+                    },
+                    "at": {
+                      "$ref": "#/$defs/layer-at"
+                    },
+                    "frames": {
+                      "$ref": "#/$defs/layer-frames"
+                    },
+                    "ease": {
+                      "$ref": "#/$defs/layer-ease"
+                    },
+                    "power": {
+                      "$ref": "#/$defs/layer-power"
+                    },
+                    "flicker": {
+                      "$ref": "#/$defs/layer-flicker"
+                    },
+                    "blend": {
+                      "$ref": "#/$defs/layer-blend"
+                    },
+                    "drift": {
+                      "$ref": "#/$defs/layer-drift"
+                    },
+                    "floor": {
+                      "$ref": "#/$defs/layer-floor"
+                    },
+                    "seed": {
+                      "$ref": "#/$defs/layer-seed"
+                    },
+                    "cue": {
+                      "$ref": "#/$defs/layer-cue"
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": -4096,
+                              "maximum": 4096
+                            },
+                            "maxItems": 2,
+                            "minItems": 2
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxItems": 256,
+                      "minItems": 1,
+                      "description": "The point's place [x, y] in each frame of the effect from the first (null where it has none); or use follow."
+                    },
+                    "follow": {
+                      "type": "object",
+                      "properties": {
+                        "recipe": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "A recipe or pose source file, relative to this source (CLI and MCP)."
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "revision": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "revision"
+                              ],
+                              "additionalProperties": false,
+                              "description": "A saved MCP revision."
+                            },
+                            {
+                              "type": "object",
+                              "description": "An inline recipe or pixelforge-poses source."
+                            }
+                          ]
+                        },
+                        "animation": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The animation whose frames the effect's frames follow, one for one."
+                        },
+                        "point": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A frame's named point (a pose marker), or part.point for a point of a pose part, such as blade.tip."
+                        },
+                        "pivot": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "A point the smear sweeps round, named the same way, such as blade.anchor (where the blade is fixed: its hilt)."
+                        }
+                      },
+                      "required": [
+                        "recipe",
+                        "animation",
+                        "point"
+                      ],
+                      "additionalProperties": false,
+                      "description": "Take points from a point of a recipe's or pose source's animation (a file through the CLI and MCP). Give the effect the animation's frame durations so the two stay in step."
+                    },
+                    "pivot": {
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -4096,
+                            "maximum": 4096
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "oneOf": [
+                              {
+                                "type": "array",
+                                "items": {
+                                  "type": "number",
+                                  "minimum": -4096,
+                                  "maximum": 4096
+                                },
+                                "maxItems": 2,
+                                "minItems": 2
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxItems": 256,
+                          "minItems": 1
+                        }
+                      ],
+                      "description": "A point the smear sweeps round, relative to at: [x, y], or one per frame. Each step between frames then runs round it, and the smear lies inside the path, its outer edge where the point went: a blade's crescent. Default none: a smooth curve through the places."
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 16,
+                      "description": "Frames of the point's path the smear reaches back over; default 3."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 64
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 64
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels across at the widest; default 4. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+                    },
+                    "taper": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 2
+                          },
+                          "maxItems": 8,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Width shares from the oldest end to the newest; default [0, 1]."
+                    },
+                    "fade": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share by which it dims toward its oldest end; default 0.5."
+                    },
+                    "noise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Seeded smooth noise: a pixel keeps value × power × (1 − noise × n), so as power falls toward the look's first threshold the shape breaks into pieces and drops. Default 0."
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Noise feature size in pixels; default 4."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A smear behind a moving point, such as a sword tip: a stroke along a smooth curve through where the point was over the last length frames, tapered from its oldest end to its newest and dimming toward the oldest. Points are relative to at (the followed sprite's top-left corner)."
+                }
+              ]
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "description": "Shape layers: ring, slash, beam, bolt, glyph, star, burst, stream, aura, trail. Needs looks."
+          },
+          "cleanup": {
+            "type": "object",
+            "properties": {
+              "corners": {
+                "type": "boolean"
+              },
+              "strays": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Remove doubled corners and stray pixels from the shapes (not the particles)."
           }
         },
         "required": [
-          "frames",
-          "emitters"
+          "frames"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "emitters"
+            ]
+          },
+          {
+            "required": [
+              "layers",
+              "looks"
+            ]
+          }
+        ]
       }
     },
     "sheet": {
@@ -636,7 +2335,6 @@
     "name",
     "width",
     "height",
-    "symbols",
     "effects"
   ],
   "additionalProperties": false,
@@ -651,6 +2349,273 @@
       "maxItems": 256,
       "minItems": 1,
       "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    },
+    "shape-look": {
+      "type": "object",
+      "properties": {
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "description": "Palette keys from the faintest band to the brightest."
+        },
+        "thresholds": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0.001,
+            "maximum": 16
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "description": "One rising threshold per colour: a colour is on where the combined field reaches its threshold."
+        },
+        "dither": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Feather each band in below its threshold through the pattern, over this share of the gap to the band below; default 0 (hard bands)."
+        },
+        "pattern": {
+          "oneOf": [
+            {
+              "enum": [
+                "bayer2",
+                "bayer4",
+                "bayer8",
+                "noise",
+                "value"
+              ]
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "maxItems": 16,
+                "minItems": 1
+              },
+              "maxItems": 16,
+              "minItems": 1
+            }
+          ],
+          "description": "Dither pattern, as for the dither operation; default bayer4. Needs dither."
+        },
+        "outline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1,
+          "description": "Palette key for a one-pixel outline on the empty pixels beside this look's own."
+        },
+        "light": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -1,
+            "maximum": 1
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "Direction toward the light for lit and shade, such as [-1, -1] (the default) for the upper left."
+        },
+        "lit": {
+          "type": "object",
+          "properties": {
+            "colors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "description": "Palette keys, one per band."
+            },
+            "thresholds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "description": "One rising share per colour, where its band begins."
+            }
+          },
+          "required": [
+            "colors",
+            "thresholds"
+          ],
+          "additionalProperties": false,
+          "description": "Highlight bands: recolour this look's pixels by the share (0–1) by which its field falls two pixels toward the light, 1 on a rim that faces it and 0 inside. Cel water, ice, slime."
+        },
+        "shade": {
+          "type": "object",
+          "properties": {
+            "colors": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "description": "Palette keys, one per band."
+            },
+            "thresholds": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1
+              },
+              "maxItems": 8,
+              "minItems": 1,
+              "description": "One rising share per colour, where its band begins."
+            }
+          },
+          "required": [
+            "colors",
+            "thresholds"
+          ],
+          "additionalProperties": false,
+          "description": "Shadow bands, as lit but measured away from the light; lit wins where both apply."
+        }
+      },
+      "required": [
+        "colors",
+        "thresholds"
+      ],
+      "additionalProperties": false
+    },
+    "layer-look": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "The look that colours this layer; may be left out when the effect has one look."
+    },
+    "layer-at": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "Centre [x, y] (a beam or bolt starts here; an aura's sprite has its top-left corner here)."
+    },
+    "layer-frames": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 256
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "[first, end]: the first frame drawn and the frame after the last; default the whole effect. Progress runs from 0 at first toward 1."
+    },
+    "layer-ease": {
+      "enum": [
+        "linear",
+        "hold",
+        "in",
+        "out",
+        "inOut",
+        "overshoot",
+        "bounce"
+      ],
+      "description": "How tweened values move across the window: out (default; linear for a layer spanning a looping effect), linear, in, inOut, hold, overshoot or bounce."
+    },
+    "layer-power": {
+      "oneOf": [
+        {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 8
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "maxItems": 8,
+          "minItems": 2
+        }
+      ],
+      "description": "Multiplies the field: bright bands shrink as it falls, so the shape erodes instead of fading; default 1. A number, or 2–8 keys spread evenly over the layer's frames through its ease."
+    },
+    "layer-flicker": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Every other frame of the window, power drops by this share."
+    },
+    "layer-blend": {
+      "enum": [
+        "max",
+        "add"
+      ],
+      "description": "max (default): the brighter layer of a look wins; add: layers sum."
+    },
+    "layer-drift": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "Move by [x, y] pixels over the window (smoke rising)."
+    },
+    "layer-floor": {
+      "type": "number",
+      "minimum": -4096,
+      "maximum": 4096,
+      "description": "Cut the layer off below this canvas row: a disc becomes a dome, a ring an arch."
+    },
+    "layer-seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "description": "Seeded detail (noise, runes, bolt paths); default the layer index."
+    },
+    "layer-cue": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Name a point at at in the layer's first frame, as an emitter cue does (a shake on impact)."
+    },
+    "layer-tilt": {
+      "type": "number",
+      "minimum": -3600,
+      "maximum": 3600,
+      "description": "Rotate the shape clockwise by degrees."
+    },
+    "layer-squash": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "minimum": 0.125,
+        "maximum": 8
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "Scale [x, y] before tilt; [1, 0.4] lays a ring or circle on the ground. On a beam it shapes the round ends alone: give a pillar the squash of its circle so its foot lies on the same ground."
     }
   }
 }

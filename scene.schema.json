@@ -372,24 +372,79 @@
             "properties": {
               "instance": {
                 "type": "string",
-                "description": "Name of an earlier, uniquely named placement."
+                "description": "Name of another uniquely named placement that is neither a tilemap nor attached itself."
               },
               "point": {
                 "type": "string",
                 "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
-                "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                "description": "A named point of its current frame; not drawn while that frame has no such point. Without one, follow where it stands, which stays on the ground while it is lifted (a contact shadow)."
               }
             },
             "required": [
-              "instance",
-              "point"
+              "instance"
             ],
             "additionalProperties": false,
-            "description": "Follow a named frame point of another placement; at becomes the offset from it. Not drawn while that frame has no such point."
+            "description": "Follow another placement; at becomes the offset from the point followed. Attached to a frame point, it stands on the other placement's ground line below the point and is lifted up to it, so a sorted held item sorts with its holder (list order decides which is in front)."
           },
           "sort": {
             "const": "ground",
-            "description": "Draw among the other sorted placements by ground line (the y of the placement point), where the first of them is listed."
+            "description": "Draw among the other sorted placements by ground line (the y of the placement point), where the first of them is listed. A sorted tilemap joins cell by cell, each standing on the bottom row of its frame, so walls and trees taller than their tile cover what stands behind them."
+          },
+          "lift": {
+            "oneOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 256
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "time": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 60000
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}([+-][0-9]{1,5})?$"
+                        }
+                      ],
+                      "description": "Milliseconds or a named cue such as \"jump+150\"."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 256
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "hold",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "Shape of the change from this key to the next: linear (default), hold (jump at the end), in, out, inOut, overshoot or bounce."
+                    }
+                  },
+                  "required": [
+                    "time",
+                    "height"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64,
+                "minItems": 1
+              }
+            ],
+            "description": "Draw this many pixels above where the placement stands, which still orders it: a jump or a flight keeps its ground line. A height, or keys of height over time, held before the first and after the last. Not on tilemaps."
           },
           "shade": {
             "type": "integer",
@@ -451,7 +506,14 @@
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 2147483647,
-                "description": "Reorders seeded variant picks and rule chances; default 0 keeps position-based picks."
+                "description": "Reshuffles variant picks and rule chances, which are seeded by cell position; default 0."
+              },
+              "layout": {
+                "enum": [
+                  "square",
+                  "iso"
+                ],
+                "description": "square (default): cells side by side, each drawing from its top-left. iso: a 2:1 diamond grid (even tile sizes such as [32, 16]), drawn back to front, cell [x, y] at [(x - y + rows - 1) * w/2, (x + y) * h/2]; each drawing stands on its diamond, bottoms aligned and centred across, so a block taller than the tile rises above its cell."
               },
               "legend": {
                 "type": "object",
@@ -646,6 +708,36 @@
           "lit": {
             "type": "boolean",
             "description": "false keeps this placement's authored colours under scene lighting: fires, lamps, glows and other light sources. Default true."
+          },
+          "parallax": {
+            "oneOf": [
+              {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 4
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "maxItems": 2,
+                "minItems": 2
+              }
+            ],
+            "description": "How much of scene.camera's movement this placement or tilemap follows, as a number or [x, y]: 1 the scene (default), 0.5 a far plane, 0 fixed on screen (a sky), above 1 a plane nearer than the scene. Each plane rounds its share to whole pixels. Not on attached placements, which move with their target."
+          },
+          "haze": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How far into scene.haze this placement or tilemap stands: each of its colours moves this much of the way to the haze colour, after lighting (0 none, 1 the haze colour)."
+          },
+          "shadow": {
+            "type": "boolean",
+            "description": "Cast a shadow from each scene light that reaches this placement (or each tile of this tilemap): its frame, a cutout standing on its ground line and facing the light, stops that light on what is drawn before it (before its sorted group, when sorted). Needs lighting.lights; not on shade placements."
           }
         },
         "required": [
@@ -655,6 +747,99 @@
         "additionalProperties": false
       },
       "maxItems": 256
+    },
+    "camera": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": -4096,
+            "maximum": 4096
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "time": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 60000
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}([+-][0-9]{1,5})?$"
+                  }
+                ],
+                "description": "Milliseconds or a named cue."
+              },
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "ease": {
+                "enum": [
+                  "linear",
+                  "hold",
+                  "in",
+                  "out",
+                  "inOut",
+                  "overshoot",
+                  "bounce"
+                ],
+                "description": "Shape of the move from this key to the next: linear (default), hold (jump at the end), in, out, inOut, overshoot or bounce."
+              }
+            },
+            "required": [
+              "time",
+              "at"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256,
+          "minItems": 1
+        }
+      ],
+      "description": "The scene point at the view's top-left corner: [x, y], or keys over time held before the first and after the last. Placements move by their parallax share of it; at [0, 0] everything is where it is written."
+    },
+    "haze": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "type": "string",
+          "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+          "description": "The colour far planes fade toward, usually the sky's."
+        },
+        "colors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "description": "The only colours hazed placements may end on, with color: each faded colour becomes the nearest. List a fixed game palette, or a short ramp toward the haze for silhouettes. Without it, every colour fades exactly."
+        }
+      },
+      "required": [
+        "color"
+      ],
+      "additionalProperties": false,
+      "description": "Atmospheric haze for placements with haze: each colour fades as a whole, never per pixel, so each becomes one colour and keeps its place among the others."
     },
     "lighting": {
       "type": "object",
@@ -703,23 +888,34 @@
                 },
                 "maxItems": 2,
                 "minItems": 2,
-                "description": "Where the light is; with follow, an offset from what it follows (default [0, 0])."
+                "description": "Where the light is, the point on the ground under it for shadows; with follow, an offset from what it follows (default [0, 0]). Not on a sun."
               },
               "height": {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 256,
-                "description": "Pixels above the scene; default 24."
+                "description": "Pixels above the scene; default 24. Not on a sun."
               },
               "radius": {
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 512,
-                "description": "How far it reaches; default 96."
+                "description": "How far it reaches; default 96. Not on a sun."
               },
               "color": {
                 "type": "string",
                 "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "sun": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -8,
+                  "maximum": 8
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "Makes this light a sun: so far away it falls the same way everywhere, with no position, height or reach. [x, y] is how far a shadow falls across the ground per pixel of height: [1, 0.5] is a low sun up and to the left, whose shadows fall right and down; [0, 0] is overhead. Takes color, strength, flicker and strength keys."
               },
               "strength": {
                 "type": "number",
@@ -839,6 +1035,11 @@
               {
                 "required": [
                   "follow"
+                ]
+              },
+              {
+                "required": [
+                  "sun"
                 ]
               }
             ]
@@ -986,12 +1187,12 @@
         "x": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 4095
         },
         "y": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 4095
         },
         "color": {
           "type": "string",
@@ -1031,6 +1232,12 @@
           "minimum": -4096,
           "maximum": 4096
         },
+        "sort": {
+          "enum": [
+            "ground"
+          ],
+          "description": "ground: draw the operations far to near by the row each stands on (its ground, or the lowest row it draws), list order breaking ties, as a game draws actors and props. Use it for everything standing on the ground: trees, grass, rocks, figures. Area operations (dither, shade, fill, outline, tilemap...) are refused."
+        },
         "palette": {
           "type": "object",
           "maxProperties": 256,
@@ -1069,6 +1276,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "color": {
               "type": "string",
               "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
@@ -1096,15 +1309,23 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -1138,15 +1359,23 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -1179,6 +1408,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "x2": {
               "type": "integer",
@@ -1222,12 +1457,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             }
           },
           "required": [
@@ -1302,6 +1539,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "rows": {
               "$ref": "#/$defs/rows"
             },
@@ -1358,6 +1601,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "symbol": {
               "type": "string",
@@ -1417,6 +1666,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "text": {
               "type": "string",
@@ -1491,6 +1746,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "from": {
               "type": "string",
@@ -1589,6 +1850,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "symbol": {
               "type": "string",
               "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -1627,6 +1894,90 @@
           ],
           "additionalProperties": false,
           "description": "Draw one autotile tile from a template symbol two tiles wide and three tall: the four quarters the mask selects (see the autotile template format). The autotile compiler emits one per frame, so editing the template redraws every tile."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "box"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's right edge runs across, in pixels (even); it runs half as far down."
+            },
+            "d": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's left edge runs across, in pixels (even)."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 512,
+              "description": "Height of the side faces in pixels; default 0, a flat diamond."
+            },
+            "top": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "left": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "right": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "edge": {
+              "type": "string",
+              "description": "Marks the top face's front edges and the corner between the side faces."
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "d"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "top"
+              ]
+            },
+            {
+              "required": [
+                "left"
+              ]
+            },
+            {
+              "required": [
+                "right"
+              ]
+            }
+          ],
+          "description": "An isometric box from the top-left of its bounds (w + d wide, (w + d) / 2 + h tall): a 2:1 top face over a left and a right face. Each pixel belongs to the face its centre lies in, so edges step two pixels across per row and boxes on a 2:1 grid meet exactly. A face without a colour is left out."
         },
         {
           "type": "object",
@@ -1692,12 +2043,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -1846,12 +2199,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "steps": {
               "type": "integer",
@@ -2041,7 +2396,14 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 2147483647,
-              "description": "Reorders seeded variant picks and rule chances; default 0 keeps position-based picks."
+              "description": "Reshuffles variant picks and rule chances, which are seeded by cell position; default 0."
+            },
+            "layout": {
+              "enum": [
+                "square",
+                "iso"
+              ],
+              "description": "square (default): cells side by side, each drawing from its top-left. iso: a 2:1 diamond grid (even tile sizes such as [32, 16]), drawn back to front, cell [x, y] at [(x - y + rows - 1) * w/2, (x + y) * h/2]; each drawing stands on its diamond, bottoms aligned and centred across, so a block taller than the tile rises above its cell."
             },
             "legend": {
               "type": "object",
@@ -2054,14 +2416,14 @@
                 "oneOf": [
                   {
                     "type": "string",
-                    "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                    "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                   },
                   {
                     "type": "object",
                     "properties": {
                       "symbol": {
                         "type": "string",
-                        "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                        "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                       },
                       "symbols": {
                         "type": "array",
@@ -2124,7 +2486,7 @@
                           "properties": {
                             "symbol": {
                               "type": "string",
-                              "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                              "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                             },
                             "symbols": {
                               "type": "array",
@@ -2255,12 +2617,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
             },
             "rules": {
               "type": "array",
@@ -2363,12 +2727,14 @@
         "width": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256
+          "maximum": 256,
+          "description": "A scene asset is at most 256 pixels a side."
         },
         "height": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256
+          "maximum": 256,
+          "description": "A scene asset is at most 256 pixels a side."
         },
         "palette": {
           "type": "object",
@@ -2436,8 +2802,8 @@
         "animations": {
           "type": "object",
           "minProperties": 1,
-          "maxProperties": 65527,
-          "description": "ZIP32 bundle budget: animation count + frame count + 7 support files must not exceed 65,535.",
+          "maxProperties": 65525,
+          "description": "ZIP32 bundle budget: animation count + frame count + 9 support files must not exceed 65,535.",
           "propertyNames": {
             "type": "string",
             "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",

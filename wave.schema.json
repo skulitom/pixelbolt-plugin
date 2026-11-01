@@ -1,0 +1,350 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt wave effects",
+  "description": "Looping coherent procedural waves compiled to editable palette grids. Direct radial/directional synthesis, not a physical water or obstacle solver. All sources combine before palette thresholds. No runtime physics or dependencies.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-wave"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "anchor": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "effects": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "description": "Names become animations; unique ignoring case. At most 256 frames and 4,194,304 pixels in total.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "minimum": 4,
+            "maximum": 128
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 1000,
+            "description": "Milliseconds per frame. Default 80. Every effect loops."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "radial"
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Source centre or phase origin [x, y] in pixel coordinates."
+                    },
+                    "wavelength": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 256,
+                      "description": "Pixels per cycle before radial stretch. Wider bands read better at small sizes."
+                    },
+                    "amplitude": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4,
+                      "description": "Signed sources are summed before colouring. Default 1."
+                    },
+                    "cycles": {
+                      "type": "integer",
+                      "minimum": -16,
+                      "maximum": 16,
+                      "description": "Whole cycles per animation; negative reverses travel, zero is static. Default 1."
+                    },
+                    "phase": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Relative phase in degrees. 180 opposes an otherwise identical source. Default 0."
+                    },
+                    "stretch": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0.125,
+                        "maximum": 8
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Radial shape scale [x, y]; default [1, 1]. A smaller y flattens the rings onto the ground."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "wavelength"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "const": "directional"
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Source centre or phase origin [x, y] in pixel coordinates."
+                    },
+                    "wavelength": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 256,
+                      "description": "Pixels per cycle before radial stretch. Wider bands read better at small sizes."
+                    },
+                    "amplitude": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4,
+                      "description": "Signed sources are summed before colouring. Default 1."
+                    },
+                    "cycles": {
+                      "type": "integer",
+                      "minimum": -16,
+                      "maximum": 16,
+                      "description": "Whole cycles per animation; negative reverses travel, zero is static. Default 1."
+                    },
+                    "phase": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Relative phase in degrees. 180 opposes an otherwise identical source. Default 0."
+                    },
+                    "angle": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees clockwise, 0 right and 90 down. Default 0."
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "at",
+                    "wavelength"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 4,
+            "minItems": 1
+          },
+          "mask": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2
+              },
+              "radius": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 256
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "Ellipse radii [x, y]. Clipping only, never a reflecting obstacle."
+              },
+              "feather": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Fraction of the ellipse radius faded inward; 0 is a hard edge. Default 0.2."
+              }
+            },
+            "required": [
+              "at",
+              "radius"
+            ],
+            "additionalProperties": false
+          },
+          "look": {
+            "type": "object",
+            "properties": {
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Single-character palette keys; dot and space are reserved."
+              },
+              "thresholds": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.000001,
+                  "maximum": 16
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Strictly increasing positive values, one per colour. Values below the first remain transparent."
+              },
+              "negative": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Optional colours for negative amplitudes at the same absolute thresholds; otherwise negative amplitudes are transparent."
+              }
+            },
+            "required": [
+              "colors",
+              "thresholds"
+            ],
+            "additionalProperties": false
+          },
+          "underlay": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "description": "A full-canvas palette grid. Dot or space leaves the pixel transparent."
+          },
+          "overlay": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "description": "A full-canvas palette grid. Dot or space leaves the pixel transparent."
+          }
+        },
+        "required": [
+          "frames",
+          "sources",
+          "look"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "palette",
+    "effects"
+  ],
+  "additionalProperties": false
+}

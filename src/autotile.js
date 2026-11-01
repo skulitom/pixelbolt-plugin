@@ -26,6 +26,19 @@ export function neighbourMask(mode, matches) {
   if (mode === 'cardinal') return Object.entries(CARDINAL_BITS).reduce((mask, [key, bit]) => mask | (matches(...OFFSETS[key]) ? bit : 0), 0);
   return reduceBlobMask(Object.entries(BLOB_BITS).reduce((mask, [key, bit]) => mask | (matches(...OFFSETS[key]) ? bit : 0), 0));
 }
+// The frames of a validated recipe that are tiles of an autotile set, for engine tile sets: each frame whose own
+// operations draw `autotile` at the frame's corner, all with one mask and mode, as every compiled frame does. Masks
+// come back as drawn: blob masks reduced, cardinal ones 0–15.
+export function autotileFrames(recipe) {
+  const tiles = [];
+  for (const frame of recipe.frames) {
+    const ops = (frame.ops ?? []).filter(op => op.op === 'autotile');
+    if (!ops.length || ops.some(op => (op.x ?? 0) !== 0 || (op.y ?? 0) !== 0)) continue;
+    const mode = ops[0].mode ?? 'blob', mask = mode === 'cardinal' ? ops[0].mask : reduceBlobMask(ops[0].mask);
+    if (ops.every(op => (op.mode ?? 'blob') === mode && (mode === 'cardinal' ? op.mask : reduceBlobMask(op.mask)) === mask)) tiles.push({ frame: frame.name, mask, mode });
+  }
+  return tiles;
+}
 export function quadrantPieces(mode, mask) {
   const has = key => mode === 'cardinal' ? (mask & (CARDINAL_BITS[key] ?? 0)) !== 0 : (mask & BLOB_BITS[key]) !== 0;
   return Object.fromEntries(Object.entries(QUADRANTS).map(([position, [a, b, diagonal]]) => {
@@ -147,10 +160,11 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
     if (members !== undefined) return blank ? empty !== undefined && members.includes(empty) : members.includes(char);
     return !blank && char === want;
   };
-  // Position-based variants, so repeated terrain does not tile visibly; with a seed or inside rules a seeded hash.
+  // Variants picked by a seeded hash of the cell's position, so repeated terrain does not tile visibly. (A product of
+  // x and y with two odd numbers, used without a seed before, kept only their low bits: two variants made a checkerboard.)
   const pick = (rule, x, y) => {
     if (rule.names.length === 1) return rule.names[0];
-    const value = rule.salt || seed ? hash(seed, x, y, rule.salt) : (((x * 73856093) ^ (y * 19349663)) >>> 0);
+    const value = hash(seed, x, y, rule.salt);
     if (!rule.weights) return rule.names[value % rule.names.length];
     let left = value % rule.weights.reduce((sum, w) => sum + w, 0);
     for (let i = 0; i < rule.names.length; i++) { left -= rule.weights[i]; if (left < 0) return rule.names[i]; }
@@ -176,4 +190,14 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
   }));
   outputs.sort((a, b) => a.y - b.y || a.x - b.x || a.moved - b.moved || a.order - b.order);
   return { cells: outputs.map(({ order, moved, ...cell }) => cell), columns: width, rows: rows.length };
+}
+
+// An iso map lays its cells on a 2:1 diamond grid: cell [x, y] (the character's column and row) has its diamond's
+// top-left at [(x - y + rows - 1) * w / 2, (x + y) * h / 2] for a tile [w, h], so the map's top-left is [0, 0] and it
+// is (columns + rows) * w / 2 wide. Cells draw back to front: by column plus row, then column, then as listed. Each
+// returned cell keeps its fields and adds `left` and `top`.
+export function isoLayout(cells, rows, [w, h]) {
+  return cells.map((cell, order) => ({ cell, order }))
+    .sort((a, b) => a.cell.x + a.cell.y - (b.cell.x + b.cell.y) || a.cell.x - b.cell.x || a.order - b.order)
+    .map(({ cell }) => ({ ...cell, left: (cell.x - cell.y + rows - 1) * w / 2, top: (cell.x + cell.y) * h / 2 }));
 }

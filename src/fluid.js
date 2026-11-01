@@ -407,7 +407,7 @@ function readEffect(effect, path, source) {
 // that rests on something (along a quarter or more of its lowest cells), as water in a flask does, or on other water,
 // needs no warning, whatever it touches; nor does one thrown away from what is above it, or bursting apart, nor any in a
 // liquid with adhesion, which clings on purpose. Gravity is the first the effect has, its keys included.
-function sourceWarnings({ path, width, height, frames, liquid, seed, emitters, fills, gravity, solid, smooth, owner, walls, layoutAt = null, adhesive = false }) {
+function sourceWarnings({ path, width, height, frames, liquid, seed, emitters, fills, gravity, solid, smooth, owner, walls, layoutAt, adhesive }) {
   const warnings = [], W = width, H = height;
   const solidBase = solid, ownerBase = owner;
   emitters.forEach((e, index) => {
@@ -450,7 +450,6 @@ function sourceWarnings({ path, width, height, frames, liquid, seed, emitters, f
     if (fill.burst || -(fill.velocity[0] * di + fill.velocity[1] * dj) > 0.25) return;
     const filled = (i, j) => i >= 0 && j >= 0 && i < W && j < H && !solid[j * W + i] && fill.inside(i + 0.5, j + 0.5);
     for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-      const c = j * W + i;
       if (!filled(i, j)) continue;
       // Its lowest cells (along gravity, under no water), and how many of them rest on an obstacle or a closed edge.
       const bi = i - di, bj = j - dj;
@@ -1145,7 +1144,7 @@ function emitGas(g, state, e, index, cycle, seed, along = cycle, share = 1, fact
   if (x0 > x1 || y0 > y1) return here;
   // A burst adds its amounts once; a rate emitter raises its cells toward them every frame (a negative amount drains),
   // so a steady source holds its level instead of piling up.
-  if (e.carry) return throwCarriers(g, state, e, index, cycle, seed, here, share);
+  if (e.carry) return throwCarriers(g, state, e, index, cycle, seed, here);
   const feed = (a, c, amount, w, strength) => {
     if (e.burst) a[c] += amount * w * strength;
     else if (amount >= 0) { const target = amount * strength; if (a[c] < target) a[c] += (target - a[c]) * w; }
@@ -1179,13 +1178,13 @@ function emitGas(g, state, e, index, cycle, seed, along = cycle, share = 1, fact
 // `drag` of the difference between its velocity and the air's each frame, falls by its `gravity`, hands `release` of
 // what it still carries to the air each frame, and drops the rest where it meets an obstacle. What it carries is drawn
 // with the smoke, so the cloud travels with the carriers and the air keeps what they leave behind.
-function throwCarriers(g, state, e, index, cycle, seed, here, share) {
+function throwCarriers(g, state, e, index, cycle, seed, here) {
   const { W, H, pixels: solid } = g, { x, y, flicker } = here, r = reach(e), list = state.carriers;
   const x0 = Math.max(0, Math.floor(x - r)), x1 = Math.min(W - 1, Math.ceil(x + r)), y0 = Math.max(0, Math.floor(y - r)), y1 = Math.min(H - 1, Math.ceil(y + r));
   for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
     const c = j * W + i, px = i + 0.5, py = j + 0.5, w = coverage(e, px - x, py - y);
     if (!w || solid[c]) continue;
-    const amount = flicker(px, py) * profile(e, px - x, py - y) * w * share, d = e.density * amount, t = e.temperature * amount;
+    const amount = flicker(px, py) * profile(e, px - x, py - y) * w, d = e.density * amount, t = e.temperature * amount;
     if (!(d > 0) && !(t > 0)) continue;
     if (list.length >= LIMITS.carriers) { state.overflow = true; return here; }
     let vx = push(e, px - x, py - y, 0, e.expand), vy = push(e, px - x, py - y, 1, e.expand);
@@ -1200,7 +1199,7 @@ function deposit(a, solid, W, H, x, y, value) {
   const fx = x - 0.5, fy = y - 0.5, i = Math.floor(fx), j = Math.floor(fy), s = fx - i, t = fy - j;
   const open = (ci, cj) => ci >= 0 && cj >= 0 && ci < W && cj < H && !solid[cj * W + ci];
   const w00 = open(i, j) ? (1 - s) * (1 - t) : 0, w10 = open(i + 1, j) ? s * (1 - t) : 0, w01 = open(i, j + 1) ? (1 - s) * t : 0, w11 = open(i + 1, j + 1) ? s * t : 0, sum = w00 + w10 + w01 + w11;
-  if (!(sum > 0)) { const ci = Math.floor(x), cj = Math.floor(y); if (open(ci, cj)) a[cj * W + ci] += value; return; }
+  if (!(sum > 0)) return;
   if (w00) a[j * W + i] += w00 / sum * value;
   if (w10) a[j * W + i + 1] += w10 / sum * value;
   if (w01) a[(j + 1) * W + i] += w01 / sum * value;
@@ -1675,7 +1674,7 @@ function spawnSparks(list, e, index, cycle, here, seed, total) {
 // that leaves it pops: it is drawn as a ring for one frame and as two droplets the next.
 const sparkColor = p => p.s.colors[Math.min(p.s.colors.length - 1, Math.floor(p.age * p.s.colors.length / p.life))].charCodeAt(0);
 // `gravity`, when given, is the effect's gravity this frame (keys), which whitewater without its own gravity follows.
-function moveSparks(list, g, density, total, liquid, pops, gravity = null) {
+function moveSparks(list, g, density, total, liquid, pops, gravity) {
   const { W, H, u, v, pixels: solid } = g;
   for (let k = list.length - 1; k >= 0; k--) {
     const p = list[k], s = p.s, fall = gravity && s.inherit ? gravity : s.gravity;
@@ -1864,15 +1863,33 @@ function moveObstacles(run, cycle) {
   if (!changed) return;
   const shift = effect.obstacles.map((o, i) => { const at = places[i], was = before.places[i]; return o.blocks && at.show && was.show && !at.jump && cycle > 0 && (at.x !== was.x || at.y !== was.y) ? [at.x - was.x, at.y - was.y] : null; });
   const covered = c => layout.solid[c] && !before.solid[c];
-  // The first open cell along a move from (x, y), passing only through cells the same obstacle has just covered; -1
-  // where another solid or the canvas edge comes first.
+  // The cells each moving obstacle passed over on its way, from every cell it held to where that cell is now. An
+  // obstacle that moves more pixels than it is thick leaves some of them open behind it: the fluid there was in its
+  // path, so it goes ahead of it too, as from the cells it covers, instead of being passed through.
+  const swept = new Int16Array(g.N).fill(-1);
+  effect.obstacles.forEach((o, i) => {
+    const s = shift[i];
+    if (!s) return;
+    const was = before.places[i], steps = Math.ceil(2 * Math.sqrt(s[0] * s[0] + s[1] * s[1]));
+    o.rows.forEach((row, j) => {
+      for (let k = 0; k < row.length; k++) if (row[k] !== '.' && row[k] !== ' ') {
+        for (let step = 1; step < steps; step++) {
+          const c = Math.floor(was.y + j + 0.5 + s[1] * step / steps) * W + Math.floor(was.x + k + 0.5 + s[0] * step / steps);
+          if (swept[c] < 0) swept[c] = i;
+        }
+      }
+    });
+  });
+  const passed = c => swept[c] >= 0 && !layout.solid[c] && !before.solid[c];
+  // The first open cell along a move from (x, y), passing only through cells the same obstacle has just covered or
+  // passed over; -1 where another solid or the canvas edge comes first.
   const landing = (x, y, o, s) => {
     const length = Math.sqrt(s[0] * s[0] + s[1] * s[1]), ux = s[0] / length, uy = s[1] / length;
     for (let step = 1; step <= 2 * length + 4; step++) {
       const px = x + 0.5 * step * ux, py = y + 0.5 * step * uy;
       if (px < 0 || py < 0 || px >= W || py >= H) return -1;
       const c = Math.floor(py) * W + Math.floor(px);
-      if (!layout.solid[c]) return c;
+      if (!layout.solid[c]) { if (passed(c) && swept[c] === o) continue; return c; }
       if (!covered(c) || owner[c] !== o) return -1;
     }
     return -1;
@@ -1880,8 +1897,8 @@ function moveObstacles(run, cycle) {
   if (effect.liquid) {
     for (let k = state.n - 1; k >= 0; k--) {
       const x = state.x[k], y = state.y[k], c = Math.floor(y) * W + Math.floor(x);
-      if (!covered(c)) continue;
-      const o = owner[c], s = shift[o], to = s ? landing(x, y, o, s) : -1;
+      if (!covered(c) && !passed(c)) continue;
+      const o = covered(c) ? owner[c] : swept[c], s = shift[o], to = s ? landing(x, y, o, s) : -1;
       if (to < 0) { removeParticle(state, k); continue; }
       // Into the open cell the walk reached, just past the obstacle, moving at least as fast as it does.
       const length = Math.sqrt(s[0] * s[0] + s[1] * s[1]), ux = s[0] / length, uy = s[1] / length, tx = to % W, ty = (to - tx) / W;
@@ -1894,8 +1911,8 @@ function moveObstacles(run, cycle) {
   } else {
     const { d, T } = state;
     for (let c = 0; c < g.N; c++) {
-      if (!covered(c) || (!d[c] && !T[c])) continue;
-      const o = owner[c], s = shift[o], to = s ? landing(c % W + 0.5, Math.floor(c / W) + 0.5, o, s) : -1;
+      if ((!covered(c) && !passed(c)) || (!d[c] && !T[c])) continue;
+      const o = covered(c) ? owner[c] : swept[c], s = shift[o], to = s ? landing(c % W + 0.5, Math.floor(c / W) + 0.5, o, s) : -1;
       if (to >= 0) { d[to] += d[c]; T[to] += T[c]; }
       d[c] = 0; T[c] = 0;
     }
@@ -1923,7 +1940,7 @@ function emitFrame(run, t, cycle, factors = null) {
   });
 }
 // The solver's substeps for one frame, with the settings its keys give frame `cycle` of the effect's cycle.
-function solveFrame(run, cycle = 0) {
+function solveFrame(run, cycle) {
   const { state } = run, effect = run.effect.schedule ? { ...run.effect, ...run.effect.schedule[cycle] } : run.effect, dt = 1 / effect.substeps;
   // Whitewater measures how much each particle's velocity changes over the frame's steps, not what emitters set.
   if (effect.liquid && effect.whitewater.length) { state.pvx.set(state.vx.subarray(0, state.n)); state.pvy.set(state.vy.subarray(0, state.n)); }

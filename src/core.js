@@ -1,6 +1,6 @@
 // Browser-compatible, deterministic rasterizer. No I/O and no dependencies.
 import { patternProblem, ditherThreshold, traceLine, pixelId, colorOf, idsOf, cleanupIds, ruleVariants, rewriteIds } from './craft.js';
-import { reduceBlobMask, quadrantPieces, templatePiece, expandTilemap } from './autotile.js';
+import { reduceBlobMask, quadrantPieces, templatePiece, expandTilemap, isoLayout } from './autotile.js';
 import { layoutText } from './font.js';
 export class PixelError extends Error {
   constructor(path, message) { super(`${path}: ${message}`); this.name = 'PixelError'; this.path = path; }
@@ -77,23 +77,46 @@ export function readRows(rows, path, palette) {
   if (!rows.length) fail(path, 'grid must contain at least one row');
   if (typeof rows[0] !== 'string' || rows[0].length < 1 || rows[0].length > 256) fail(`${path}[0]`, 'row must contain 1–256 characters');
   const width = rows[0].length;
+  rows.forEach((row, y) => { if (typeof row !== 'string') fail(`${path}[${y}]`, `all rows must be ${width} characters wide`); });
+  // Every miscounted row at once, with its own width, so a hand-typed grid is fixed in one pass.
+  const uneven = rows.flatMap((row, y) => row.length === width ? [] : [y]);
+  if (uneven.length) fail(`${path}[${uneven[0]}]`, `all rows must be ${width} characters wide, as row 0 is: ${uneven.slice(0, 8).map(y => `row ${y} has ${rows[y].length}`).join(', ')}${uneven.length > 8 ? ` and ${uneven.length - 8} more rows differ` : ''}`);
+  const unknown = new Map();
   rows.forEach((row, y) => {
-    if (typeof row !== 'string' || row.length !== width) fail(`${path}[${y}]`, `all rows must be ${width} characters wide`);
     for (const char of row) if (char !== '.' && char !== ' ') {
       // Rows are indexed by UTF-16 code unit, so an astral character (emoji) would split in two.
       if (char.length !== 1) fail(`${path}[${y}]`, `grid characters must be single UTF-16 code units, not ${JSON.stringify(char)}`);
-      if (!own(palette, char)) fail(`${path}[${y}]`, `unknown palette character ${JSON.stringify(char)}`);
+      if (!own(palette, char) && !unknown.has(char)) unknown.set(char, y);
     }
   });
+  if (unknown.size) {
+    const [[first, y], ...others] = unknown;
+    fail(`${path}[${y}]`, `unknown palette character ${JSON.stringify(first)}${others.length ? `; also ${others.slice(0, 8).map(([char, row]) => `${JSON.stringify(char)} in row ${row}`).join(', ')}` : ''}`);
+  }
   return { rows, width, height: rows.length };
 }
 const round6 = value => Math.round(value * 1e6) / 1e6;
 
-function readProject(spec) {
+// Canvas sides. A recipe with several frames is at most 256 pixels a side. A recipe with a single frame (a still: a
+// backdrop, mural or wallpaper drawn at one pixel per screen pixel) may be up to 4096 a side, within the same
+// 4,194,304 pixels that bound every recipe's frames.
+export const CANVAS_SIDE = 256, STILL_SIDE = 4096, FRAME_AREA = 4194304;
+// What may stand in a layer with sort "ground", and what works on an area instead.
+const STANDING = new Set(['pixel', 'rect', 'ellipse', 'line', 'grid', 'stamp', 'text', 'copy', 'autotile', 'box']);
+const AREA = new Set(['clear', 'fill', 'replace', 'tilemap', 'outline', 'dither', 'shade', 'rewrite']);
+
+// `stills: false` keeps a document to the animation limit even with one frame (pose sources compile to animations).
+function readProject(spec, { stills = true } = {}) {
   object(spec, 'project', ['$schema', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'background', 'symbols', 'frames', 'animations', 'sheet', 'anchor']);
   if (spec.version !== 1) fail('project.version', 'expected 1');
   const projectName = name(spec.name, 'project.name');
-  const width = integer(spec.width, 'project.width', 1, 256), height = integer(spec.height, 'project.height', 1, 256);
+  const frameCount = Array.isArray(spec.frames) ? spec.frames.length : 0, still = stills && frameCount === 1;
+  const side = (value, path) => {
+    if (stills && frameCount > 1 && Number.isInteger(value) && value > CANVAS_SIDE && value <= STILL_SIDE) fail(path, `expected an integer from 1 to ${CANVAS_SIDE}; only a single-frame still may be larger (up to ${STILL_SIDE}), and this recipe has ${frameCount} frames`);
+    return integer(value, path, 1, still ? STILL_SIDE : CANVAS_SIDE);
+  };
+  const width = side(spec.width, 'project.width'), height = side(spec.height, 'project.height');
+  if (still && width * height > FRAME_AREA) fail('project', `a ${width}×${height} still is ${String(width * height).replace(/\B(?=(\d{3})+$)/g, ',')} pixels; a still holds at most 4,194,304 (1920×1080, 2560×1440 and 2048×2048 fit), so draw it smaller or enlarge a smaller canvas with sheet.scale`);
   const palette = spec.palette ?? {};
   object(palette, 'project.palette');
   if (own(palette, '$ref')) fail('project.palette.$ref', 'palette files are resolved by the CLI, MCP or resolveRecipe(); inline the palette to render here');
@@ -127,8 +150,23 @@ function readProject(spec) {
   if (width * height * spec.frames.length > 4194304) fail('project.frames', 'total frame area exceeds 4,194,304 pixels');
   object(spec.animations ?? {}, 'project.animations');
   const animationCount = spec.animations === undefined ? 1 : Object.keys(spec.animations).length;
-  if (7 + spec.frames.length + animationCount > 65535) fail('project.animations', `bundle exceeds the ZIP32 limit of 65,535 files; at most ${65535 - 7 - spec.frames.length} animations fit alongside these frames and 7 support files`);
+  // Support files: sheet, atlas, SpriteFrames, recipe, CSS, player, preview and README, and a TileSet for an autotile set.
+  if (9 + spec.frames.length + animationCount > 65535) fail('project.animations', `bundle exceeds the ZIP32 limit of 65,535 files; at most ${65535 - 9 - spec.frames.length} animations fit alongside these frames and 9 support files`);
   return { projectName, width, height, palette, ramps, background, projectAnchor, symbols };
+}
+
+/**
+ * Puts a shared palette file's colours into a document whose palette links it (`"palette": { "$ref": "shared.json",
+ * ...local entries }`). `shared` is the file as read, `{ palette, ramps }`: entries the document sets itself win, and a
+ * recipe or pose source without ramps of its own takes the file's (autotile, effect, fluid, wave and normals sources
+ * have no ramps). A document without a link comes back as it is. The renderer never reads files: the CLI and MCP read
+ * the file (src/resolve.js), and the studio is sent the one its recipe links, so both draw a linked recipe alike.
+ */
+export function inlineSharedPalette(document, { palette, ramps = null }) {
+  if (!isObject(document) || !isObject(document.palette) || !own(document.palette, '$ref')) return document;
+  const { $ref, ...local } = document.palette;
+  const inherit = ramps && (document.format === undefined || document.format === 'pixelforge-poses') && document.ramps === undefined;
+  return { ...document, palette: { ...palette, ...local }, ...(inherit && { ramps }) };
 }
 
 export function renderProject(spec, options = {}) {
@@ -145,15 +183,67 @@ export function renderProject(spec, options = {}) {
     return renderProject(isolated, { ...(options.stats && { stats: true }) });
   }
   const { projectName, width, height, palette, ramps, background, projectAnchor, symbols } = readProject(spec);
+  // Rectangles, ellipses and dither or shade regions may overhang the canvas: up to 512 pixels, or twice the side of a
+  // larger still.
+  const boxWidth = Math.max(512, 2 * width), boxHeight = Math.max(512, 2 * height);
   let activePalette = palette;
   const color = (value, path) => parseColor(value, activePalette, path);
   let work = 0, operationCount = 0, layerPixels = 0;
   const spend = amount => { work += amount; if (work > 67108864) fail('project', 'drawing work exceeds the 67-million-pixel budget; simplify repeated operations'); };
+  // An invalid drawing operation is noted and skipped while the rest are checked, so one reply names every broken
+  // operation (up to ten) instead of one per run. Operations don't depend on each other being valid, and a render that
+  // noted one returns no pixels. Anything else (a frame field, animations, the sheet, a budget) still stops at once.
+  const noted = [];
+  const note = (error, p) => {
+    const inside = error instanceof PixelError && !error.errors && (error.path === p || error.path.startsWith(`${p}.`) || error.path.startsWith(`${p}[`));
+    if (!inside) throw error;
+    noted.push(error);
+    if (noted.length === 10) throw together();
+  };
+  // The first error, naming the others in its message and listing every one in `errors`.
+  const together = (last = null) => {
+    const all = last && !last.errors && !noted.includes(last) ? [...noted, last] : noted;
+    if (all.length === 1) return all[0];
+    const [first, ...rest] = all;
+    const combined = new PixelError(first.path, `${first.message.slice(first.path.length + 2)}; ${rest.length} more error${rest.length === 1 ? '' : 's'}${noted.length === 10 ? ' (checking stopped at 10)' : ''}: ${rest.map(error => error.message).join('; ')}`);
+    combined.errors = all.map(error => ({ path: error.path, error: error.message }));
+    return combined;
+  };
+  const checked = run => { try { return run(); } catch (error) { throw noted.length && !error.errors ? together(error) : error; } };
   // Clipping is counted per source location so an agent can find the operation that overhangs.
   const clipped = new Map();
   const clip = (path, pixels = 1) => clipped.set(path, (clipped.get(path) ?? 0) + pixels);
   const rendered = new Map(), frameNames = new Set();
-  function drawOps(data, ops, path, bounds = null) {
+  // The row an operation stands on, for a layer with sort "ground": its `ground`, or the lowest row it draws (a
+  // stamp's or grid's bottom after scale and rotation, a line's lower end, a shape's bottom edge). Text needs `ground`,
+  // since accents and alignment move it. Operations that work on an area rather than stand on the ground are refused.
+  // Malformed values count as their own y here and are reported when the operation is drawn.
+  const whole = (value, fallback) => (Number.isInteger(value) ? value : fallback);
+  const standingRow = (op, p) => {
+    if (!isObject(op) || typeof op.op !== 'string') return 0;
+    if (!STANDING.has(op.op)) {
+      if (AREA.has(op.op)) fail(`${p}.op`, `${op.op} works on an area rather than standing on the ground; draw it in a layer without sort`);
+      return 0;
+    }
+    if (op.ground !== undefined) return integer(op.ground, `${p}.ground`);
+    if (op.op === 'text') fail(`${p}.ground`, 'text in a layer with sort "ground" needs ground: the row it stands on');
+    const y = whole(op.y, 0), turned = op.rotate === 90 || op.rotate === 270, scale = whole(op.scale, 1);
+    const box = (w, h) => y + (turned ? w : h) * scale - 1;
+    if (op.op === 'pixel') return y;
+    if (op.op === 'line') return Math.max(y, whole(op.y2, y));
+    if (op.op === 'rect' || op.op === 'ellipse') return y + whole(op.h, 1) - 1;
+    if (op.op === 'grid') return Array.isArray(op.rows) && typeof op.rows[0] === 'string' ? box(op.rows[0].length, op.rows.length) : y;
+    const grid = typeof op.symbol === 'string' && own(symbols, op.symbol) ? symbols[op.symbol] : null;
+    if (op.op === 'stamp') return grid ? box(grid.width, grid.height) : y;
+    if (op.op === 'autotile') return grid ? y + grid.width / 2 - 1 : y;
+    if (op.op === 'box') return y + Math.floor((whole(op.w, 2) + whole(op.d, 2)) / 2) + whole(op.h, 0) - 1;
+    // copy: the copied rectangle, from a symbol or from an earlier frame (the canvas).
+    const [sourceWidth, sourceHeight] = grid ? [grid.width, grid.height] : [width, height];
+    return box(whole(op.w, sourceWidth - whole(op.sx, 0)), whole(op.h, sourceHeight - whole(op.sy, 0)));
+  };
+  // Operations draw in list order; in a layer with sort "ground" they draw far to near, by the row each stands on, and
+  // operations on the same row keep list order (as a game draws actors and props). Paths keep list positions.
+  function drawOps(data, ops, path, bounds = null, sorted = false) {
     // Conservative dirty bounds, including writes later erased. Global operations still see the complete buffer.
     const touch = (x, y) => {
       if (!bounds) return;
@@ -163,21 +253,30 @@ export function renderProject(spec, options = {}) {
       if (y > bounds[3]) bounds[3] = y;
     };
     list(ops, path);
-    for (let index = 0; index < ops.length; index++) {
+    const order = ops.map((_, index) => index);
+    if (sorted) {
+      const rows = ops.map((op, index) => standingRow(op, `${path}[${index}]`));
+      order.sort((a, b) => rows[a] - rows[b] || a - b);
+    }
+    for (const index of order) {
       if (++operationCount > 20000) fail(path, 'project exceeds 20,000 drawing operations');
-      const op = ops[index], p = `${path}[${index}]`;
+      const p = `${path}[${index}]`;
+      try { drawOp(ops[index], p); } catch (error) { note(error, p); }
+    }
+    function drawOp(op, p) {
       object(op, p);
       const transform = ['scale', 'flipX', 'flipY', 'rotate'];
       const fields = {
-        pixel: ['x', 'y', 'color'], rect: ['x', 'y', 'w', 'h', 'color', 'filled'],
-        ellipse: ['x', 'y', 'w', 'h', 'color', 'filled'], line: ['x', 'y', 'x2', 'y2', 'color'],
+        pixel: ['x', 'y', 'color', 'ground'], rect: ['x', 'y', 'w', 'h', 'color', 'filled', 'ground'],
+        ellipse: ['x', 'y', 'w', 'h', 'color', 'filled', 'ground'], line: ['x', 'y', 'x2', 'y2', 'color', 'ground'],
         clear: ['x', 'y', 'w', 'h'], fill: ['x', 'y', 'color'],
-        grid: ['x', 'y', 'rows', ...transform, 'remap'],
-        stamp: ['x', 'y', 'symbol', ...transform, 'remap'], replace: ['from', 'to'],
-        text: ['x', 'y', 'text', 'color', 'align', 'spacing', 'lineHeight', ...transform],
-        copy: ['x', 'y', 'from', 'symbol', 'sx', 'sy', 'w', 'h', ...transform, 'remap'],
-        autotile: ['x', 'y', 'symbol', 'mask', 'mode', 'remap'],
-        tilemap: ['x', 'y', 'tile', 'rows', 'legend', 'outside', 'empty', 'classes', 'seed'],
+        grid: ['x', 'y', 'rows', ...transform, 'remap', 'ground'],
+        stamp: ['x', 'y', 'symbol', ...transform, 'remap', 'ground'], replace: ['from', 'to'],
+        text: ['x', 'y', 'text', 'color', 'align', 'spacing', 'lineHeight', ...transform, 'ground'],
+        copy: ['x', 'y', 'from', 'symbol', 'sx', 'sy', 'w', 'h', ...transform, 'remap', 'ground'],
+        autotile: ['x', 'y', 'symbol', 'mask', 'mode', 'remap', 'ground'],
+        box: ['x', 'y', 'w', 'd', 'h', 'top', 'left', 'right', 'edge', 'ground'],
+        tilemap: ['x', 'y', 'tile', 'rows', 'legend', 'outside', 'empty', 'classes', 'seed', 'layout'],
         outline: ['color', 'diagonal', 'position', 'width', 'directions'],
         dither: ['x', 'y', 'w', 'h', 'color', 'erase', 'density', 'direction', 'pattern', 'offset', 'seed', 'scale', 'over'],
         shade: ['x', 'y', 'w', 'h', 'steps', 'shape', 'density', 'direction', 'pattern', 'offset', 'seed', 'scale', 'over'],
@@ -185,6 +284,7 @@ export function renderProject(spec, options = {}) {
       };
       if (typeof op.op !== 'string' || !own(fields, op.op)) fail(`${p}.op`, `unknown operation ${JSON.stringify(op.op)}`);
       object(op, p, ['op', ...fields[op.op]]);
+      if (op.ground !== undefined && !sorted) fail(`${p}.ground`, 'ground orders a layer with sort "ground"; set sort on this layer, or remove ground');
       const x = integer(op.x ?? 0, `${p}.x`), y = integer(op.y ?? 0, `${p}.y`);
       const put = (px, py, c, erase = false) => {
         if (px < 0 || py < 0 || px >= width || py >= height) { clip(p); return; }
@@ -209,14 +309,15 @@ export function renderProject(spec, options = {}) {
         };
       };
       // Draws a w x h source through flip, rotation and integer scale; flips happen before rotation. `shift` moves
-      // the drawing by [dx, dy], given its drawn width and scale (text alignment, and accents above the first line).
+      // the drawing by [dx, dy], given the scale, rotation and vertical flip (text alignment, and accents above the
+      // first line).
       const drawCells = (w, h, sample, shift = () => [0, 0]) => {
         const scale = integer(op.scale ?? 1, `${p}.scale`, 1, 16);
         const flipX = boolean(op.flipX ?? false, `${p}.flipX`), flipY = boolean(op.flipY ?? false, `${p}.flipY`);
         const rotate = integer(op.rotate ?? 0, `${p}.rotate`, 0, 270);
         if (rotate % 90) fail(`${p}.rotate`, 'expected 0, 90, 180 or 270 degrees clockwise');
         spend(w * h * scale * scale);
-        const [dx, dy] = shift((rotate % 180 ? h : w) * scale, scale), left = x + dx, top = y + dy;
+        const [dx, dy] = shift({ scale, rotate, flipY }), left = x + dx, top = y + dy;
         for (let gy = 0; gy < h; gy++) for (let gx = 0; gx < w; gx++) {
           const c = sample(gx, gy);
           if (!c) continue;
@@ -231,7 +332,7 @@ export function renderProject(spec, options = {}) {
       // say otherwise), a density or [from, to] ramp along a direction, and a pattern. The returned function visits
       // every pixel of the region, optionally limited by `inside(i, j, w, h)`, whose threshold is below the density.
       const densityField = (fallback, inside = null) => {
-        const w = integer(op.w ?? Math.max(1, width - x), `${p}.w`, 1, 512), h = integer(op.h ?? Math.max(1, height - y), `${p}.h`, 1, 512);
+        const w = integer(op.w ?? Math.max(1, width - x), `${p}.w`, 1, boxWidth), h = integer(op.h ?? Math.max(1, height - y), `${p}.h`, 1, boxHeight);
         const ramp = Array.isArray(op.density);
         if (ramp && op.density.length !== 2) fail(`${p}.density`, 'expected a number from 0 to 1, or [from, to]');
         const [from, to] = ramp ? op.density : [op.density ?? fallback, op.density ?? fallback];
@@ -275,7 +376,7 @@ export function renderProject(spec, options = {}) {
       };
       if (op.op === 'pixel') { spend(1); put(x, y, color(op.color, `${p}.color`)); }
       else if (['rect', 'ellipse', 'clear'].includes(op.op)) {
-        const w = integer(op.w, `${p}.w`, 1, 512), h = integer(op.h, `${p}.h`, 1, 512);
+        const w = integer(op.w, `${p}.w`, 1, boxWidth), h = integer(op.h, `${p}.h`, 1, boxHeight);
         const c = op.op === 'clear' ? [0, 0, 0, 0] : color(op.color, `${p}.color`);
         const filled = op.filled === undefined ? true : boolean(op.filled, `${p}.filled`);
         spend(w * h);
@@ -306,7 +407,15 @@ export function renderProject(spec, options = {}) {
         const spacing = integer(op.spacing ?? 1, `${p}.spacing`, 0, 16), lineHeight = integer(op.lineHeight ?? 10, `${p}.lineHeight`, 1, 64);
         const block = layoutText(op.text, { spacing, lineHeight, align }, message => fail(`${p}.text`, message)), c = color(op.color, `${p}.color`);
         if (block.width > 4096) fail(`${p}.text`, `a line is ${block.width} pixels wide; break it into lines`);
-        drawCells(block.width, block.height, (gx, gy) => block.rows[gy][gx] === '#' ? c : null, (drawn, scale) => [align === 'center' ? -Math.floor(drawn / 2) : align === 'right' ? -drawn : 0, block.top * scale]);
+        // The accent rows above the first line (-block.top of them) end up on one side of the drawn block, by the
+        // rotation and vertical flip. Only where that side is the top or the left does the block move back by them,
+        // and alignment measures the letters without them, so the letters stay put whether or not a line has accents.
+        drawCells(block.width, block.height, (gx, gy) => block.rows[gy][gx] === '#' ? c : null, ({ scale, rotate, flipY }) => {
+          const accents = -block.top, across = rotate % 180 !== 0, first = !flipY !== (rotate === 90 || rotate === 180);
+          const drawn = (across ? block.height - accents : block.width) * scale, back = first ? -accents * scale : 0;
+          const aligned = align === 'center' ? -Math.floor(drawn / 2) : align === 'right' ? -drawn : 0;
+          return across ? [aligned + back, 0] : [aligned, back];
+        });
       } else if (op.op === 'copy') {
         // Copies a rectangle of a symbol (palette characters) or of an earlier frame (exact RGBA).
         if ((op.from === undefined) === (op.symbol === undefined)) fail(p, 'copy needs exactly one of from (an earlier frame) or symbol');
@@ -344,6 +453,32 @@ export function renderProject(spec, options = {}) {
         const mode = op.mode ?? 'blob';
         if (!['blob', 'cardinal'].includes(mode)) fail(`${p}.mode`, 'expected blob or cardinal');
         drawTemplate(grid, integer(op.mask, `${p}.mask`, 0, mode === 'cardinal' ? 15 : 255), mode, x, y, paletteSampler(), `${p}.symbol`);
+      } else if (op.op === 'box') {
+        // An isometric box from the top-left of its bounds: a 2:1 top face whose right edge runs `w` pixels across and
+        // left edge `d`, over a left and a right face `h` pixels tall. Each pixel belongs to the face its centre lies in
+        // (tested on doubled coordinates, so on whole numbers), so edges step two pixels across for each one down and
+        // boxes laid on a 2:1 grid meet with no gap or overlap. `edge` marks the top's front edges and the corner
+        // between the sides. A face without a colour is left out; h 0 and a top alone is a floor diamond.
+        const w = integer(op.w, `${p}.w`, 2, 512), d = integer(op.d, `${p}.d`, 2, 512), h = integer(op.h ?? 0, `${p}.h`, 0, 512);
+        for (const [key, value] of [['w', w], ['d', d]]) if (value % 2) fail(`${p}.${key}`, 'expected an even number: a 2:1 edge runs two pixels across for each one down');
+        const faces = ['top', 'left', 'right'].map(key => (op[key] === undefined ? null : color(op[key], `${p}.${key}`)));
+        if (!faces.some(Boolean)) fail(`${p}.top`, 'give at least one face a colour: top, left or right');
+        const edge = op.edge === undefined ? null : color(op.edge, `${p}.edge`), across = w + d, down = across / 2 + h;
+        spend(across * down);
+        // 0 top, 1 left, 2 right, -1 outside the box.
+        const face = (i, j) => {
+          if (i < 0 || j < 0 || i >= across || j >= down) return -1;
+          const s = 2 * i + 4 * j + 3 - 2 * d, t = 4 * j - 2 * i + 2 * d + 1;
+          if (s > 0 && s < 4 * w && t > 0 && t < 4 * d) return 0;
+          const below = i < w ? t - 4 * d : s - 4 * w;
+          return below > 0 && below < 4 * h ? (i < w ? 1 : 2) : -1;
+        };
+        for (let j = 0; j < down; j++) for (let i = 0; i < across; i++) {
+          const f = face(i, j);
+          if (f < 0 || !faces[f]) continue;
+          const marked = edge && ((f === 0 && face(i, j + 1) > 0) || (f === 1 && face(i + 1, j) === 2));
+          put(x + i, y + j, marked ? edge : faces[f]);
+        }
       } else if (op.op === 'tilemap') {
         // A character map drawn from this recipe's symbols and autotile templates, with the legend, variants and rules of
         // scene tilemaps (see expandTilemap in autotile.js). Later operations see the composed result: dither over its
@@ -351,11 +486,21 @@ export function renderProject(spec, options = {}) {
         if (op.tile === undefined) fail(`${p}.tile`, 'expected [width, height]: the distance between cells in pixels');
         const tile = point(op.tile, `${p}.tile`);
         if (tile.some(n => n < 1 || n > 256)) fail(`${p}.tile`, 'cells are 1–256 pixels wide and tall');
+        // An iso map lays cells on a 2:1 diamond grid, back to front; each symbol stands on its diamond, bottoms aligned
+        // and centred across, so a block taller than the tile rises above its cell.
+        if (op.layout !== undefined && op.layout !== 'square' && op.layout !== 'iso') fail(`${p}.layout`, 'expected square or iso');
+        const iso = op.layout === 'iso';
+        if (iso && tile.some(n => n % 2)) fail(`${p}.tile`, 'an iso tile has an even width and height');
         const expanded = expandTilemap(op, { path: p, fail, kinds: ['symbol', 'template'], text: 'symbol', masked: kind => kind !== 'template', exists: (kind, key) => own(symbols, key) });
         const sample = paletteSampler();
-        for (const cell of expanded.cells) {
-          const grid = symbols[cell.name], left = x + cell.x * tile[0], top = y + cell.y * tile[1];
-          if (cell.kind === 'template') { drawTemplate(grid, cell.mask, cell.mode, left, top, sample, `${p}.legend: template ${JSON.stringify(cell.name)}`); continue; }
+        const cells = iso ? isoLayout(expanded.cells, expanded.rows, tile) : expanded.cells.map(cell => ({ ...cell, left: cell.x * tile[0], top: cell.y * tile[1] }));
+        for (const cell of cells) {
+          const grid = symbols[cell.name];
+          if (cell.kind === 'template') {
+            if (iso) fail(`${p}.legend`, `template ${JSON.stringify(cell.name)} draws square tiles; an iso map takes symbols`);
+            drawTemplate(grid, cell.mask, cell.mode, x + cell.left, y + cell.top, sample, `${p}.legend: template ${JSON.stringify(cell.name)}`); continue;
+          }
+          const left = x + cell.left + (iso ? Math.floor((tile[0] - grid.width) / 2) : 0), top = y + cell.top + (iso ? tile[1] - grid.height : 0);
           spend(grid.width * grid.height);
           for (let gy = 0; gy < grid.height; gy++) for (let gx = 0; gx < grid.width; gx++) { const c = sample(grid.rows[gy][gx]); if (c) put(left + gx, top + gy, c); }
         }
@@ -485,7 +630,7 @@ export function renderProject(spec, options = {}) {
       }
     }
   }
-  const frames = spec.frames.map((frame, index) => {
+  const frames = checked(() => spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
     object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'ops', 'layers', 'pixels']);
     const frameName = name(frame.name, `${p}.name`);
@@ -537,7 +682,8 @@ export function renderProject(spec, options = {}) {
     const pixels = (frame.layers ?? []).length ? new Uint8ClampedArray(data.length) : null;
     for (const [li, layer] of (frame.layers ?? []).entries()) {
       const lp = `${p}.layers[${li}]`;
-      object(layer, lp, ['name', 'visible', 'opacity', 'x', 'y', 'palette', 'ops']);
+      object(layer, lp, ['name', 'visible', 'opacity', 'x', 'y', 'palette', 'sort', 'ops']);
+      if (layer.sort !== undefined && layer.sort !== 'ground') fail(`${lp}.sort`, 'expected "ground": draw this layer\'s operations far to near by the row each stands on');
       if (layer.name !== undefined) name(layer.name, `${lp}.name`);
       // A layer palette recolors keys for this layer's drawing only, on top of the frame's palette, so one layer can
       // flash or cycle while other drawing that shares the key keeps its colour.
@@ -556,7 +702,7 @@ export function renderProject(spec, options = {}) {
       if (typeof opacity !== 'number' || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) fail(`${lp}.opacity`, 'expected a number from 0 to 1');
       const lx = integer(layer.x ?? 0, `${lp}.x`), ly = integer(layer.y ?? 0, `${lp}.y`);
       const bounds = [width, height, -1, -1];
-      drawOps(pixels, layer.ops ?? [], `${lp}.ops`, bounds);
+      drawOps(pixels, layer.ops ?? [], `${lp}.ops`, bounds, layer.sort === 'ground');
       activePalette = framePalette;
       if (visible && opacity > 0 && bounds[2] >= 0) {
         const area = (bounds[2] - bounds[0] + 1) * (bounds[3] - bounds[1] + 1);
@@ -587,16 +733,17 @@ export function renderProject(spec, options = {}) {
     const result = { name: frameName, duration, data, ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
     rendered.set(frameName, result);
     return result;
-  });
-  const animations = readAnimations(spec, frames);
-  const sheet = readSheet(spec, frames, width, height);
+  }));
+  const animations = checked(() => readAnimations(spec, frames));
+  const sheet = checked(() => readSheet(spec, frames, width, height));
+  if (noted.length) throw together();
   const warnings = [], clipping = [...clipped].map(([path, pixels]) => ({ path, pixels }));
   if (clipping.length) warnings.push(`Some drawing falls outside the canvas and is clipped: ${clipping[0].path} (${clipping[0].pixels} px)${clipping.length > 1 ? ` and ${clipping.length - 1} more location${clipping.length > 2 ? 's' : ''}` : ''}.`);
   return {
     name: projectName, width, height, frames, animations, palette, ramps,
     ...(options.stats && { work: { pixels: work, layerPixels, operations: operationCount } }),
     sheet,
-    warnings, ...(clipping.length && { clipping: clipping.slice(0, 64), ...(clipping.length > 64 && { clippingOmitted: clipping.length - 64 }) })
+    warnings, ...(clipping.length && { clipping: clipping.slice(0, 16), ...(clipping.length > 16 && { clippingOmitted: clipping.length - 16 }) })
   };
 }
 
@@ -604,7 +751,7 @@ export function renderProject(spec, options = {}) {
 // atlas validation with the renderer, but never allocates or composites a canvas. A stamp cannot erase, so visible
 // symbol bounds suffice to compute the exact trimmed atlas, including flips and canvas clipping.
 export function describeStampRecipe(spec) {
-  const { width, height, palette, symbols } = readProject(spec);
+  const { width, height, palette, symbols } = readProject(spec, { stills: false });
   if (spec.background !== undefined) fail('project.background', 'compiler stamp recipes omit the background');
   const frameNames = new Set(), boundsBySymbol = new Map(), boxes = [];
   let work = 0, operations = 0;
@@ -747,6 +894,80 @@ export function scalePixels(data, width, height, scale = 1) {
   return result;
 }
 
+// Perspective guides drawn over an enlarged review image, never into art: a horizon row, rays from up to three
+// vanishing points and an isometric grid of tile diagonals. Coordinates are canvas pixel corners, like anchors.
+export function readGuides(value, path = 'guides') {
+  object(value, path, ['horizon', 'vanish', 'iso']);
+  if (!Object.keys(value).length) fail(path, 'name a horizon, vanish points or an iso grid');
+  const guides = {};
+  if (value.horizon !== undefined) guides.horizon = integer(value.horizon, `${path}.horizon`, -4096, 8192);
+  if (value.vanish !== undefined) {
+    list(value.vanish, `${path}.vanish`, 3);
+    if (!value.vanish.length) fail(`${path}.vanish`, 'expected 1–3 points [x, y]');
+    guides.vanish = value.vanish.map((p, i) => { if (!Array.isArray(p) || p.length !== 2) fail(`${path}.vanish[${i}]`, 'expected [x, y]'); return [integer(p[0], `${path}.vanish[${i}][0]`, -16384, 16384), integer(p[1], `${path}.vanish[${i}][1]`, -16384, 16384)]; });
+  }
+  if (value.iso !== undefined) {
+    const iso = object(value.iso, `${path}.iso`, ['tile', 'at']);
+    if (!Array.isArray(iso.tile) || iso.tile.length !== 2) fail(`${path}.iso.tile`, 'expected [width, height] of one diamond tile, such as [32, 16]');
+    guides.iso = { tile: [integer(iso.tile[0], `${path}.iso.tile[0]`, 2, 256), integer(iso.tile[1], `${path}.iso.tile[1]`, 1, 256)], at: iso.at === undefined ? [0, 0] : point(iso.at, `${path}.iso.at`) };
+  }
+  return guides;
+}
+const GUIDE_COLORS = { horizon: [255, 176, 32, 220], vanish: [40, 210, 255, 150], iso: [130, 255, 120, 120] };
+// Draws `guides` into `target` (an RGBA image `targetWidth` wide) inside `box` ({left, top, w, h} in target pixels),
+// where canvas pixel corner (region.x, region.y) sits at the box's corner and each canvas pixel is `scale` wide.
+export function drawGuides(target, targetWidth, box, scale, region, guides) {
+  const toX = x => box.left + (x - region.x) * scale, toY = y => box.top + (y - region.y) * scale;
+  const right = box.left + box.w, bottom = box.top + box.h;
+  // A segment in target pixels, clipped to the box (Liang–Barsky), then stepped one pixel at a time.
+  const segment = (x0, y0, x1, y1, color) => {
+    let t0 = 0, t1 = 1;
+    const dx = x1 - x0, dy = y1 - y0;
+    for (const [p, q] of [[-dx, x0 - box.left], [dx, right - 1 - x0], [-dy, y0 - box.top], [dy, bottom - 1 - y0]]) {
+      if (p === 0) { if (q < 0) return; continue; }
+      const t = q / p;
+      if (p < 0) { if (t > t1) return; if (t > t0) t0 = t; } else { if (t < t0) return; if (t < t1) t1 = t; }
+    }
+    const ax = x0 + t0 * dx, ay = y0 + t0 * dy, bx = x0 + t1 * dx, by = y0 + t1 * dy, steps = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
+    let last = -1;
+    for (let i = 0; i <= steps; i++) {
+      const x = Math.round(ax + (bx - ax) * i / steps), y = Math.round(ay + (by - ay) * i / steps);
+      if (x < box.left || y < box.top || x >= right || y >= bottom) continue;
+      const at = (y * targetWidth + x) * 4;
+      if (at !== last) blend(target, at, color);
+      last = at;
+    }
+  };
+  // Canvas extent of the box, for lines that cross all of it.
+  const cx0 = region.x, cy0 = region.y, cx1 = region.x + box.w / scale, cy1 = region.y + box.h / scale;
+  if (guides.iso) {
+    const [w, h] = guides.iso.tile, [x0, y0] = guides.iso.at, m = h / w;
+    // Tile edges run through each diamond's top corner (x0 + w/2, y0) at slopes ±h/w, one line every h rows.
+    for (const sign of [1, -1]) {
+      const c0 = y0 - sign * m * (x0 + w / 2), at = x => sign * m * x;
+      const low = Math.min(cy0 - at(cx0), cy0 - at(cx1)), high = Math.max(cy1 - at(cx0), cy1 - at(cx1));
+      for (let k = Math.ceil((low - c0) / h); k <= Math.floor((high - c0) / h); k++) {
+        const c = c0 + k * h;
+        segment(toX(cx0), toY(at(cx0) + c), toX(cx1), toY(at(cx1) + c), GUIDE_COLORS.iso);
+      }
+    }
+  }
+  for (const [vx, vy] of guides.vanish ?? []) {
+    // Rays through eight evenly spaced points on each side of the box, extended across it.
+    const span = Math.max(cx1 - cx0, cy1 - cy0) * 2;
+    for (let i = 0; i < 8; i++) {
+      const f = (i + 0.5) / 8, x = cx0 + (cx1 - cx0) * f, y = cy0 + (cy1 - cy0) * f;
+      for (const [px, py] of [[x, cy0], [x, cy1], [cx0, y], [cx1, y]]) {
+        const reach = Math.max(Math.abs(px - vx), Math.abs(py - vy));
+        if (!reach) continue;
+        const k = 1 + span / reach;
+        segment(toX(vx), toY(vy), toX(vx + (px - vx) * k), toY(vy + (py - vy) * k), GUIDE_COLORS.vanish);
+      }
+    }
+  }
+  if (guides.horizon !== undefined) segment(toX(cx0), toY(guides.horizon), toX(cx1), toY(guides.horizon), GUIDE_COLORS.horizon);
+}
+
 // Packs frames into one RGBA sheet. `trim: false` forces the uniform grid even for a trimmed recipe (aligned
 // material passes need identical rectangles). Anchors and points are exported pixels; pivot is anchor/source size.
 export function buildAtlas(project, { trim } = {}) {
@@ -779,8 +1000,24 @@ export function buildAtlas(project, { trim } = {}) {
     entries[frame.name] = { frame: { x, y, w, h }, rotated: false, trimmed: false, spriteSourceSize: { x: 0, y: 0, w, h }, sourceSize: { w, h }, duration: frame.duration, ...extras(frame) };
   });
   const animations = Object.fromEntries(Object.entries(project.animations).map(([key, a]) => [key, { ...a, frames: a.frames.map(i => frames[i].name) }]));
-  const meta = { app: 'Pixelbolt', version: '1', image: `${project.name}.png`, format: 'RGBA8888', size: { w: atlasWidth, h: atlasHeight }, scale: String(s) };
+  const frameTags = Object.entries(project.animations).map(([key, a]) => frameTag(key, a.frames)).filter(Boolean);
+  const meta = { app: 'Pixelbolt', version: '1', image: `${project.name}.png`, format: 'RGBA8888', size: { w: atlasWidth, h: atlasHeight }, scale: String(s), frameTags };
   return { data, width: atlasWidth, height: atlasHeight, metadata: { frames: entries, animations, meta } };
+}
+
+// An Aseprite-style tag for an animation that plays one run of frames in recipe order: forward, backward, or forward
+// and back without repeating either end (a ping-pong of a, b, c plays a, b, c, b). `from` and `to` are indices into
+// the atlas's frames, lowest first. Any other sequence (holds, skips, frames from all over) has no from/to range, so
+// it gets no tag: the atlas's `animations` lists every animation in full.
+export function frameTag(name, sequence) {
+  const first = sequence[0], last = sequence.at(-1), runs = (list, step) => list.every((index, i) => i === 0 || index - list[i - 1] === step);
+  if (runs(sequence, 1)) return { name, from: first, to: last, direction: 'forward' };
+  if (runs(sequence, -1)) return { name, from: last, to: first, direction: 'reverse' };
+  if (sequence.length % 2 === 0) {
+    const peak = sequence.length / 2, up = sequence.slice(0, peak + 1), down = sequence.slice(peak + 1);
+    if (runs(up, 1) && down.every((index, i) => index === up[peak - 1 - i])) return { name, from: first, to: up[peak], direction: 'pingpong' };
+  }
+  return null;
 }
 
 // Inspection and comparison build in-memory contact sheets and palette-key text. Nothing is written.
@@ -828,6 +1065,9 @@ const readRegion = (data, width, region, namer) => Array.from({ length: region.h
 
 // Cells run left to right, top to bottom. The largest scale that keeps cells within 256px and the sheet within 1024px
 // wins, then fewer rows, then less area. Checker squares span whole source pixels so transparency never reads as dithering.
+// A sheet holds at most 4096 pixels of cells a side; their 2-pixel gutters may take it past that, so a still 4096
+// pixels wide shows whole. Wider gutters (above scale 2) count against the limit.
+const SHEET_SIDE = 4096;
 function drawSheet(sources, width, region, { scale, background = null, columns, where = 'inspect' } = {}) {
   const measure = (c, s) => {
     const rows = Math.ceil(sources.length / c), gap = Math.max(2, s);
@@ -845,7 +1085,7 @@ function drawSheet(sources, width, region, { scale, background = null, columns, 
     const m = measure(c, scale ?? 1);
     if (!layout || Math.max(m.width, m.height) < Math.max(layout.width, layout.height)) layout = m;
   }
-  if (layout.width > 4096 || layout.height > 4096) fail(where, `the contact sheet would be ${layout.width}×${layout.height} pixels, above the 4096-pixel limit; select fewer frames, a smaller region or a lower scale`);
+  if (layout.width > SHEET_SIDE + 2 * (layout.columns + 1) || layout.height > SHEET_SIDE + 2 * (layout.rows + 1)) fail(where, `the contact sheet would be ${layout.width}×${layout.height} pixels, above the 4096-pixel limit (4096 pixels of frames and 2-pixel gutters); select fewer frames, a smaller region or a lower scale`);
   const data = new Uint8ClampedArray(layout.width * layout.height * 4), square = Math.max(2, Math.ceil(8 / layout.scale)), composed = new Map();
   for (let i = 0; i < data.length; i += 4) data.set(gutterColor, i);
   sources.forEach((source, n) => {
@@ -920,7 +1160,7 @@ export function wildcard(pattern, text) {
 }
 
 export function inspectProject(project, options = {}) {
-  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset']);
+  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'guides']);
   const { width, height, frames } = project;
   if (options.frames !== undefined && options.animation !== undefined) fail('inspect', 'choose frames or animation, not both');
   let cells = frames.map((_, i) => i);
@@ -947,6 +1187,8 @@ export function inspectProject(project, options = {}) {
   if (!['color', 'silhouette', 'grayscale', 'onion', 'tile'].includes(mode)) fail('inspect.view', 'expected color, silhouette, grayscale, onion or tile');
   if (mode === 'onion' && options.animation === undefined) fail('inspect.view', 'onion requires an animation so neighbors have an unambiguous playback position');
   if (mode === 'tile' && options.region !== undefined) fail('inspect.region', 'tile view repeats whole frames; omit region');
+  if (mode === 'tile' && options.guides !== undefined) fail('inspect.guides', 'guides draw over one canvas; tile view repeats it, so omit guides');
+  const guides = options.guides === undefined ? null : readGuides(options.guides, 'inspect.guides');
   let region = { x: 0, y: 0, w: width, h: height };
   if (options.region !== undefined) {
     const r = object(options.region, 'inspect.region', ['x', 'y', 'w', 'h']);
@@ -988,6 +1230,12 @@ export function inspectProject(project, options = {}) {
   } else {
     const sources = cells.map((i, n) => mode === 'onion' ? onionPixels(project, project.animations[options.animation], positions[n]) : reviewPixels(frames[i].data, mode));
     view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(sources, width, region, { scale, background }) };
+    if (guides) {
+      // Over every cell of the enlarged sheet; the native sheet keeps its exact pixels.
+      const { sheet } = view, w = region.w * sheet.scale, h = region.h * sheet.scale;
+      cells.forEach((_, n) => drawGuides(sheet.data, sheet.width, { left: sheet.gap + (n % sheet.columns) * (w + sheet.gap), top: sheet.gap + Math.floor(n / sheet.columns) * (h + sheet.gap), w, h }, sheet.scale, region, guides));
+      view.guides = guides;
+    }
     if (mode !== 'color') view.mode = mode;
     if (native) view.nativeSheet = drawSheet(sources, width, region, { scale: 1, background });
   }
@@ -1143,14 +1391,21 @@ export function compareProjects(before, after) {
     ...(Object.keys(filled(animations)).length && { animations: filled(animations) })
   };
   // Before and after share one row per frame, cropped to the changed area plus 2 pixels unless frames were added or removed.
+  // When two frames side by side would pass the sheet limit (a still over 2048 wide), before goes above after; a
+  // comparison too large either way (over 2048 a side, which no recipe is) keeps its report without the image.
   if (shown.length && !resized) {
     let region = { x: 0, y: 0, w: width, h: height };
     if (shown.every(row => row.box)) {
       const x = Math.max(0, Math.min(...shown.map(row => row.box.x)) - 2), y = Math.max(0, Math.min(...shown.map(row => row.box.y)) - 2);
       region = { x, y, w: Math.min(width, Math.max(...shown.map(row => row.box.x + row.box.w)) + 2) - x, h: Math.min(height, Math.max(...shown.map(row => row.box.y + row.box.h)) + 2) - y };
     }
-    const rows = shown.slice(0, Math.max(1, Math.min(16, Math.floor(4094 / (region.h + 2)))));
-    report.image = { region, frames: rows.map(({ frame, status }) => ({ frame, status })), ...(rows.length < shown.length && { omitted: shown.length - rows.length }), sheet: drawSheet(rows.flatMap(row => [row.before, row.after]), width, region, { columns: 2, where: 'image' }) };
+    const stacked = 2 * region.w > SHEET_SIDE;
+    if (stacked && 2 * region.h > SHEET_SIDE) report.imageNote = `no before/after image: two ${region.w}×${region.h} frames pass the 4096-pixel sheet limit side by side and stacked; inspect each revision with a region instead`;
+    else {
+      const rows = shown.slice(0, Math.max(1, Math.min(16, Math.floor(4094 / ((stacked ? 2 : 1) * (region.h + 2))))));
+      report.image = { region, frames: rows.map(({ frame, status }) => ({ frame, status })), ...(rows.length < shown.length && { omitted: shown.length - rows.length }), sheet: drawSheet(rows.flatMap(row => [row.before, row.after]), width, region, { columns: stacked ? 1 : 2, where: 'image' }) };
+      if (stacked) report.imageNote = `before above after: side by side, two ${region.w}-pixel frames would pass the 4096-pixel sheet limit`;
+    }
   }
   const legend = namer.legend();
   if (Object.keys(legend).length) report.legend = legend;

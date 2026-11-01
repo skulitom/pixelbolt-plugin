@@ -17,12 +17,14 @@
     "width": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 256
+      "maximum": 4096,
+      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
     },
     "height": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 256
+      "maximum": 4096,
+      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
     },
     "palette": {
       "type": "object",
@@ -90,8 +92,8 @@
     "animations": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 65527,
-      "description": "ZIP32 bundle budget: animation count + frame count + 7 support files must not exceed 65,535.",
+      "maxProperties": 65525,
+      "description": "ZIP32 bundle budget: animation count + frame count + 9 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -162,6 +164,26 @@
     "frames"
   ],
   "additionalProperties": false,
+  "if": {
+    "properties": {
+      "frames": {
+        "minItems": 2
+      }
+    },
+    "required": [
+      "frames"
+    ]
+  },
+  "then": {
+    "properties": {
+      "width": {
+        "maximum": 256
+      },
+      "height": {
+        "maximum": 256
+      }
+    }
+  },
   "$defs": {
     "rows": {
       "type": "array",
@@ -288,12 +310,12 @@
         "x": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 4095
         },
         "y": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 4095
         },
         "color": {
           "type": "string",
@@ -333,6 +355,12 @@
           "minimum": -4096,
           "maximum": 4096
         },
+        "sort": {
+          "enum": [
+            "ground"
+          ],
+          "description": "ground: draw the operations far to near by the row each stands on (its ground, or the lowest row it draws), list order breaking ties, as a game draws actors and props. Use it for everything standing on the ground: trees, grass, rocks, figures. Area operations (dither, shade, fill, outline, tilemap...) are refused."
+        },
         "palette": {
           "type": "object",
           "maxProperties": 256,
@@ -371,6 +399,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "color": {
               "type": "string",
               "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
@@ -398,15 +432,23 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -440,15 +482,23 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -481,6 +531,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "x2": {
               "type": "integer",
@@ -524,12 +580,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             }
           },
           "required": [
@@ -604,6 +662,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "rows": {
               "$ref": "#/$defs/rows"
             },
@@ -660,6 +724,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "symbol": {
               "type": "string",
@@ -719,6 +789,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "text": {
               "type": "string",
@@ -793,6 +869,12 @@
               "type": "integer",
               "minimum": -4096,
               "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
             },
             "from": {
               "type": "string",
@@ -891,6 +973,12 @@
               "minimum": -4096,
               "maximum": 4096
             },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
             "symbol": {
               "type": "string",
               "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -929,6 +1017,90 @@
           ],
           "additionalProperties": false,
           "description": "Draw one autotile tile from a template symbol two tiles wide and three tall: the four quarters the mask selects (see the autotile template format). The autotile compiler emits one per frame, so editing the template redraws every tile."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "box"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's right edge runs across, in pixels (even); it runs half as far down."
+            },
+            "d": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's left edge runs across, in pixels (even)."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 512,
+              "description": "Height of the side faces in pixels; default 0, a flat diamond."
+            },
+            "top": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "left": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "right": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "edge": {
+              "type": "string",
+              "description": "Marks the top face's front edges and the corner between the side faces."
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "d"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "top"
+              ]
+            },
+            {
+              "required": [
+                "left"
+              ]
+            },
+            {
+              "required": [
+                "right"
+              ]
+            }
+          ],
+          "description": "An isometric box from the top-left of its bounds (w + d wide, (w + d) / 2 + h tall): a 2:1 top face over a left and a right face. Each pixel belongs to the face its centre lies in, so edges step two pixels across per row and boxes on a 2:1 grid meet exactly. A face without a colour is left out."
         },
         {
           "type": "object",
@@ -994,12 +1166,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "color": {
               "type": "string",
@@ -1148,12 +1322,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
             },
             "steps": {
               "type": "integer",
@@ -1343,7 +1519,14 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 2147483647,
-              "description": "Reorders seeded variant picks and rule chances; default 0 keeps position-based picks."
+              "description": "Reshuffles variant picks and rule chances, which are seeded by cell position; default 0."
+            },
+            "layout": {
+              "enum": [
+                "square",
+                "iso"
+              ],
+              "description": "square (default): cells side by side, each drawing from its top-left. iso: a 2:1 diamond grid (even tile sizes such as [32, 16]), drawn back to front, cell [x, y] at [(x - y + rows - 1) * w/2, (x + y) * h/2]; each drawing stands on its diamond, bottoms aligned and centred across, so a block taller than the tile rises above its cell."
             },
             "legend": {
               "type": "object",
@@ -1356,14 +1539,14 @@
                 "oneOf": [
                   {
                     "type": "string",
-                    "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                    "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                   },
                   {
                     "type": "object",
                     "properties": {
                       "symbol": {
                         "type": "string",
-                        "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                        "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                       },
                       "symbols": {
                         "type": "array",
@@ -1426,7 +1609,7 @@
                           "properties": {
                             "symbol": {
                               "type": "string",
-                              "description": "A symbol drawn at the cell's top-left; with autotile, {mask} in its name becomes the neighbour mask."
+                              "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
                             },
                             "symbols": {
                               "type": "array",
@@ -1557,12 +1740,14 @@
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 512
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
             },
             "rules": {
               "type": "array",

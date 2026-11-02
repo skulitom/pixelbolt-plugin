@@ -10,6 +10,7 @@ import { createSequence } from './sequence.js';
 import { prepareScene } from './scene.js';
 import { compilePoses } from './authoring.js';
 import { compileWaves } from './wave.js';
+import { EFFECT_PRESETS } from '../studio/effects-controls.js';
 
 const routes = new Map([
   ['/', ['../studio/index.html', 'text/html; charset=utf-8']],
@@ -25,6 +26,8 @@ const routes = new Map([
   ['/motions.js', ['./motions.js', 'text/javascript; charset=utf-8']],
   ['/motion.js', ['./motion.js', 'text/javascript; charset=utf-8']],
   ['/autotile.js', ['./autotile.js', 'text/javascript; charset=utf-8']],
+  ['/terrain.js', ['./terrain.js', 'text/javascript; charset=utf-8']],
+  ['/slopes.js', ['./slopes.js', 'text/javascript; charset=utf-8']],
   ['/scene.js', ['./scene.js', 'text/javascript; charset=utf-8']],
   ['/scene-player.js', ['../studio/scene-player.js', 'text/javascript; charset=utf-8']],
   ['/scene.css', ['../studio/scene.css', 'text/css; charset=utf-8']],
@@ -34,12 +37,20 @@ const routes = new Map([
   ['/fluid-lab.js', ['../studio/fluid-lab.js', 'text/javascript; charset=utf-8']],
   ['/fluid-controls.js', ['../studio/fluid-controls.js', 'text/javascript; charset=utf-8']],
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
+  ['/electric.js', ['./electric.js', 'text/javascript; charset=utf-8']],
   ['/wave.js', ['./wave.js', 'text/javascript; charset=utf-8']],
+  ['/effects.html', ['../studio/effects.html', 'text/html; charset=utf-8']],
+  ['/effects-lab.js', ['../studio/effects-lab.js', 'text/javascript; charset=utf-8']],
+  ['/effects-controls.js', ['../studio/effects-controls.js', 'text/javascript; charset=utf-8']],
+  ['/fx.js', ['./fx.js', 'text/javascript; charset=utf-8']],
+  ['/shapes.js', ['./shapes.js', 'text/javascript; charset=utf-8']],
+  // The effects lab compiles these sources in the browser.
+  ...EFFECT_PRESETS.map(({ file }) => [`/examples/${file}.fx.json`, [`../examples/${file}.fx.json`, 'application/json']]),
   ...['interference', 'portal'].map(name => [`/examples/${name}.wave.json`, [`../examples/${name}.wave.json`, 'application/json']]),
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
-  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
+  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'tesla-coil', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
 export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/scene-source.json', '/project.json', '/shared-palette.json'];

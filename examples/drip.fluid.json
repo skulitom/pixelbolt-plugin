@@ -41,12 +41,12 @@
       "gravity": [0, 0.4],
       "flip": 0,
       "drag": 0.04,
-      "tension": 2,
+      "tension": 3,
       "obstacles": [{ "symbol": "rock", "x": 0, "y": 0 }, { "symbol": "ground", "x": 0, "y": 29 }],
       "fill": [{ "x": 1, "y": 25, "w": 14, "h": 4 }],
       "emitters": [
         { "name": "bead", "at": [8, 7.5], "radius": 1.4, "rate": 1, "end": 8, "velocity": [0, 0] },
-        { "name": "swell", "at": [8, 8], "radius": 1.5, "rate": 1, "start": 4, "end": 8, "velocity": [0, 0] },
+        { "name": "swell", "at": [8, 8.5], "radius": 2, "rate": 1, "start": 4, "end": 8, "velocity": [0, 0] },
         {
           "name": "spray-left",
           "at": [6.5, 25.5],

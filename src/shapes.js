@@ -15,24 +15,33 @@ const PI = 3.141592653589793;
 // Tilt and squash belong to the kinds drawn around a centre; bolts, streams and trails run between points and auras hug
 // a sprite, so they take neither.
 const SPECIFIC = {
-  aura: ['symbol', 'width', 'rise', 'noise', 'scale', 'boil'],
-  trail: ['points', 'pivot', 'length', 'width', 'taper', 'fade', 'noise', 'scale'],
-  ring: ['radius', 'width', 'fill', 'noise', 'scale', 'tilt', 'squash'],
-  slash: ['radius', 'width', 'arc', 'reveal', 'noise', 'scale', 'tilt', 'squash'],
-  beam: ['to', 'width', 'reveal', 'wobble', 'wavelength', 'waves', 'fade', 'noise', 'scale', 'tilt', 'squash'],
-  bolt: ['to', 'width', 'glow', 'jag', 'branches', 'reroll', 'segment', 'reveal', 'noise', 'scale'],
-  glyph: ['radius', 'inner', 'points', 'step', 'runes', 'double', 'spin', 'reveal', 'glow', 'fill', 'noise', 'scale', 'tilt', 'squash'],
-  star: ['radius', 'points', 'ratio', 'width', 'core', 'angle', 'spin', 'jitter', 'noise', 'scale', 'tilt', 'squash'],
+  aura: ['symbol', 'around', 'disc', 'width', 'rise', 'noise', 'scale', 'boil'],
+  trail: ['points', 'pivot', 'length', 'width', 'taper', 'fade', 'noise', 'flow', 'scale'],
+  ring: ['radius', 'width', 'fill', 'noise', 'scale', 'boil', 'tilt', 'squash'],
+  slash: ['radius', 'width', 'arc', 'reveal', 'noise', 'flow', 'scale', 'tilt', 'squash'],
+  beam: ['to', 'width', 'reveal', 'wobble', 'wavelength', 'waves', 'fade', 'noise', 'flow', 'scale', 'tilt', 'squash'],
+  bolt: ['to', 'width', 'glow', 'jag', 'branches', 'reroll', 'segment', 'reveal', 'noise', 'flow', 'scale'],
+  glyph: ['radius', 'inner', 'points', 'step', 'runes', 'double', 'spin', 'reveal', 'glow', 'fill', 'noise', 'flow', 'scale', 'tilt', 'squash'],
+  star: ['radius', 'points', 'ratio', 'width', 'core', 'angle', 'spin', 'jitter', 'noise', 'flow', 'scale', 'tilt', 'squash'],
   burst: ['radius', 'hole', 'noise', 'scale', 'boil', 'tilt', 'squash'],
-  stream: ['through', 'width', 'taper', 'head', 'tail', 'sway', 'wavelength', 'waves', 'noise', 'scale']
+  stream: ['through', 'width', 'taper', 'head', 'tail', 'sway', 'wavelength', 'waves', 'fade', 'noise', 'flow', 'scale']
 };
-const COMMON = ['kind', 'look', 'at', 'frames', 'ease', 'power', 'flicker', 'blend', 'drift', 'floor', 'seed', 'cue'];
+const COMMON = ['kind', 'look', 'at', 'path', 'frames', 'ease', 'power', 'flicker', 'blend', 'drift', 'curve', 'floor', 'seed', 'cue', 'depth'];
+// Where a layer draws relative to a character standing in the effect: in front (the default), behind it, or split at
+// the layer's centre row, its far half (above) behind and its near half in front, as a ring lying round its feet.
+export const LAYER_DEPTHS = ['front', 'back', 'split'];
 // Painting work across one compile, in pixels visited: very wide streams or ink over many frames are refused instead
 // of running for hours. Area shapes visit each canvas pixel once a frame, so the recipe's frame-area limit keeps them
 // well under it. The shipped effects use under 0.1%; reaching it takes a few seconds.
 export const SHAPE_WORK = 400_000_000;
 
 const fail = (path, message) => { throw new PixelError(path, message); };
+// Counts `n` pixels visited against the compile's shared budget (painting, and measuring an aura's distance field),
+// refusing the layer at `path` that crosses it.
+const spendWork = (work, n, path) => {
+  work.spent += n;
+  if (work.spent > SHAPE_WORK) fail(path, `the shape layers would visit more than ${SHAPE_WORK.toLocaleString('en-US')} pixels to draw; make them smaller (radius, width, the part on the canvas), fewer, or over fewer frames`);
+};
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const number = (value, path, min, max) => {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
@@ -47,6 +56,20 @@ const pair = (value, path, min, max) => {
   return [number(value[0], `${path}[0]`, min, max), number(value[1], `${path}[1]`, min, max)];
 };
 const clamp01 = x => (x < 0 ? 0 : x > 1 ? 1 : x);
+function squashOf(value, path) {
+  if (!Array.isArray(value) || !Array.isArray(value[0])) return { squash: pair(value ?? [1, 1], path, 0.125, 8), squashKeys: null };
+  if (value.length < 2 || value.length > 8) fail(path, 'expected [x, y], or 2–8 of them as keys spread over the layer\'s frames');
+  const keys = value.map((key, i) => pair(key, `${path}[${i}]`, 0.125, 8));
+  return { squash: keys[0], squashKeys: [keys.map(key => key[0]), keys.map(key => key[1])] };
+}
+// drift: [x, y] moved over the window, or 2–8 offsets (a path's 2–16) as keys spread over it, so a layer can travel a curve (an orb
+// that arcs, a flame that wanders) instead of a straight line.
+function driftOf(value, path, most = 8) {
+  if (!Array.isArray(value) || !Array.isArray(value[0])) return { drift: pair(value ?? [0, 0], path, -4096, 4096), driftKeys: null };
+  if (value.length < 2 || value.length > most) fail(path, `expected [x, y], or 2–${most} offsets [x, y] as keys spread over the layer's frames`);
+  const keys = value.map((key, i) => pair(key, `${path}[${i}]`, -4096, 4096));
+  return { drift: keys.at(-1), driftKeys: [keys.map(key => key[0]), keys.map(key => key[1])] };
+}
 // The frame of an animation (a list of frames) that effect frame t shows: frame for frame, holding the last after the
 // animation ends, or round again in a loop.
 export const sequenceFrame = (list, t, loop) => list[loop ? t % list.length : Math.min(t, list.length - 1)];
@@ -74,6 +97,32 @@ export function tween(value, path, min, max) {
   if (!Array.isArray(value)) return [number(value, path, min, max)];
   if (value.length < 2 || value.length > 8) fail(path, `expected a number from ${min} to ${max}, or 2–8 of them as keys spread over the layer's frames`);
   return value.map((v, i) => number(v, `${path}[${i}]`, min, max));
+}
+// Keys through a uniform Catmull-Rom curve instead of straight lines: it passes through every key with no corner at
+// the inner ones (the end keys' neighbours are themselves). Polynomial, so every engine computes the same bits.
+export function curveSample(keys, q) {
+  if (keys.length < 3) return sample(keys, q);
+  const n = keys.length - 1, s = q * n, i = Math.max(0, Math.min(n - 1, Math.floor(s))), u = s - i;
+  const p0 = keys[Math.max(0, i - 1)], p1 = keys[i], p2 = keys[i + 1], p3 = keys[Math.min(n, i + 2)];
+  return 0.5 * (2 * p1 + (p2 - p0) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (3 * p1 - p0 - 3 * p2 + p3) * u * u * u);
+}
+// A point moving at a steady speed along a path of points, straight between them or through a smooth curve: `t` is the
+// share of the path's length travelled, so points far apart take longer to pass between than points close together.
+// A curve is measured along 16 straight pieces per span. Only + − × ÷ and sqrt, so every engine gives the same bits.
+export function pathWalker(points, curved = false) {
+  const xs = points.map(p => p[0]), ys = points.map(p => p[1]), steps = (points.length - 1) * (curved ? 16 : 1);
+  const marks = Array.from({ length: steps + 1 }, (_, k) => (curved ? [curveSample(xs, k / steps), curveSample(ys, k / steps)] : points[k]));
+  const lengths = [0];
+  for (let k = 1; k <= steps; k++) { const dx = marks[k][0] - marks[k - 1][0], dy = marks[k][1] - marks[k - 1][1]; lengths.push(lengths[k - 1] + Math.sqrt(dx * dx + dy * dy)); }
+  const total = lengths[steps];
+  return t => {
+    if (!(total > 0)) return [marks[0][0], marks[0][1]];
+    const d = Math.min(1, Math.max(0, t)) * total;
+    let low = 0, high = steps - 1;
+    while (low < high) { const mid = (low + high + 1) >> 1; if (lengths[mid] <= d) low = mid; else high = mid - 1; }
+    const span = lengths[low + 1] - lengths[low], u = span > 0 ? (d - lengths[low]) / span : 0;
+    return [marks[low][0] + (marks[low + 1][0] - marks[low][0]) * u, marks[low][1] + (marks[low + 1][1] - marks[low][1]) * u];
+  };
 }
 export function sample(keys, q) {
   if (keys.length === 1) return keys[0];
@@ -111,7 +160,18 @@ function readShading(value, path, palette) {
 }
 
 function readLook(look, path, palette, seed) {
-  fields(look, ['colors', 'thresholds', 'dither', 'pattern', 'outline', 'light', 'lit', 'shade'], path);
+  fields(look, ['colors', 'thresholds', 'dither', 'pattern', 'outline', 'halo', 'light', 'reach', 'lit', 'shade', 'front'], path);
+  // halo: a glow of one colour on the empty pixels within `width` steps of the look (beyond its outline), on every
+  // other pixel when dithered (the default from width 2: a checkerboard on a one-pixel ring would leave whole diagonal
+  // sides solid or empty), so a bright shape glows without a hard ring.
+  let halo = null;
+  if (look.halo !== undefined) {
+    if (look.halo === null || typeof look.halo !== 'object' || Array.isArray(look.halo)) fail(`${path}.halo`, 'expected { color, width, dither }');
+    fields(look.halo, ['color', 'width', 'dither'], `${path}.halo`);
+    if (look.halo.color === undefined) fail(`${path}.halo.color`, 'name the palette key the glow is drawn in');
+    halo = { color: paletteKey(look.halo.color, `${path}.halo.color`, palette).charCodeAt(0), width: integer(look.halo.width ?? 1, `${path}.halo.width`, 1, 4),
+      dither: look.halo.dither === undefined ? (look.halo.width ?? 1) > 1 : (typeof look.halo.dither === 'boolean' ? look.halo.dither : fail(`${path}.halo.dither`, 'expected true or false')) };
+  }
   const lit = look.lit === undefined ? null : readShading(look.lit, `${path}.lit`, palette), shade = look.shade === undefined ? null : readShading(look.shade, `${path}.shade`, palette);
   if (look.light !== undefined && !lit && !shade) fail(`${path}.light`, 'light points the lit and shade bands; add lit or shade too');
   const toward = look.light === undefined ? [-1, -1] : pair(look.light, `${path}.light`, -1, 1), reach = Math.sqrt(toward[0] * toward[0] + toward[1] * toward[1]);
@@ -130,13 +190,18 @@ function readLook(look, path, palette, seed) {
   return {
     codes: colors.map(key => key.charCodeAt(0)), thresholds, gaps: thresholds.map((t, i) => t - (i ? thresholds[i - 1] : 0)),
     dither: number(look.dither ?? 0, `${path}.dither`, 0, 1), threshold: ditherThreshold(pattern, [0, 0], seed),
-    outline: look.outline === undefined ? 0 : paletteKey(look.outline, `${path}.outline`, palette).charCodeAt(0),
-    lit, shade, light: [toward[0] / reach, toward[1] / reach]
+    outline: look.outline === undefined ? 0 : paletteKey(look.outline, `${path}.outline`, palette).charCodeAt(0), halo,
+    lit, shade, light: [toward[0] / reach, toward[1] / reach],
+    // front: drawn over the symbol particles (smoke over sparks) instead of under them.
+    front: look.front === undefined ? false : (typeof look.front === 'boolean' ? look.front : fail(`${path}.front`, 'expected true or false')),
+    // How many pixels toward (and away from) the light the field is compared over: 1 keeps a small drop's highlight to
+    // a thin rim, 3–4 spreads light over a large body.
+    reach: (look.reach !== undefined && !lit && !shade) ? fail(`${path}.reach`, 'reach sizes the lit and shade bands; add lit or shade too') : number(look.reach ?? 2, `${path}.reach`, 0.5, 8)
   };
 }
 
 function readLayer(layer, path, context, index) {
-  const { frames, lookNames, seed, loop, symbols, sequences } = context;
+  const { frames, lookNames, seed, loop, symbols, sequences, view, work } = context;
   if (!isObject(layer)) fail(path, 'expected a layer object');
   if (!SHAPE_KINDS.includes(layer.kind)) fail(`${path}.kind`, `expected ${SHAPE_KINDS.join(', ')}`);
   const kind = layer.kind;
@@ -162,21 +227,39 @@ function readLayer(layer, path, context, index) {
     if (typeof layer.cue !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(layer.cue) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(layer.cue)) fail(`${path}.cue`, 'expected a portable name of letters, digits, hyphens or underscores');
     cue = layer.cue;
   }
+  // path: absolute points the layer moves through over its window, as an emitter's path does, so a projectile's head
+  // and the emitters trailing it share one list of points. It stands for at (its first point) and keyed drift.
+  let route = null;
+  if (layer.path !== undefined) {
+    if (layer.at !== undefined || layer.drift !== undefined) fail(`${path}.path`, 'a layer with a path starts at its first point and moves through the rest; leave at and drift out');
+    if (!Array.isArray(layer.path) || layer.path.length < 2 || layer.path.length > 16) fail(`${path}.path`, 'expected 2–16 points [x, y] for the layer to move through over its window');
+    route = layer.path.map((point, i) => pair(point, `${path}.path[${i}]`, -4096, 4096));
+  }
   const out = {
     kind, look, t0, t1, ease: name, blend, cue, path, cycle,
-    at: pair(layer.at, `${path}.at`, -4096, 4096),
+    at: route ? route[0] : pair(layer.at, `${path}.at`, -4096, 4096),
     power: tween(layer.power ?? 1, `${path}.power`, 0, 8),
     flicker: number(layer.flicker ?? 0, `${path}.flicker`, 0, 1),
     tilt: number(layer.tilt ?? 0, `${path}.tilt`, -3600, 3600),
-    squash: pair(layer.squash ?? [1, 1], `${path}.squash`, 0.125, 8),
-    drift: pair(layer.drift ?? [0, 0], `${path}.drift`, -4096, 4096),
+    // A squash may be keyed, 2–8 [x, y] pairs over the window: `squash` is the first, `squashKeys` the x and y keys.
+    ...squashOf(layer.squash, `${path}.squash`),
+    // A path moves the layer at a steady speed along its length (pathWalker), offsets from its first point.
+    ...(route ? { drift: [route.at(-1)[0] - route[0][0], route.at(-1)[1] - route[0][1]], driftKeys: null, walk: pathWalker(route.map(([x, y]) => [x - route[0][0], y - route[0][1]]), layer.curve === true) } : driftOf(layer.drift, `${path}.drift`)),
+    // curve: true runs keyed drift through a smooth curve, so an arc has no corner at its middle key.
+    curved: layer.curve === undefined ? false : (typeof layer.curve !== 'boolean' ? fail(`${path}.curve`, 'expected true or false') : layer.curve && (route ? route.length : Array.isArray(layer.drift?.[0]) ? layer.drift.length : 0) < 3 ? fail(`${path}.curve`, 'curve smooths a path or drift keys; give three or more points') : layer.curve),
     floor: layer.floor === undefined ? null : number(layer.floor, `${path}.floor`, -4096, 4096),
+    depth: layer.depth === undefined ? 'front' : LAYER_DEPTHS.includes(layer.depth) ? layer.depth : fail(`${path}.depth`, 'expected front, back, or split (the rows above the layer\'s centre go behind a character, the rest in front: a ring lying round its feet)'),
     seed: hash(seed, integer(layer.seed ?? index, `${path}.seed`, 0, 2147483647))
   };
   const t = (key, fallback, min, max) => tween(layer[key] ?? fallback, `${path}.${key}`, min, max);
   const required = key => { if (layer[key] === undefined) fail(`${path}.${key}`, `a ${kind} layer needs ${key}`); return layer[key]; };
   const reveal = fallback => number(layer.reveal ?? (cycle ? 0 : fallback), `${path}.reveal`, 0, 0.95);
-  if (kind === 'ring') Object.assign(out, { radius: t('radius', required('radius'), 0, 512), width: t('width', 3, 0, 256), fill: t('fill', 0, 0, 2), noise: number(layer.noise ?? 0, `${path}.noise`, 0, 1), scale: integer(layer.scale ?? 6, `${path}.scale`, 1, 64) });
+  // Noise may be keyed like any other field, so a shape can stand solid and then shatter: `noise` is its strongest key.
+  const noisy = fallback => { const noiseKeys = tween(layer.noise ?? fallback, `${path}.noise`, 0, 1); return { noise: maxKey(noiseKeys), noiseKeys }; };
+  if (kind === 'ring') {
+    Object.assign(out, { radius: t('radius', required('radius'), 0, 512), width: t('width', 3, 0, 256), fill: t('fill', 0, 0, 2), ...noisy(0), scale: integer(layer.scale ?? 6, `${path}.scale`, 1, 64), boil: number(layer.boil ?? 0, `${path}.boil`, -512, 512) });
+    if (layer.boil !== undefined && !out.noise) fail(`${path}.boil`, 'boil moves the noise; give the ring noise too');
+  }
   if (kind === 'slash') {
     const arc = pair(required('arc'), `${path}.arc`, -3600, 3600);
     if (arc[0] === arc[1] || Math.abs(arc[1] - arc[0]) > 360) fail(`${path}.arc`, 'expected [from, to] in degrees clockwise (0 right, 90 down), at most 360 apart; the slash sweeps from the first to the second');
@@ -195,7 +278,7 @@ function readLayer(layer, path, context, index) {
   if (kind === 'star') Object.assign(out, { radius: t('radius', required('radius'), 0, 512), points: integer(layer.points ?? 8, `${path}.points`, 2, 16), ratio: number(layer.ratio ?? 0.55, `${path}.ratio`, 0.05, 1), width: t('width', 2.5, 0, 64), core: t('core', layer.width === undefined ? 3 : maxKey(tween(layer.width, `${path}.width`, 0, 64)) * 1.2, 0, 128), angle: number(layer.angle ?? 0, `${path}.angle`, -3600, 3600), spin: t('spin', 0, -3600, 3600), jitter: number(layer.jitter ?? 0, `${path}.jitter`, 0, 1) });
   if (kind === 'burst') {
     const radius = t('radius', required('radius'), 0, 512);
-    Object.assign(out, { radius, hole: t('hole', 0, 0, 1), noise: number(layer.noise ?? 0.4, `${path}.noise`, 0, 1), scale: integer(layer.scale ?? 4, `${path}.scale`, 1, 64), boil: number(layer.boil ?? maxKey(radius) * 0.5, `${path}.boil`, -512, 512) });
+    Object.assign(out, { radius, hole: t('hole', 0, 0, 1), ...noisy(0.4), scale: integer(layer.scale ?? 4, `${path}.scale`, 1, 64), boil: number(layer.boil ?? maxKey(radius) * 0.5, `${path}.boil`, -512, 512) });
   }
   if (kind === 'stream') {
     if (!Array.isArray(layer.through) || !layer.through.length || layer.through.length > 7) fail(`${path}.through`, 'expected 1–7 more [x, y] points: the stream runs from at through each of them on a smooth curve');
@@ -203,17 +286,27 @@ function readLayer(layer, path, context, index) {
     const points = [out.at, ...layer.through.map((point, i) => pair(point, `${path}.through[${i}]`, -4096, 4096))];
     Object.assign(out, {
       curve: spline(points), width: t('width', 6, 0, 256), taper: tween(layer.taper ?? [0, 1, 0], `${path}.taper`, 0, 2), head: t('head', 1, 0, 1), tail: t('tail', 0, 0, 1),
-      sway: number(layer.sway ?? 0, `${path}.sway`, -64, 64), wavelength: number(layer.wavelength ?? 16, `${path}.wavelength`, 2, 512), waves: number(layer.waves ?? 1, `${path}.waves`, -64, 64)
+      sway: number(layer.sway ?? 0, `${path}.sway`, -64, 64), wavelength: number(layer.wavelength ?? 16, `${path}.wavelength`, 2, 512), waves: number(layer.waves ?? 1, `${path}.waves`, -64, 64),
+      fade: number(layer.fade ?? 0, `${path}.fade`, 0, 1)
     });
   }
   if (kind === 'aura') {
-    const name = required('symbol'), animated = typeof name === 'string' && !!sequences && Object.hasOwn(sequences, name);
-    if (typeof name !== 'string' || (!animated && !(symbols && Object.hasOwn(symbols, name)))) fail(`${path}.symbol`, `expected the name of one of the source's symbols${typeof name === 'string' ? `; there is none named ${JSON.stringify(name)}` : ''}`);
+    // An aura hugs a sprite (symbol, top-left at at) or an ellipse (around: [rx, ry], centred on at; its ring, or with
+    // disc the whole disc): flames licking up from a ground ring need no sprite.
+    let rings = null;
+    if (layer.around !== undefined) {
+      if (layer.symbol !== undefined) fail(`${path}.around`, 'an aura hugs a symbol or an ellipse (around), not both');
+      const [rx, ry] = pair(layer.around, `${path}.around`, 1, 64), disc = layer.disc === undefined ? false : (typeof layer.disc === 'boolean' ? layer.disc : fail(`${path}.disc`, 'expected true or false'));
+      rings = [ellipseRows(Math.round(rx), Math.round(ry), disc)];
+      out.at = [out.at[0] - Math.round(rx), out.at[1] - Math.round(ry)];
+    } else if (layer.disc !== undefined) fail(`${path}.disc`, 'disc fills the ellipse an aura hugs; give around too');
+    const name = rings ? null : required('symbol'), animated = typeof name === 'string' && !!sequences && Object.hasOwn(sequences, name);
+    if (!rings && (typeof name !== 'string' || (!animated && !(symbols && Object.hasOwn(symbols, name))))) fail(`${path}.symbol`, `expected the name of one of the source's symbols${typeof name === 'string' ? `; there is none named ${JSON.stringify(name)}` : ''}`);
     const width = t('width', 3, 0, 32), rise = number(layer.rise ?? 2, `${path}.rise`, 1, 4);
-    const noise = number(layer.noise ?? 0.5, `${path}.noise`, 0, 1);
+    const { noise, noiseKeys } = noisy(0.5);
     // Noise stretches the reach by up to half its share, so the field is measured that far out.
-    Object.assign(out, { symbol: name, width, rise, noise, scale: integer(layer.scale ?? 3, `${path}.scale`, 1, 64), boil: number(layer.boil ?? 2 * maxKey(width) * rise, `${path}.boil`, -512, 512), loop,
-      fields: (animated ? sequences[name] : [symbols[name]]).map(rows => auraField(rows, maxKey(width) * (1 + noise / 2), rise, path, animated)) });
+    Object.assign(out, { symbol: name, width, rise, noise, noiseKeys, scale: integer(layer.scale ?? 3, `${path}.scale`, 1, 64), boil: number(layer.boil ?? 2 * maxKey(width) * rise, `${path}.boil`, -512, 512), loop,
+      fields: (rings ?? (animated ? sequences[name] : [symbols[name]])).map(rows => auraField(rows, maxKey(width) * (1 + noise / 2), rise, path, animated, work)) });
     if (out.fields.every(field => !field)) fail(`${path}.symbol`, 'the symbol has no visible pixels for an aura to hug');
   }
   if (kind === 'trail') {
@@ -233,23 +326,50 @@ function readLayer(layer, path, context, index) {
   else {
     // The other kinds take noise in screen space, moving with the layer, so a falling power breaks them up. Scales are
     // whole pixels, as the dither op's are: craft keeps one noise table per scale for the life of the process.
-    Object.assign(out, { noise: number(layer.noise ?? 0, `${path}.noise`, 0, 1), scale: integer(layer.scale ?? 4, `${path}.scale`, 1, 64) });
+    Object.assign(out, { ...noisy(0), scale: integer(layer.scale ?? 4, `${path}.scale`, 1, 64) });
     if (out.noise) out.grain = ditherThreshold('value', [0, 0], out.seed, out.scale);
+    // flow moves the grain that many pixels over the window (each cycle, through two fields that take turns, when the
+    // layer spans a loop), so water runs along a stream and a beam's texture streams out.
+    if (layer.flow !== undefined) {
+      if (!out.noise) fail(`${path}.flow`, 'flow moves the noise; give the layer noise too');
+      out.flow = pair(layer.flow, `${path}.flow`, -512, 512);
+      if (cycle) out.grainLater = ditherThreshold('value', [0, 0], hash(out.seed, 2), out.scale);
+    }
+    // A turned copy reads the grain where the drawn effect had that pixel.
+    if (out.noise && view) out.unturn = view.unpoint;
   }
-  // A cycling burst or aura boils through a second, independent field half a cycle behind the first (see boilFields).
-  if ((kind === 'burst' || kind === 'aura') && cycle && out.noise && out.boil) out.noiseLater = ditherThreshold('value', [0, 0], hash(out.seed, 1), out.scale);
+  // A cycling burst, aura or boiling ring boils through a second, independent field half a cycle behind the first (see boilFields).
+  if ((kind === 'burst' || kind === 'aura' || kind === 'ring') && cycle && out.noise && out.boil) out.noiseLater = ditherThreshold('value', [0, 0], hash(out.seed, 1), out.scale);
+  // A layer spanning a loop wraps what it reads at the end of each frame round the cycle: a stream's head and tail keys must
+  // end where they start, and a reveal would draw the shape on again every cycle. compileEffects warns about these.
+  if (cycle) out.seams = [...(kind === 'stream' ? ['head', 'tail'].filter(key => sample(out[key], 0) !== sample(out[key], 1)) : []), ...(out.reveal > 0 ? ['reveal'] : [])];
   return out;
 }
 
+// An ellipse of radii rx, ry as symbol rows: its one-pixel ring (the filled ellipse's pixels beside an empty one), or the
+// whole disc.
+function ellipseRows(rx, ry, disc) {
+  const inside = (x, y) => (x / (rx + 0.5)) ** 2 + (y / (ry + 0.5)) ** 2 <= 1, rows = [];
+  for (let y = -ry; y <= ry; y++) {
+    let row = '';
+    for (let x = -rx; x <= rx; x++) row += inside(x, y) && (disc || !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) ? 'x' : '.';
+    rows.push(row);
+  }
+  return rows;
+}
 // An aura's distance field around a sprite, measured once: for each pixel of the sprite's box widened by the reach,
 // the distance to the nearest visible pixel, with distances upward divided by `rise` so the glow reaches that much
-// higher (flames above a head, a short glow below the feet). Further than the reach stays Infinity.
-function auraField(rows, reach, rise, path, emptyOk = false) {
+// higher (flames above a head, a short glow below the feet). Further than the reach stays Infinity. The steps it takes
+// count against the compile's shared shape work (`work`), as painting does: an aura on each frame of a long animation,
+// or many auras, are refused instead of measuring for minutes.
+function auraField(rows, reach, rise, path, emptyOk = false, work = null) {
   const w = rows[0].length, h = rows.length, side = Math.ceil(reach), up = Math.ceil(reach * rise), W = w + 2 * side, H = h + up + side;
   const solid = [];
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) if (rows[j][i] !== '.' && rows[j][i] !== ' ') solid.push([i, j]);
   if (!solid.length) { if (emptyOk) return null; fail(`${path}.symbol`, 'the symbol has no visible pixels for an aura to hug'); }
-  if (solid.length * (2 * side + 1) * (up + side + 1) > 64_000_000) fail(`${path}.width`, 'this sprite with this width and rise would take too long to measure; lower width or rise');
+  const steps = solid.length * (2 * side + 1) * (up + side + 1);
+  if (steps > 64_000_000) fail(`${path}.width`, 'this sprite with this width and rise would take too long to measure; lower width or rise');
+  if (work) spendWork(work, steps, path);
   const d = new Float64Array(W * H).fill(Infinity);
   for (const [i, j] of solid) for (let b = -up; b <= side; b++) {
     const dy = b < 0 ? b / rise : b, row = (j + b + up) * W + i + side;
@@ -267,6 +387,19 @@ function boilFields(layer, s) {
   const a = s.p, b = a < 0.5 ? a + 0.5 : a - 0.5, wa = 1 - Math.abs(2 * a - 1), wb = 1 - wa;
   return { parts: [[layer.noiseAt, layer.boil * a, wa], [layer.noiseLater, layer.boil * b, wb]].filter(part => part[2] > 0), norm: Math.sqrt(wa * wa + wb * wb) };
 }
+// The grain fields a flowing layer reads this frame: one moved by `flow` over a one-shot's window (through its easing),
+// or in a cycle two independent fields half a cycle apart, each moving steadily and fading out as it wraps.
+function flowFields(layer, p, q) {
+  const [fx, fy] = layer.flow;
+  if (!layer.grainLater) return { parts: [[layer.grain, fx * q, fy * q, 1]], norm: 1 };
+  const a = p, b = a < 0.5 ? a + 0.5 : a - 0.5, wa = 1 - Math.abs(2 * a - 1), wb = 1 - wa;
+  return { parts: [[layer.grain, fx * a, fy * a, wa], [layer.grainLater, fx * b, fy * b, wb]].filter(part => part[3] > 0), norm: Math.sqrt(wa * wa + wb * wb) };
+}
+function flowing({ parts, norm }, gx, gy) {
+  let sum = 0;
+  for (const [field, sx, sy, weight] of parts) sum += weight * (field(256 + gx - sx, 256 + gy - sy) - 0.5);
+  return clamp01(0.5 + sum / norm);
+}
 function boiled({ parts, norm }, read) {
   let sum = 0;
   for (const [field, by, weight] of parts) sum += weight * (read(field, by) - 0.5);
@@ -280,7 +413,7 @@ export function readShapes(effect, path, context) {
     for (const key of ['looks', 'cleanup']) if (effect[key] !== undefined) fail(`${path}.${key}`, `${key} colours shape layers and blob particles; add layers too`);
     return null;
   }
-  const { palette, seed, frames, loop, symbols, sequences } = context;
+  const { palette, seed, frames, loop, symbols, sequences, view, work } = context;
   if (effect.looks === undefined && effect.layers === undefined) fail(`${path}.looks`, 'blob particles are drawn into the effect\'s looks; add looks: named colour ramps');
   if (!isObject(effect.looks) || !Object.keys(effect.looks).length || Object.keys(effect.looks).length > LIMITS.looks) fail(`${path}.looks`, `expected 1–${LIMITS.looks} named looks: colour ramps that cut the layers' fields into bands, drawn in order`);
   const looks = Object.entries(effect.looks).map(([name, look]) => {
@@ -288,7 +421,7 @@ export function readShapes(effect, path, context) {
     return { name, ...readLook(look, `${path}.looks.${name}`, palette, seed) };
   });
   if (effect.layers !== undefined && (!Array.isArray(effect.layers) || !effect.layers.length || effect.layers.length > LIMITS.layers)) fail(`${path}.layers`, `expected 1–${LIMITS.layers} shape layers`);
-  const layers = (effect.layers ?? []).map((layer, i) => readLayer(layer, `${path}.layers[${i}]`, { frames, seed, loop, symbols, sequences, lookNames: looks.map(l => l.name) }, i));
+  const layers = (effect.layers ?? []).map((layer, i) => readLayer(layer, `${path}.layers[${i}]`, { frames, seed, loop, symbols, sequences, view, work, lookNames: looks.map(l => l.name) }, i));
   let cleanup = { strays: false, corners: false };
   if (effect.cleanup !== undefined) {
     fields(effect.cleanup, ['strays', 'corners'], `${path}.cleanup`);
@@ -383,6 +516,9 @@ const PAINTERS = {
   // and seeded angular noise that breaks the band up.
   ring(layer, s, put, W, H) {
     const R = sample(layer.radius, s.q), w = Math.max(0.5, sample(layer.width, s.q)), fill = sample(layer.fill, s.q), rn = maxKey(layer.radius);
+    // boil reads the angular noise farther out over the window, so the breaks churn instead of standing still (in a
+    // cycle through two fields that take turns, seamlessly).
+    const boil = layer.boil ? boilFields(layer, s) : null;
     paintArea(put, W, H, s.cx, s.cy, R * s.frame.reach + 2, s.frame, (u, v) => {
       const d = Math.sqrt(u * u + v * v);
       let value = 0;
@@ -392,16 +528,17 @@ const PAINTERS = {
         if (k <= 1) value = 1 - 0.85 * k;
         if (fill > 0 && R > w) value = Math.max(value, fill * (0.5 + 0.5 * d / (R - w)));
       }
-      if (layer.noise > 0 && value > 0 && d > 0) value *= 1 - layer.noise * layer.noiseAt(256 + u / d * rn, 256 + v / d * rn);
+      if (s.noise > 0 && value > 0 && d > 0) value *= 1 - s.noise * (boil ? clamp01(0.5 + boiled(boil, (field, by) => field(256 + u / d * (rn + by), 256 + v / d * (rn + by)))) : layer.noiseAt(256 + u / d * rn, 256 + v / d * rn));
       return value;
     });
   },
   // A crescent whose outer edge is a crisp arc at `radius`: the head sweeps `arc` over the first `reveal` share of the
   // frames and the tail chases it over the rest, the band thickest mid-arc and pointed at both ends, brightest at the
-  // outer edge and dimming toward the tail.
+  // outer edge and dimming toward the tail. A cycling slash stays whole, since a sweep would vanish at the loop point and
+  // pop back (one that asks for a reveal still draws on).
   slash(layer, s, put, W, H) {
     const R = sample(layer.radius, s.q), w = sample(layer.width, s.q), [from, to] = layer.arc, span = Math.abs(to - from), clockwise = to > from;
-    const head = layer.reveal ? ease('out', clamp01(s.end / layer.reveal)) : 1, tail = layer.reveal < 1 ? clamp01((s.p - layer.reveal) / (1 - layer.reveal)) : 0;
+    const head = layer.reveal ? ease('out', clamp01(s.end / layer.reveal)) : 1, tail = layer.reveal < 1 && !(layer.cycle && !layer.reveal) ? clamp01((s.p - layer.reveal) / (1 - layer.reveal)) : 0;
     paintArea(put, W, H, s.cx, s.cy, R * s.frame.reach + 2, s.frame, (u, v) => {
       const d = Math.sqrt(u * u + v * v), inside = R - d;
       if (inside < -0.5 || inside > w + 0.5) return 0;
@@ -446,7 +583,8 @@ const PAINTERS = {
   // Lightning: a jagged one-pixel core from `at` to `to` with a glow, seeded branches that dim toward their ends, and
   // a new path every `reroll` frames.
   bolt(layer, s, put) {
-    const roll = layer.reroll ? Math.floor(s.k / layer.reroll) : 0, ax = s.cx, ay = s.cy, bx = layer.to[0] + s.dx, by = layer.to[1] + s.dy;
+    // A layer spanning a loop rerolls round its cycle, so the frame after the last draws frame 0's path again.
+    const rolls = layer.cycle && layer.reroll ? Math.ceil((layer.t1 - layer.t0) / layer.reroll) : 0, roll = layer.reroll ? Math.floor(s.k / layer.reroll) % (rolls || Infinity) : 0, ax = s.cx, ay = s.cy, bx = layer.to[0] + s.dx, by = layer.to[1] + s.dy;
     const core = (Math.max(1, sample(layer.width, s.q)) - 1) / 2, glow = sample(layer.glow, s.q);
     const main = zigzag(ax, ay, bx, by, layer.segment, layer.jag, hash(layer.seed, roll, 1));
     const shown = layer.reveal ? Math.max(1, Math.ceil(ease('out', clamp01(s.end / layer.reveal)) * (main.length - 1))) : main.length - 1;
@@ -522,7 +660,7 @@ const PAINTERS = {
   // in the middle, with a hole that can open from the centre (`hole`, a share of the radius) as it burns out. In a
   // cycle the noise boils on steadily through the loop point (boilFields).
   burst(layer, s, put, W, H) {
-    const R = sample(layer.radius, s.q), hole = sample(layer.hole, s.q) * R, n = layer.noise, boil = boilFields(layer, s);
+    const R = sample(layer.radius, s.q), hole = sample(layer.hole, s.q) * R, n = s.noise, boil = boilFields(layer, s);
     if (R <= 0) return;
     paintArea(put, W, H, s.cx, s.cy, R * (1 + n / 2) * s.frame.reach + 2, s.frame, (u, v) => {
       const d = Math.sqrt(u * u + v * v);
@@ -536,7 +674,7 @@ const PAINTERS = {
   // seeded noise stretched upright and rising `boil` pixels over the window, so its edge licks up in flames. In a cycle
   // the noise rises steadily through the loop point (boilFields). `at` is the sprite's top-left corner.
   aura(layer, s, put) {
-    const reach = sample(layer.width, s.q), field = sequenceFrame(layer.fields, s.f, layer.loop), n = layer.noise, boil = boilFields(layer, s);
+    const reach = sample(layer.width, s.q), field = sequenceFrame(layer.fields, s.f, layer.loop), n = s.noise, boil = boilFields(layer, s);
     if (reach <= 0 || !field) return;
     const { left, top, W, H, d } = field;
     const ox = round(s.cx) + left, oy = round(s.cy) + top;
@@ -569,7 +707,8 @@ const PAINTERS = {
       let x = a[0] + (b[0] - a[0]) * f + s.dx, y = a[1] + (b[1] - a[1]) * f + s.dy;
       if (layer.sway) { const off = layer.sway * (d / L) * sinDeg(360 * (d / layer.wavelength - layer.waves * s.p)); x -= ty * off; y += tx * off; }
       // Each step stamps a cone a little wider than its half width, so even a one-pixel tip keeps its pixels.
-      cone(put, x, y, Math.max(0.6, w * sample(layer.taper, (d - tail) / span)) + 0.5, 1);
+      // fade dims it toward the far end of its curve, as a beam's does, so a tail cools and its tip is not a bright line.
+      cone(put, x, y, Math.max(0.6, w * sample(layer.taper, (d - tail) / span)) + 0.5, layer.fade ? 1 - layer.fade * d / L : 1);
     }
   },
   // A smear behind a moving point (a sword tip): a stroke along a smooth curve through where the point was over the last
@@ -578,12 +717,14 @@ const PAINTERS = {
   // count too, so a smear drawn from the strike on still shows the wind-up behind it.
   // With pivots, each step between two frames is an arc round the pivot (angle and distance moving evenly), and the
   // stroke lies inside the point's path, so its outer edge is where the tip went: a blade's crescent smear.
+  // A trail spanning a loop reads its places round the cycle (each at most once), so frame 0 still shows the smear of
+  // the last frames and the frame after the last is frame 0 again.
   trail(layer, s, put) {
-    const path = [], centres = [];
-    for (let f = Math.max(0, s.f - layer.length); f <= s.f; f++) {
-      const p = layer.points[f];
+    const path = [], centres = [], n = layer.points.length;
+    for (let f = layer.cycle ? s.f - Math.min(layer.length, n - 1) : Math.max(0, s.f - layer.length); f <= s.f; f++) {
+      const at = layer.cycle ? ((f % n) + n) % n : f, p = layer.points[at];
       if (!p) continue;
-      const x = p[0] + s.cx, y = p[1] + s.cy, last = path[path.length - 1], c = layer.pivots?.[f];
+      const x = p[0] + s.cx, y = p[1] + s.cy, last = path[path.length - 1], c = layer.pivots?.[at];
       if (!last || last[0] !== x || last[1] !== y) { path.push([x, y]); centres.push(c ? [c[0] + s.cx, c[1] + s.cy] : null); }
     }
     const w = sample(layer.width, s.q) / 2;
@@ -649,40 +790,58 @@ function band(value, thresholds) {
 }
 
 /**
- * The shape grid for frame `f`: { x, y, rows } cropped to its drawn pixels, or null. `blobs` are this frame's blob
- * particles, { look, x, y, radius }: each adds a soft disc, (1 − d²/r²)², to its look's field, so drops that touch merge
+ * The shape grid for frame `f`: { x, y, rows } cropped to its drawn pixels, or null. It holds the looks whose `front`
+ * is `front`: the effect draws one grid under its particles and, when a look asks, one over them. `blobs` are this frame's blob
+ * particles, { look, x, y, radius, power }: each adds a soft disc, (1 − d²/r²)² times its power (default 1), to its look's field, so drops that touch merge
  * into one body. `work` counts the pixels painting visits across one compile (pass the same object for every frame and
  * effect); past SHAPE_WORK the layer that crosses it is refused.
  */
-export function renderShapes(shapes, f, width, height, blobs = [], work = { spent: 0 }) {
-  const N = width * height, chars = new Uint16Array(N), owner = new Uint8Array(N);
+// With `split`, each drawn pixel also gets a side, 1 behind a character and 2 in front: a look's pixel takes the side of
+// the layer or blob that gave it the most, cleanup's fills and outlines the side of the pixel beside them, and halos
+// that of the nearest pixel they glow from. The result then has `parts`, the back and front pixels as grids of their
+// own, which together are exactly the whole.
+// With `wrap`, a loop's frame count, frame `wrap` is the one after the loop's last, for reviewing its seam: a layer
+// spanning the loop goes on to the end of its cycle (progress 1), and any other draws as it does in frame 0.
+export function renderShapes(shapes, f, width, height, blobs = [], work = { spent: 0 }, front = false, split = false, wrap = 0) {
+  const N = width * height, chars = new Uint16Array(N), owner = new Uint8Array(N), side = split ? new Uint8Array(N) : null;
   let drawn = false;
   shapes.looks.forEach((look, lookIndex) => {
-    const field = new Float64Array(N), scratch = new Float64Array(N);
+    if (look.front !== front) return;
+    const field = new Float64Array(N), scratch = new Float64Array(N), best = split ? new Float64Array(N) : null, from = split ? new Uint8Array(N) : null;
     let any = false;
     for (const layer of shapes.layers) {
-      if (layer.look !== look.name || f < layer.t0 || f >= layer.t1) continue;
-      const k = f - layer.t0, p = k / (layer.t1 - layer.t0), q = ease(layer.ease, p);
-      const power = sample(layer.power, q) * (layer.flicker && k % 2 ? 1 - layer.flicker : 1);
+      const g = wrap && f >= wrap && !layer.cycle ? f - wrap : f;
+      if (layer.look !== look.name || g < layer.t0 || g > layer.t1 || (g === layer.t1 && !(wrap && layer.cycle))) continue;
+      const k = g - layer.t0, p = k / (layer.t1 - layer.t0), q = ease(layer.ease, p);
+      const power = sample(layer.power, q) * (layer.flicker && k % 2 ? 1 - layer.flicker : 1), noise = sample(layer.noiseKeys, q);
       if (power <= 0) continue;
-      const dx = layer.drift[0] * q, dy = layer.drift[1] * q, cx = layer.at[0] + dx, cy = layer.at[1] + dy;
+      const along = layer.curved ? curveSample : sample;
+      const walked = layer.walk ? layer.walk(q) : null;
+      const dx = walked ? walked[0] : layer.driftKeys ? along(layer.driftKeys[0], q) : layer.drift[0] * q, dy = walked ? walked[1] : layer.driftKeys ? along(layer.driftKeys[1], q) : layer.drift[1] * q, cx = layer.at[0] + dx, cy = layer.at[1] + dy;
       scratch.fill(0);
       // A floor cuts the layer off below its row: a disc becomes a dome, a ring an arch.
       const bottom = layer.floor === null ? height - 1 : Math.min(height - 1, Math.floor(layer.floor));
       const put = (i, j, value) => { if (i >= 0 && j >= 0 && i < width && j <= bottom) { const c = j * width + i; if (value > scratch[c]) scratch[c] = value; } };
       // Painters visit only the canvas (width × rows down to bottom) and count what they visit.
       put.width = width; put.bottom = bottom;
-      put.spend = n => {
-        work.spent += n;
-        if (work.spent > SHAPE_WORK) fail(layer.path, `the shape layers would visit more than ${SHAPE_WORK.toLocaleString('en-US')} pixels to draw; make them smaller (radius, width, the part on the canvas), fewer, or over fewer frames`);
-      };
+      put.spend = n => spendWork(work, n, layer.path);
       // Reveals measure to the end of the frame, so the first frame of a window already shows the shape under way.
-      PAINTERS[layer.kind](layer, { k, p, end: (k + 1) / (layer.t1 - layer.t0), q, cx, cy, dx, dy, f, frame: frameOf(layer, cx, cy) }, put, width, height);
+      // A keyed squash draws this frame's squash through a copy of the layer, so painters read it as they always have.
+      const flow = layer.flow ? flowFields(layer, p, q) : null;
+      const shaped = layer.squashKeys ? { ...layer, squash: [sample(layer.squashKeys[0], q), sample(layer.squashKeys[1], q)] } : layer;
+      // What a painter reads at the end of the frame (a stream's head and tail, a reveal) wraps round a cycle as well.
+      const end = (k + 1) / (layer.t1 - layer.t0);
+      PAINTERS[layer.kind](shaped, { k, p, end: wrap && layer.cycle && end > 1 ? end - 1 : end, q, cx, cy, dx, dy, f: g, noise, frame: frameOf(shaped, cx, cy) }, put, width, height);
       for (let c = 0; c < N; c++) {
         let value = scratch[c] * power;
         if (value <= 0) continue;
-        if (layer.grain) value *= 1 - layer.noise * layer.grain(256 + (c % width) - round(dx), 256 + Math.floor(c / width) - round(dy));
+        if (layer.grain) {
+          // In a turned copy the grain turns too, so every direction breaks up as the drawn one does.
+          const [gx, gy] = layer.unturn ? layer.unturn([c % width - dx, Math.floor(c / width) - dy]) : [c % width - round(dx), Math.floor(c / width) - round(dy)];
+          value *= 1 - noise * (flow ? flowing(flow, gx, gy) : layer.grain(256 + gx, 256 + gy));
+        }
         field[c] = layer.blend === 'add' ? field[c] + value : Math.max(field[c], value);
+        if (split && value > best[c]) { best[c] = value; from[c] = layer.depth === 'back' || (layer.depth === 'split' && Math.floor(c / width) < cy) ? 1 : 2; }
         any = true;
       }
     }
@@ -693,13 +852,14 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
       for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
         const dx = i - blob.x, dy = j - blob.y, d2 = dx * dx + dy * dy;
         if (d2 >= r2) continue;
-        const k = 1 - d2 / r2;
-        field[j * width + i] += k * k;
+        const k = 1 - d2 / r2, value = blob.power === undefined ? k * k : k * k * blob.power, c = j * width + i;
+        field[c] += value;
+        if (split && value > best[c]) { best[c] = value; from[c] = blob.back ? 1 : 2; }
         any = true;
       }
     }
     if (!any) return;
-    const { thresholds, gaps, codes, dither, threshold, lit, shade, light: [lx, ly] } = look;
+    const { thresholds, gaps, codes, dither, threshold, lit, shade, light: [lx, ly], reach } = look;
     for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) {
       const c = j * width + i, value = field[c];
       if (value < thresholds[0] - dither * gaps[0]) continue;
@@ -710,32 +870,67 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
       let code = codes[level - 1];
       // Lit and shade bands recolour the look's own pixels by how far its field falls two pixels toward the light
       // (and away from it): a highlight on the rim that faces the light, a shadow side opposite.
-      if (shade) { const s = band(1 - between(field, width, height, i - 2 * lx, j - 2 * ly) / value, shade.thresholds); if (s) code = shade.codes[s - 1]; }
-      if (lit) { const s = band(1 - between(field, width, height, i + 2 * lx, j + 2 * ly) / value, lit.thresholds); if (s) code = lit.codes[s - 1]; }
+      if (shade) { const s = band(1 - between(field, width, height, i - reach * lx, j - reach * ly) / value, shade.thresholds); if (s) code = shade.codes[s - 1]; }
+      if (lit) { const s = band(1 - between(field, width, height, i + reach * lx, j + reach * ly) / value, lit.thresholds); if (s) code = lit.codes[s - 1]; }
       chars[c] = code; owner[c] = lookIndex + 1; drawn = true;
+      if (split) side[c] = from[c] || 2;
     }
   });
   if (!drawn) return null;
   if (shapes.cleanup.strays || shapes.cleanup.corners) for (const change of cleanupIds(chars, width, height, shapes.cleanup)) chars[change.index] = change.id;
-  // Each look's outline takes the empty pixels beside its own, in look order.
-  const filled = Uint8Array.from(owner);
+  // A hole cleanup filled takes the side of a drawn pixel beside it.
+  if (split) for (let c = 0; c < N; c++) {
+    if (!chars[c] || side[c]) continue;
+    const i = c % width, j = (c - i) / width;
+    for (let dy = -1; dy <= 1 && !side[c]; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const x = i + dx, y = j + dy, n = y * width + x;
+      if ((dx || dy) && x >= 0 && y >= 0 && x < width && y < height && chars[n] && side[n]) { side[c] = side[n]; break; }
+    }
+    if (!side[c]) side[c] = 2;
+  }
+  // Each look's outline takes the empty pixels beside its own, in look order: only those still drawn after cleanup, so a
+  // stray it removed leaves no outline behind.
+  const filled = owner.map((look, c) => (chars[c] ? look : 0)), haloed = shapes.looks.some(look => look.halo && look.front === front), rim = haloed ? new Uint8Array(N) : null;
   shapes.looks.forEach((look, lookIndex) => {
-    if (!look.outline) return;
+    if (!look.outline || look.front !== front) return;
     const mine = lookIndex + 1;
     for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) {
       const c = j * width + i;
       if (chars[c]) continue;
-      if ((i > 0 && filled[c - 1] === mine) || (i < width - 1 && filled[c + 1] === mine) || (j > 0 && filled[c - width] === mine) || (j < height - 1 && filled[c + width] === mine)) chars[c] = look.outline;
+      const beside = i > 0 && filled[c - 1] === mine ? c - 1 : i < width - 1 && filled[c + 1] === mine ? c + 1 : j > 0 && filled[c - width] === mine ? c - width : j < height - 1 && filled[c + width] === mine ? c + width : -1;
+      if (beside >= 0) { chars[c] = look.outline; if (rim) rim[c] = mine; if (split) side[c] = side[beside]; }
     }
   });
-  let x0 = width, y0 = height, x1 = -1, y1 = -1;
-  for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) if (chars[j * width + i]) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
-  if (x1 < 0) return null;
-  const rows = [];
-  for (let j = y0; j <= y1; j++) {
-    let row = '';
-    for (let i = x0; i <= x1; i++) { const code = chars[j * width + i]; row += code ? String.fromCharCode(code) : '.'; }
-    rows.push(row);
-  }
-  return { x: x0, y: y0, rows };
+  // Halos take the empty pixels within a round reach of each look's pixels and outline, in look order: an offset (dx, dy)
+  // reaches when dx² + dy² ≤ (width + 0.5)² − 1, so one pixel wide is the four neighbours and wider halos are round.
+  if (haloed) shapes.looks.forEach((look, lookIndex) => {
+    if (!look.halo || look.front !== front) return;
+    const mine = lookIndex + 1, { color, width: reach, dither } = look.halo, limit = (reach + 0.5) * (reach + 0.5) - 1, offsets = [];
+    for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) if ((dx || dy) && dx * dx + dy * dy <= limit) offsets.push([dx, dy]);
+    // Split, a halo pixel takes the side of the nearest pixel it glows from, so the offsets are searched nearest first.
+    const source = c => filled[c] === mine || rim[c] === mine, taken = [], near = split ? [...offsets].sort((a, b) => a[0] * a[0] + a[1] * a[1] - b[0] * b[0] - b[1] * b[1]) : offsets;
+    for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) {
+      const c = j * width + i;
+      if (chars[c] || (dither && ((i + j) & 1))) continue;
+      const hit = near.find(([dx, dy]) => { const x = i + dx, y = j + dy; return x >= 0 && y >= 0 && x < width && y < height && source(y * width + x); });
+      if (hit) taken.push([c, split ? side[c + hit[1] * width + hit[0]] : 0]);
+    }
+    for (const [c, s] of taken) { chars[c] = color; if (split) side[c] = s; }
+  });
+  // The drawn pixels that pass `keep`, cropped to their bounds, or null.
+  const grid = keep => {
+    let x0 = width, y0 = height, x1 = -1, y1 = -1;
+    for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) { const c = j * width + i; if (chars[c] && keep(c)) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; } }
+    if (x1 < 0) return null;
+    const rows = [];
+    for (let j = y0; j <= y1; j++) {
+      let row = '';
+      for (let i = x0; i <= x1; i++) { const c = j * width + i, code = chars[c]; row += code && keep(c) ? String.fromCharCode(code) : '.'; }
+      rows.push(row);
+    }
+    return { x: x0, y: y0, rows };
+  };
+  const whole = grid(() => true);
+  if (!whole || !split) return whole;
+  return { ...whole, parts: { back: grid(c => side[c] === 1), front: grid(c => side[c] !== 1) } };
 }

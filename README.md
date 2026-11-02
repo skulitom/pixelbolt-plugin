@@ -33,8 +33,8 @@ Then restart Claude Code in your project folder and ask in your own words, for e
   Claude tells it to; `preview` serves the studio pages on 127.0.0.1 only and, with `--open`, opens them in your
   browser.
 - **What the MCP server reads and writes:** only files under the folder you opened in Claude Code. It reads the recipes and PNGs
-  you name there, saves recipe revisions in `output/.revisions/`, and writes each export into a new folder under
-  `output/`. When asked, `pixel_render` also saves copies of an export (PNG, GIF, JSON or Godot `.tres` files) at
+  you name there, saves recipe revisions in `output/.revisions/` and a preset-list cache in `output/.presets/`, and writes each export into a new folder under
+  `output/`. When asked, `pixel_render` also saves copies of an export (PNG, GIF, JSON, Godot `.tres` or Tiled `.tsx` files) at
   paths named inside that folder, never in hidden files or folders, and replaces an existing file there only when
   asked to overwrite it.
 - **What it sends:** nothing. The MCP server uses no network and no external service.

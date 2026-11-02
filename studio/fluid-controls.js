@@ -10,7 +10,15 @@ export const FLUID_PRESETS = [
   { file: 'honey', title: 'Honey', note: 'Viscous liquid · loop' }, { file: 'slime', title: 'Slime', note: 'Yield-stress liquid · one-shot' },
   { file: 'roof-snow', title: 'Snow off a roof', note: 'Smooth obstacle · one-shot' }, { file: 'dam-break', title: 'Dam break', note: 'Moving obstacle · one-shot' },
   { file: 'dust-wave', title: 'Dust wave', note: 'Carried gas · one-shot' }, { file: 'slime-burst', title: 'Bursting slime', note: 'Burst fill · one-shot' },
-  { file: 'honey-drop', title: 'Honey let-go', note: 'Keyed liquid · one-shot' }
+  { file: 'honey-drop', title: 'Honey let-go', note: 'Keyed liquid · one-shot' }, { file: 'aquarium', title: 'Aquarium bubbles', note: 'Bubbles · loop' },
+  { file: 'honey-dipper', title: 'Honey dipper', note: 'Sticky moving obstacle · one-shot' },
+  { file: 'glug', title: 'Glugging bottle', note: 'Air pockets · one-shot' },
+  { file: 'jacobs-ladder', title: "Jacob's ladder", note: 'Electric arc · loop' }, { file: 'lightning', title: 'Lightning', note: 'Electric gas · one-shot' },
+  { file: 'tesla-coil', title: 'Tesla coil', note: 'Electric gas · loop' }, { file: 'plasma-globe', title: 'Plasma globe', note: 'Electric gas · loop' },
+  { file: 'ice-melt', title: 'Ice cube melting', note: 'Heat · one-shot' }, { file: 'pond-freeze', title: 'Pond freezing', note: 'Heat · one-shot' },
+  { file: 'boiling-pot', title: 'Boiling pot', note: 'Heat, vapour · loop' }, { file: 'frost-window', title: 'Frosted window', note: 'Frost · one-shot' },
+  { file: 'dry-ice', title: 'Dry-ice fog', note: 'Sublimation · one-shot' },
+  { file: 'lightning-pond', title: 'Lightning into a pond', note: 'Arcs into water · one-shot' }
 ];
 // Each slider sets one setting of the preset's effect; Strength scales every emitter's rate or burst. A slider's range
 // and step must hold every preset's value exactly: a range input clamps to its range and snaps to its step.

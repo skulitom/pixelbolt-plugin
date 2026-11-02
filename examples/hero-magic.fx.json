@@ -12,6 +12,7 @@
       "frames": 14,
       "duration": 70,
       "seed": 3,
+      "edges": ["top", "bottom"],
       "looks": { "light": { "colors": ["v", "b", "c", "W"], "thresholds": [0.3, 0.5, 0.72, 0.9] } },
       "layers": [
         {
@@ -53,6 +54,7 @@
       "duration": 70,
       "loop": true,
       "seed": 5,
+      "edges": ["bottom"],
       "looks": { "spirit": { "colors": ["v", "b", "c", "W"], "thresholds": [0.1, 0.3, 0.55, 0.8] } },
       "cleanup": { "corners": true, "strays": true },
       "layers": [

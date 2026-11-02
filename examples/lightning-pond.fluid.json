@@ -1,0 +1,153 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "lightning-pond",
+  "width": 64,
+  "height": 72,
+  "palette": {
+    "v": "#3b2a8c",
+    "b": "#4f7cff",
+    "c": "#8fe9ff",
+    "W": "#ffffff",
+    "k": "#1d2030",
+    "g": "#2c3044",
+    "B": "#1d3f7a",
+    "P": "#2f6fc0",
+    "p": "#5fb4e8",
+    "s": "#7d8aa3",
+    "S": "#c3cad8",
+    "m": "#3a2f2c",
+    "M": "#2a2220",
+    "n": "#3f6b3a",
+    "N": "#2c4a2a"
+  },
+  "symbols": {
+    "cloud": [
+      "...gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg..",
+      "....gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg...",
+      ".....gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg....",
+      "......ggggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggggg.....",
+      "........gggggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggg.......",
+      "..........gggggggggggkkkkkkkkkkkkkkkkkkkkkkkggggggggggg.........",
+      ".............gggggggggggggggkkkkkkkkkggggggggggggggg............",
+      ".................ggggggggggggggggggggggggggggggg................",
+      ".......................ggggggggggggggggggg......................",
+      "................................................................"
+    ],
+    "charge": [
+      "...kkk...",
+      "..kkkkk..",
+      ".kkkkkkk.",
+      "..kkkkk..",
+      "...kkk..."
+    ],
+    "banks": [
+      "................................................................",
+      "................................................................",
+      "nnnnnnnnn..............................................nnnnnnnnn",
+      "NNNNNNNNNN............................................NNNNNNNNNN",
+      "mmmmmmmmmmm..........................................mmmmmmmmmmm",
+      "mmmmmmmmmm............................................mmmmmmmmmm",
+      "mmmmmmmmmm............................................mmmmmmmmmm",
+      "mmmmmmmmmmm..........................................mmmmmmmmmmm",
+      "mmmmmmmmmmmm........................................mmmmmmmmmmmm",
+      "mmmmmmmmmmmmm......................................mmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmm..................................mmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmm................................mmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmm............................mmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmm......................mmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmm................mmmmmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm....mmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm",
+      "mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm"
+    ],
+    "bed": [
+      "................................................................",
+      "................................................................",
+      "................................................................",
+      "................................................................",
+      "................................................................",
+      "..........M..........................................M..........",
+      "..........MM........................................MM..........",
+      "...........MM......................................MM...........",
+      "............MM....................................MM............",
+      ".............MM..................................MM.............",
+      "...............MM..............................MM...............",
+      "................MMM..........................MMM................",
+      "..................MMM......................MMM..................",
+      ".....................MMM................MMM.....................",
+      "........................MMMMMMMMMMMMMMMM........................",
+      "..............................MMMM..............................",
+      "................................................................",
+      "................................................................",
+      "................................................................",
+      "................................................................"
+    ]
+  },
+  "effects": {
+    "lightning-pond": {
+      "kind": "liquid",
+      "frames": 48,
+      "duration": 60,
+      "seed": 3,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "flip": 0.6,
+      "drag": 0.04,
+      "tension": 1.5,
+      "heat": { "air": 0.02, "conduct": 0.08, "latent": 0.4, "vaporize": 1 },
+      "vapour": {
+        "expansion": 8,
+        "buoyancy": 0.5,
+        "vorticity": 0.3,
+        "cooling": 0.12,
+        "dissipation": 0.02,
+        "look": [
+          { "field": "density", "colors": ["s"], "thresholds": [0.3], "dither": 0.5 },
+          { "field": "density", "colors": ["S"], "thresholds": [0.8], "dither": 0.4 },
+          { "field": "ionization", "colors": ["v", "b"], "thresholds": [0.06, 0.35], "dither": 0.4 },
+          {
+            "field": "current",
+            "colors": ["c", "W"],
+            "thresholds": [0.25, 0.8],
+            "dither": 0,
+            "halo": { "color": "v", "width": 1 }
+          }
+        ]
+      },
+      "obstacles": [
+        { "symbol": "cloud", "x": 0, "y": 0, "solid": false, "draw": "under" },
+        {
+          "symbol": "charge",
+          "x": 26,
+          "y": 6,
+          "solid": false,
+          "draw": "none",
+          "voltage": [
+            { "frame": 0, "voltage": -180 },
+            { "frame": 8, "voltage": 0 },
+            { "frame": 16, "voltage": -180 },
+            { "frame": 21, "voltage": 0 }
+          ],
+          "resistance": 20
+        },
+        { "symbol": "banks", "x": 0, "y": 52 },
+        { "symbol": "bed", "x": 0, "y": 52, "voltage": 0 }
+      ],
+      "electric": { "breakdown": 2.5, "focus": 2, "growth": 40, "recombine": 0.5, "memory": 12, "heating": 0.05 },
+      "fill": [{ "x": 0, "y": 54, "w": 64, "h": 16 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["P"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["p", "P", "B"], "thresholds": [1, 2, 6], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

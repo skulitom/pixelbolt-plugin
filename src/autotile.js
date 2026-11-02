@@ -5,8 +5,14 @@ import { hash, random } from './craft.js';
 // them, and becomes one of five pieces: o (outer corner), h (horizontal edge), v (vertical edge), i (inner corner)
 // or f (fill). Masks use N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128 for "blob" (47 reduced masks) and
 // N=1, E=2, S=4, W=8 for "cardinal" (16 masks, no inner corners).
+// A "corner" tile (a dual grid) sits where four map cells meet instead, half a tile up and left of the cell below
+// and right of that point, and its mask says which of those four cells are terrain: NW=1, NE=2, SW=4, SE=8 (16
+// masks; 0 draws nothing). Each of its quarters is the inner quarter of one of the four cells, cut from the same
+// template, so a corner map draws exactly what a blob map of the same cells draws, from 16 tiles instead of 47.
 export const BLOB_BITS = { n: 1, ne: 2, e: 4, se: 8, s: 16, sw: 32, w: 64, nw: 128 };
 export const CARDINAL_BITS = { n: 1, e: 2, s: 4, w: 8 };
+export const CORNER_BITS = { nw: 1, ne: 2, sw: 4, se: 8 };
+export const AUTOTILE_MODES = Object.freeze(['blob', 'cardinal', 'corner']);
 export const QUADRANTS = { tl: ['n', 'w', 'nw'], tr: ['n', 'e', 'ne'], bl: ['s', 'w', 'sw'], br: ['s', 'e', 'se'] };
 const OFFSETS = { n: [0, -1], ne: [1, -1], e: [1, 0], se: [1, 1], s: [0, 1], sw: [-1, 1], w: [-1, 0], nw: [-1, -1] };
 
@@ -20,22 +26,33 @@ export function reduceBlobMask(mask) {
 }
 export const BLOB_MASKS = Object.freeze([...new Set(Array.from({ length: 256 }, (_, m) => reduceBlobMask(m)))].sort((a, b) => a - b));
 export const CARDINAL_MASKS = Object.freeze(Array.from({ length: 16 }, (_, m) => m));
+export const CORNER_MASKS = CARDINAL_MASKS;
+export const MODE_MASKS = Object.freeze({ blob: BLOB_MASKS, cardinal: CARDINAL_MASKS, corner: CORNER_MASKS });
+export const MODE_BITS = Object.freeze({ blob: BLOB_BITS, cardinal: CARDINAL_BITS, corner: CORNER_BITS });
+// The four cells around a corner tile, from the cell whose top-left corner it sits on.
+const CORNER_OFFSETS = { nw: [-1, -1], ne: [0, -1], sw: [-1, 0], se: [0, 0] };
 
-// `matches(dx, dy)` answers whether the neighbour at that offset belongs to the same terrain.
+// `matches(dx, dy)` answers whether the neighbour at that offset belongs to the same terrain. For a corner tile the
+// offsets are from the cell whose top-left corner the tile sits on, and that cell is one of the four.
 export function neighbourMask(mode, matches) {
   if (mode === 'cardinal') return Object.entries(CARDINAL_BITS).reduce((mask, [key, bit]) => mask | (matches(...OFFSETS[key]) ? bit : 0), 0);
+  if (mode === 'corner') return Object.entries(CORNER_BITS).reduce((mask, [key, bit]) => mask | (matches(...CORNER_OFFSETS[key]) ? bit : 0), 0);
   return reduceBlobMask(Object.entries(BLOB_BITS).reduce((mask, [key, bit]) => mask | (matches(...OFFSETS[key]) ? bit : 0), 0));
 }
+// A tile's mask as drawn: blob masks reduced, cardinal and corner ones as given.
+export const drawnMask = (mode, mask) => (mode === 'blob' ? reduceBlobMask(mask) : mask);
 // The frames of a validated recipe that are tiles of an autotile set, for engine tile sets: each frame whose own
 // operations draw `autotile` at the frame's corner, all with one mask and mode, as every compiled frame does. Masks
-// come back as drawn: blob masks reduced, cardinal ones 0–15.
+// come back as drawn: blob masks reduced, cardinal ones 0–15. A frame whose tile names a terrain says which set it
+// belongs to. A tile of a layered set, whose tile names its corners' terrains, is not one: it belongs to those terrains.
 export function autotileFrames(recipe) {
   const tiles = [];
   for (const frame of recipe.frames) {
+    if (frame.tile?.corners !== undefined) continue;
     const ops = (frame.ops ?? []).filter(op => op.op === 'autotile');
     if (!ops.length || ops.some(op => (op.x ?? 0) !== 0 || (op.y ?? 0) !== 0)) continue;
-    const mode = ops[0].mode ?? 'blob', mask = mode === 'cardinal' ? ops[0].mask : reduceBlobMask(ops[0].mask);
-    if (ops.every(op => (op.mode ?? 'blob') === mode && (mode === 'cardinal' ? op.mask : reduceBlobMask(op.mask)) === mask)) tiles.push({ frame: frame.name, mask, mode });
+    const mode = ops[0].mode ?? 'blob', mask = drawnMask(mode, ops[0].mask);
+    if (ops.every(op => (op.mode ?? 'blob') === mode && drawnMask(mode, op.mask) === mask)) tiles.push({ frame: frame.name, mask, mode, ...(frame.tile?.terrain !== undefined && { terrain: frame.tile.terrain }) });
   }
   return tiles;
 }
@@ -46,6 +63,22 @@ export function quadrantPieces(mode, mask) {
     if (!has(a)) return [position, 'h'];
     if (!has(b)) return [position, 'v'];
     return [position, mode !== 'cardinal' && !has(diagonal) ? 'i' : 'f'];
+  }));
+}
+// Where each quarter of a tile comes from: { tl, tr, bl, br }, each { from, piece } (the template quarter position and
+// piece, for templatePiece) or null for a quarter that draws nothing. A blob or cardinal tile's quarters are its own
+// cell's; a corner tile's top-left quarter is the bottom-right quarter of its NW cell, and so on, each shaped by the
+// other three cells as that cell's neighbours.
+const CORNER_QUARTERS = { tl: ['nw', 'br'], tr: ['ne', 'bl'], bl: ['sw', 'tr'], br: ['se', 'tl'] };
+const CORNER_AT = { nw: [0, 0], ne: [1, 0], sw: [0, 1], se: [1, 1] };
+const DIRECTION = Object.fromEntries(Object.entries(OFFSETS).map(([key, [dx, dy]]) => [`${dx},${dy}`, key]));
+export function tilePieces(mode, mask) {
+  if (mode !== 'corner') return Object.fromEntries(Object.entries(quadrantPieces(mode, drawnMask(mode, mask))).map(([position, piece]) => [position, { from: position, piece }]));
+  return Object.fromEntries(Object.entries(CORNER_QUARTERS).map(([position, [cell, from]]) => {
+    if (!(mask & CORNER_BITS[cell])) return [position, null];
+    const [cx, cy] = CORNER_AT[cell];
+    const around = Object.entries(CORNER_AT).reduce((bits, [other, [ox, oy]]) => (other !== cell && (mask & CORNER_BITS[other]) ? bits | BLOB_BITS[DIRECTION[`${ox - cx},${oy - cy}`]] : bits), 0);
+    return [position, { from, piece: quadrantPieces('blob', reduceBlobMask(around))[from] }];
   }));
 }
 // Template layout (tile T, quarter Q = T/2), two tiles wide and three tall:
@@ -112,11 +145,12 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
       if (!Array.isArray(spec.weights) || spec.weights.length !== list.length || spec.weights.some(w => !Number.isInteger(w) || w < 1 || w > 1000)) fail(`${where}.weights`, `expected ${list.length} whole-number weight${list.length === 1 ? '' : 's'} from 1 to 1000, one per name`);
       weights = spec.weights;
     }
-    if (spec.autotile !== undefined && !['blob', 'cardinal'].includes(spec.autotile)) fail(`${where}.autotile`, 'expected blob or cardinal');
-    if (spec.autotile && masked(kind) && list.some(n => !n.includes('{mask}'))) fail(`${where}.${key}`, 'autotile names must contain {mask}');
-    if (!spec.autotile && !masked(kind)) fail(`${where}.autotile`, `a ${kind} draws the tile its neighbour mask selects; set autotile to blob or cardinal`);
+    if (spec.autotile !== undefined && !AUTOTILE_MODES.includes(spec.autotile)) fail(`${where}.autotile`, 'expected blob, cardinal or corner');
+    if (list.some(n => n.includes('{corners}')) && (spec.autotile !== 'corner' || !masked(kind))) fail(`${where}.${key}`, `{corners} names a layered set's tile by the characters of the four cells around it; it goes with autotile corner${masked(kind) ? '' : `, in a ${kinds.filter(masked).join(' or ')} name`}`);
+    if (spec.autotile && masked(kind) && list.some(n => !n.includes('{mask}') && !(spec.autotile === 'corner' && n.includes('{corners}')))) fail(`${where}.${key}`, spec.autotile === 'corner' ? 'corner names must contain {mask} or, for a layered set, {corners}' : 'autotile names must contain {mask}');
+    if (!spec.autotile && !masked(kind)) fail(`${where}.autotile`, `a ${kind} draws the tile its neighbour mask selects; set autotile to blob, cardinal or corner`);
     if (spec.match !== undefined && (typeof spec.match !== 'string' || !spec.match.length)) fail(`${where}.match`, 'expected a string of matching characters');
-    return { kind, names: list, weights, autotile: spec.autotile ?? null, match: spec.match ?? null };
+    return { kind, names: list, weights, autotile: spec.autotile ?? null, match: spec.match ?? null, path: `${where}.${key}`, all: list.map((_, i) => i), layered: list.some(n => n.includes('{corners}')) };
   };
   const ruleFields = ['where', 'chance', 'offset', 'stop'], drawFields = [...names, 'weights', 'autotile', 'match'];
   const legend = new Map();
@@ -147,6 +181,17 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
       legend.set(char, [{ ...drawable(entry, lp), salt: 0, pattern: null, chance: 1, offset: [0, 0], stop: false }]);
     }
   }
+  // A layered entry's variants are tiles the set has for some corners only (a layer's variants of its plain tile), so
+  // each must be a tile for some four of the map's layered keys; one that is a tile for none is a mistake.
+  const layeredKeys = [...legend].filter(([, rules]) => rules?.some(rule => rule.layered)).map(([char]) => char), k = layeredKeys.length;
+  if (k <= 8) for (const rules of legend.values()) for (const rule of rules ?? []) {
+    if (!rule.layered || rule.names.length < 2) continue;
+    rule.names.forEach((name, i) => {
+      if (!name.includes('{corners}') || name.includes('{mask}')) return;
+      for (let code = 0; code < k * k * k * k; code++) if (exists(rule.kind, name.replaceAll('{corners}', [1, k, k * k, k * k * k].map(place => layeredKeys[Math.floor(code / place) % k]).join('')))) return;
+      fail(`${rule.path}[${i}]`, `${JSON.stringify(name)} is no ${rule.kind} for any four of the map's layered keys (${layeredKeys.join(' ')}); a layered set names a layer's variants after its plain tile, such as ${rule.names[0].replaceAll('{corners}', layeredKeys[0].repeat(4))}-<variant>`);
+    });
+  }
   const width = rows[0].length;
   const charAt = (x, y) => (y >= 0 && y < rows.length && x >= 0 && x < width ? rows[y][x] : undefined);
   // In a `where` pattern a dot matches anything, the empty character matches empty cells, a class matches its
@@ -162,15 +207,46 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
   };
   // Variants picked by a seeded hash of the cell's position, so repeated terrain does not tile visibly. (A product of
   // x and y with two odd numbers, used without a seed before, kept only their low bits: two variants made a checkerboard.)
-  const pick = (rule, x, y) => {
-    if (rule.names.length === 1) return rule.names[0];
+  // Returns the index of the name picked from `among`, indices into the rule's names, by their weights.
+  const pick = (rule, x, y, among) => {
+    if (among.length === 1) return among[0];
     const value = hash(seed, x, y, rule.salt);
-    if (!rule.weights) return rule.names[value % rule.names.length];
-    let left = value % rule.weights.reduce((sum, w) => sum + w, 0);
-    for (let i = 0; i < rule.names.length; i++) { left -= rule.weights[i]; if (left < 0) return rule.names[i]; }
-    return rule.names.at(-1);
+    if (!rule.weights) return among[value % among.length];
+    let left = value % among.reduce((sum, i) => sum + rule.weights[i], 0);
+    for (const i of among) { left -= rule.weights[i]; if (left < 0) return i; }
+    return among.at(-1);
   };
-  const outputs = [];
+  const outputs = [], drawnCorners = new Set();
+  // The characters of the four cells around a corner tile (NW, NE, SW, SE), for {corners}: past the map's edge, the
+  // nearest cell in it, since a layered map's terrain goes on.
+  const cornerCells = (x, y) => [[-1, -1], [0, -1], [-1, 0], [0, 0]].map(([dx, dy]) => [Math.min(Math.max(x + dx, 0), width - 1), Math.min(Math.max(y + dy, 0), rows.length - 1)]);
+  // What a rule draws at one place: x, y name the cell, or for a corner tile the cell whose top-left corner it sits on.
+  // A corner tile is drawn once at its point for each thing drawn there, however many of its cells ask for it.
+  const emit = (rule, char, x, y, cp) => {
+    const match = rule.match ?? char, corner = rule.autotile === 'corner';
+    const mask = rule.autotile ? neighbourMask(rule.autotile, (dx, dy) => { const c = charAt(x + dx, y + dy); return c === undefined ? outside === 'match' : match.includes(c); }) : null;
+    const named = name => (mask !== null && masked(rule.kind) ? name.replaceAll('{mask}', String(mask)) : name);
+    let name, corners = null;
+    if (!rule.layered) name = named(rule.names[pick(rule, x, y, rule.all)]);
+    else {
+      const cells = cornerCells(x, y), blank = cells.find(([cx, cy]) => rows[cy][cx] === '.' || rows[cy][cx] === ' ');
+      if (blank) fail(`${path}.rows[${blank[1]}][${blank[0]}]`, 'is empty, but {corners} names a layered tile by the characters of the four cells around it; give every cell of a layered map one of its terrains\' keys');
+      corners = cells.map(([cx, cy]) => rows[cy][cx]);
+      // Names the set has no tile for at these corners (other terrains' variants) are left out of the pick.
+      const names = rule.names.map(n => named(n).replaceAll('{corners}', corners.join(''))), have = rule.all.filter(i => exists(rule.kind, names[i]));
+      name = names[have.length ? pick(rule, x, y, have) : 0];
+    }
+    if (!exists(rule.kind, name)) fail(cp, `${rule.kind} ${JSON.stringify(name)} does not exist${corners ? ` (corners ${corners.join(' ')}: every cell around a layered tile is one of the set's keys)` : mask === null ? '' : ` (${corner ? 'corner ' : ''}mask ${mask})`}`);
+    const [dx, dy] = rule.offset, moved = dx !== 0 || dy !== 0, half = corner ? 0.5 : 0;
+    // A layered tile's name says all it draws, so another terrain's entry that finds it (with a mask of its own) draws
+    // nothing more.
+    if (corner) {
+      const key = `${x + dx},${y + dy}|${rule.kind}|${name}|${corners ? '' : mask}`;
+      if (drawnCorners.has(key)) return;
+      drawnCorners.add(key);
+    }
+    outputs.push({ x: x + dx - half, y: y + dy - half, kind: rule.kind, name, ...(mask !== null && !masked(rule.kind) && { mask, mode: rule.autotile }), ...(corner && masked(rule.kind) && { corner: true }), order: outputs.length, moved });
+  };
   rows.forEach((row, y) => [...row].forEach((char, x) => {
     if (char === '.' || char === ' ') return;
     const rules = legend.get(char), cp = `${path}.rows[${y}][${x}]`;
@@ -179,16 +255,15 @@ export function expandTilemap(tilemap, { path, fail, kinds, text, exists, masked
     for (const rule of rules) {
       if (rule.pattern && ![...rule.pattern].every((want, k) => fits(want, charAt(x + (k % 3) - 1, y + Math.floor(k / 3) - 1)))) continue;
       if (rule.chance < 1 && random(seed, x, y, rule.salt, 0x63) >= rule.chance) continue;
-      const match = rule.match ?? char;
-      const mask = rule.autotile ? neighbourMask(rule.autotile, (dx, dy) => { const c = charAt(x + dx, y + dy); return c === undefined ? outside === 'match' : match.includes(c); }) : null;
-      const chosen = pick(rule, x, y), name = mask !== null && masked(rule.kind) ? chosen.replaceAll('{mask}', String(mask)) : chosen;
-      if (!exists(rule.kind, name)) fail(cp, `${rule.kind} ${JSON.stringify(name)} does not exist${mask === null ? '' : ` (mask ${mask})`}`);
-      const [dx, dy] = rule.offset, moved = dx !== 0 || dy !== 0;
-      outputs.push({ x: x + dx, y: y + dy, kind: rule.kind, name, ...(mask !== null && !masked(rule.kind) && { mask, mode: rule.autotile }), order: outputs.length, moved });
+      // A corner tile belongs to the point where four cells meet, so a cell draws the tiles at its four corners, with
+      // variants picked by the point.
+      if (rule.autotile !== 'corner') emit(rule, char, x, y, cp);
+      else for (const [cx, cy] of [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]]) emit(rule, char, cx, cy, cp);
       if (rule.stop) break;
     }
   }));
   outputs.sort((a, b) => a.y - b.y || a.x - b.x || a.moved - b.moved || a.order - b.order);
+  // A corner tile's x and y end in .5: it sits half a cell up and left of the cell it was found from.
   return { cells: outputs.map(({ order, moved, ...cell }) => cell), columns: width, rows: rows.length };
 }
 

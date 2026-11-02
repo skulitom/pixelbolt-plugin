@@ -1,0 +1,497 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "water-spells",
+  "width": 64,
+  "height": 64,
+  "palette": { "W": "#f2fdff", "h": "#bff2ff", "m": "#6fd3f0", "b": "#2f8fd6", "d": "#1d4f8f", "o": "#12305a" },
+  "symbols": {
+    "bubble-big": [
+      ".hhh.",
+      "hW..h",
+      "h...m",
+      "h...m",
+      ".mmm."
+    ],
+    "bubble": [
+      ".hh.",
+      "hW.m",
+      "h..m",
+      ".mm."
+    ]
+  },
+  "anchor": [32, 40],
+  "effects": {
+    "projectile": {
+      "frames": 8,
+      "duration": 60,
+      "loop": true,
+      "seed": 5,
+      "turn": { "angles": [0, 45, 90, 135, 180, 225, 270, 315], "about": [32, 40] },
+      "looks": {
+        "water": {
+          "colors": ["b"],
+          "thresholds": [0.2],
+          "lit": { "colors": ["m", "h"], "thresholds": [0.35, 0.72] },
+          "shade": { "colors": ["d"], "thresholds": [0.4] },
+          "outline": "o"
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "stream",
+          "at": [44, 40],
+          "through": [[35, 40], [24, 40]],
+          "width": 15,
+          "taper": [1, 0.8, 0.5, 0.15],
+          "sway": 0.8,
+          "wavelength": 16,
+          "waves": 1,
+          "noise": 0.15,
+          "scale": 4,
+          "power": 1.4
+        },
+        { "kind": "burst", "at": [44, 40], "radius": 7.5, "noise": 0.1, "boil": 3, "power": 1.3 }
+      ],
+      "emitters": [
+        {
+          "name": "drops",
+          "at": [18, 40],
+          "area": [2, 4],
+          "rate": 0.8,
+          "angle": [172, 188],
+          "speed": [1.2, 1.8],
+          "life": [3, 4],
+          "blob": { "radius": [3.4, 3, 2.6] }
+        }
+      ]
+    },
+    "impact": {
+      "frames": 11,
+      "duration": { "from": 40, "to": 90, "ease": "in" },
+      "seed": 3,
+      "looks": {
+        "water": {
+          "colors": ["b"],
+          "thresholds": [0.2],
+          "lit": { "colors": ["m", "h"], "thresholds": [0.35, 0.72] },
+          "shade": { "colors": ["d"], "thresholds": [0.4] },
+          "outline": "o"
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "star",
+          "at": [32, 40],
+          "frames": [0, 2],
+          "radius": [15, 18],
+          "points": 7,
+          "ratio": 0.75,
+          "width": [8, 5],
+          "core": 4,
+          "jitter": 0.3,
+          "angle": 12,
+          "power": [1.4, 1],
+          "cue": "hit"
+        },
+        {
+          "kind": "burst",
+          "at": [32, 40],
+          "frames": [0, 2],
+          "radius": [9, 9],
+          "noise": 0.3,
+          "scale": 3,
+          "boil": 2,
+          "power": [1.3, 0.8]
+        },
+        {
+          "kind": "ring",
+          "at": [32, 40],
+          "frames": [1, 9],
+          "radius": [10, 16, 19.5],
+          "width": [8, 7, 6],
+          "noise": 1,
+          "scale": 5,
+          "power": [1.6, 1.1, 0.22]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "tips",
+          "at": [32, 40],
+          "ring": { "radius": 12, "arc": [12, 372], "even": true, "outward": true },
+          "burst": 7,
+          "angle": [-6, 6],
+          "speed": [2.4, 3],
+          "gravity": [0, 0.1],
+          "drag": 0.2,
+          "life": [2, 3],
+          "blob": { "radius": [3.4, 3] }
+        },
+        {
+          "name": "beads",
+          "at": [32, 40],
+          "ring": { "radius": [15, 18], "outward": true },
+          "burst": 9,
+          "start": 4,
+          "angle": [-25, 25],
+          "speed": [0.4, 1.3],
+          "gravity": [0, 0.16],
+          "drag": 0.06,
+          "life": [4, 6],
+          "blob": { "radius": [3, 2.7, 2.4] }
+        }
+      ]
+    },
+    "area": {
+      "frames": 20,
+      "duration": { "from": 50, "to": 95, "ease": "in" },
+      "seed": 6,
+      "looks": {
+        "pool": { "colors": ["d", "b"], "thresholds": [0.2, 0.6], "outline": "o" },
+        "water": {
+          "colors": ["b"],
+          "thresholds": [0.2],
+          "lit": { "colors": ["m", "h"], "thresholds": [0.3, 0.85] },
+          "shade": { "colors": ["d"], "thresholds": [0.45] },
+          "outline": "o",
+          "light": [-0.35, -1]
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "pool",
+          "at": [32, 40],
+          "frames": [0, 18],
+          "radius": [6, 17, 17, 14, 6],
+          "width": 6,
+          "fill": 0.85,
+          "squash": [1, 0.34],
+          "noise": 0.3,
+          "scale": 8,
+          "power": [1.3, 1.2, 1.1, 0.7, 0.2],
+          "ease": "linear",
+          "cue": "hit"
+        },
+        {
+          "kind": "ring",
+          "look": "pool",
+          "at": [32, 40],
+          "frames": [9, 17],
+          "radius": [15, 28],
+          "width": [11, 8],
+          "squash": [1, 0.36],
+          "noise": 0.8,
+          "scale": 6,
+          "power": [1.4, 0.35]
+        },
+        {
+          "kind": "burst",
+          "look": "water",
+          "at": [32, 40],
+          "frames": [0, 3],
+          "radius": [7, 9, 8],
+          "squash": [1, 0.6],
+          "floor": 41,
+          "noise": 0.25,
+          "scale": 4,
+          "boil": 0,
+          "power": [1.5, 1.3, 0.6]
+        },
+        {
+          "kind": "stream",
+          "look": "water",
+          "at": [32, 41],
+          "through": [[32, 26], [33, 9]],
+          "frames": [0, 14],
+          "width": [9, 12, 11, 7],
+          "taper": [0.75, 0.8, 0.85, 0.75],
+          "head": [0.1, 0.82, 0.82, 0.25],
+          "tail": 0,
+          "sway": 1.2,
+          "wavelength": 16,
+          "waves": 2,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.45, 1.35, 1.1, 0.35],
+          "ease": "linear"
+        },
+        {
+          "kind": "stream",
+          "look": "water",
+          "at": [24, 41],
+          "through": [[22, 34], [18, 28], [13, 27], [10, 31]],
+          "frames": [1, 12],
+          "width": [7, 7, 5],
+          "taper": [1, 0.8, 0.65],
+          "head": [0.12, 1, 1, 1],
+          "tail": [0, 0, 0.35, 1],
+          "sway": 0.6,
+          "wavelength": 14,
+          "waves": 1,
+          "noise": 0.5,
+          "scale": 4,
+          "power": [1.4, 1.35, 1.1, 0.4],
+          "ease": "linear",
+          "seed": 11
+        },
+        {
+          "kind": "stream",
+          "look": "water",
+          "at": [40, 40],
+          "through": [[42, 34], [46, 29], [51, 28], [54, 32]],
+          "frames": [2, 12],
+          "width": [7, 7, 5],
+          "taper": [1, 0.8, 0.65],
+          "head": [0.12, 1, 1, 1],
+          "tail": [0, 0, 0.35, 1],
+          "sway": -0.6,
+          "wavelength": 14,
+          "waves": 1,
+          "noise": 0.5,
+          "scale": 4,
+          "power": [1.4, 1.35, 1.1, 0.4],
+          "ease": "linear",
+          "seed": 12
+        }
+      ],
+      "emitters": [
+        {
+          "name": "cap-0",
+          "at": [32, 36],
+          "burst": 1,
+          "angle": 270,
+          "speed": 5.7,
+          "life": 5,
+          "blob": { "look": "water", "radius": [2.5600000000000005, 3.2, 3.2, 3.2] }
+        },
+        {
+          "name": "cap-1",
+          "at": [28, 35],
+          "burst": 1,
+          "angle": 264,
+          "speed": 5.8,
+          "life": 5,
+          "blob": { "look": "water", "radius": [3.6, 4.5, 4.5, 4.5] }
+        },
+        {
+          "name": "cap-2",
+          "at": [36, 35],
+          "burst": 1,
+          "angle": 276,
+          "speed": 5.8,
+          "life": 5,
+          "blob": { "look": "water", "radius": [3.6, 4.5, 4.5, 4.5] }
+        },
+        {
+          "name": "shed",
+          "from": "cap-1",
+          "when": "life",
+          "rate": 0.5,
+          "at": [-1, 1],
+          "area": [4, 3],
+          "angle": [165, 200],
+          "speed": [0.8, 1.4],
+          "gravity": [0, 0.4],
+          "life": [3, 4],
+          "blob": { "look": "water", "radius": [2.8, 2.4] }
+        },
+        {
+          "name": "shed2",
+          "from": "cap-2",
+          "when": "life",
+          "rate": 0.5,
+          "at": [1, 1],
+          "area": [4, 3],
+          "angle": [340, 375],
+          "speed": [0.8, 1.4],
+          "gravity": [0, 0.4],
+          "life": [3, 4],
+          "blob": { "look": "water", "radius": [2.8, 2.4] }
+        },
+        {
+          "name": "tip-left",
+          "at": [11, 30],
+          "area": [3, 3],
+          "burst": 2,
+          "start": 5,
+          "angle": [95, 120],
+          "speed": [0.5, 1],
+          "gravity": [0, 0.6],
+          "floor": 43,
+          "life": [4, 5],
+          "blob": { "look": "water", "radius": [3.2, 2.8, 2.4] }
+        },
+        {
+          "name": "tip-right",
+          "at": [53, 31],
+          "area": [3, 3],
+          "burst": 2,
+          "start": 6,
+          "angle": [60, 85],
+          "speed": [0.5, 1],
+          "gravity": [0, 0.6],
+          "floor": 43,
+          "life": [4, 5],
+          "blob": { "look": "water", "radius": [3.2, 2.8, 2.4] }
+        },
+        {
+          "name": "crown-left",
+          "at": [31, 11],
+          "area": [5, 5],
+          "burst": 4,
+          "start": 5,
+          "angle": [185, 240],
+          "speed": [1.6, 2.6],
+          "gravity": [0, 0.9],
+          "floor": 42,
+          "life": [8, 9],
+          "blob": { "look": "water", "radius": [3.4, 3, 2.6] }
+        },
+        {
+          "name": "crown-right",
+          "at": [35, 11],
+          "area": [5, 5],
+          "burst": 4,
+          "start": 5,
+          "angle": [300, 355],
+          "speed": [1.6, 2.6],
+          "gravity": [0, 0.9],
+          "floor": 42,
+          "life": [8, 9],
+          "blob": { "look": "water", "radius": [3.4, 3, 2.6] }
+        },
+        {
+          "name": "splash-left",
+          "from": "crown-left",
+          "when": "floor",
+          "burst": 2,
+          "angle": [215, 325],
+          "speed": [0.8, 1.4],
+          "gravity": [0, 0.35],
+          "floor": 43,
+          "life": [3, 4],
+          "blob": { "look": "water", "radius": [2.6, 2.2] }
+        },
+        {
+          "name": "splash-right",
+          "from": "crown-right",
+          "when": "floor",
+          "burst": 2,
+          "angle": [215, 325],
+          "speed": [0.8, 1.4],
+          "gravity": [0, 0.35],
+          "floor": 43,
+          "life": [3, 4],
+          "blob": { "look": "water", "radius": [2.6, 2.2] }
+        },
+        {
+          "name": "spray",
+          "at": [32, 28],
+          "line": { "to": [33, 14] },
+          "burst": 4,
+          "start": 9,
+          "angle": [180, 360],
+          "speed": [0.6, 1.2],
+          "gravity": [0, 0.8],
+          "floor": 42,
+          "life": [5, 6],
+          "blob": { "look": "water", "radius": [3, 2.6] }
+        }
+      ]
+    },
+    "buff": {
+      "frames": 10,
+      "duration": 80,
+      "loop": true,
+      "seed": 9,
+      "looks": {
+        "water": {
+          "colors": ["b"],
+          "thresholds": [0.2],
+          "lit": { "colors": ["m", "h"], "thresholds": [0.35, 0.72] },
+          "shade": { "colors": ["d"], "thresholds": [0.4] },
+          "outline": "o"
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "water",
+          "at": [32, 40],
+          "radius": 14,
+          "width": 7,
+          "squash": [1, 0.32],
+          "noise": 0.3,
+          "scale": 5,
+          "power": 0.75
+        },
+        {
+          "kind": "stream",
+          "look": "water",
+          "at": [19, 40],
+          "through": [[17, 31], [19, 22], [17, 15]],
+          "frames": [0, 6],
+          "width": [5, 6, 4],
+          "taper": [1, 0.6, 0.1],
+          "head": [0.15, 1, 1],
+          "tail": [0, 0.2, 1],
+          "sway": 1.5,
+          "wavelength": 12,
+          "waves": 1,
+          "noise": 0.4,
+          "scale": 4,
+          "power": [1.3, 1.25, 0.6],
+          "ease": "linear"
+        },
+        {
+          "kind": "stream",
+          "look": "water",
+          "at": [45, 40],
+          "through": [[47, 32], [45, 24], [47, 17]],
+          "frames": [4, 10],
+          "width": [5, 6, 4],
+          "taper": [1, 0.6, 0.1],
+          "head": [0.15, 1, 1],
+          "tail": [0, 0.2, 1],
+          "sway": -1.5,
+          "wavelength": 12,
+          "waves": 1,
+          "noise": 0.4,
+          "scale": 4,
+          "power": [1.3, 1.25, 0.6],
+          "ease": "linear",
+          "seed": 3
+        }
+      ],
+      "emitters": [
+        {
+          "name": "swirl",
+          "at": [32, 40],
+          "rate": 1.2,
+          "speed": 0,
+          "life": [7, 9],
+          "sway": { "amplitude": [14, 4.5], "period": 10 },
+          "blob": { "look": "water", "radius": [1.8, 3.2, 3.2, 1.8] }
+        },
+        {
+          "name": "bubbles",
+          "at": [32, 32],
+          "area": [28, 12],
+          "rate": 0.45,
+          "angle": [265, 275],
+          "speed": [1.6, 2.2],
+          "drag": 0.02,
+          "life": [10, 13],
+          "sway": { "amplitude": [1.5, 0], "period": 5 },
+          "shapes": ["bubble", "bubble-big", "bubble-big", "bubble"]
+        }
+      ]
+    }
+  }
+}

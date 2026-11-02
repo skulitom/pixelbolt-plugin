@@ -76,6 +76,11 @@ function sceneTilemap(tilemap, project, path) {
   const expanded = expandTilemap(tilemap, { path, fail, kinds: ['frame', 'animation'], text: 'frame', masked: () => true,
     exists: (kind, name) => kind === 'frame' ? frames.has(name) : Object.hasOwn(project.animations, name) });
   const { columns, rows } = expanded, [w, h] = tile;
+  // Corner tiles sit half a cell up and left of the cell they were found from.
+  if (expanded.cells.some(cell => cell.corner)) {
+    if (iso) fail(`${path}.legend`, 'corner tiles sit where four square cells meet; an iso map takes frames and animations without autotile corner');
+    if (w % 2 || h % 2) fail(`${path}.tile`, 'corner tiles sit where four cells meet, half a cell up and left of one; use an even cell width and height');
+  }
   if (!iso) return { tile, width: columns * w, height: rows * h, cells: expanded.cells.map(cell => ({ x: cell.x * w, y: cell.y * h, bottom: cell.y * h + project.height, [cell.kind]: cell.name })), columns, rows };
   const cells = isoLayout(expanded.cells, rows, tile).map(cell => ({ x: cell.left + Math.floor((w - project.width) / 2), y: cell.top + h - project.height, bottom: cell.top + h / 2, [cell.kind]: cell.name }));
   return { tile, width: (columns + rows) * w / 2, height: (columns + rows) * h / 2, cells, columns, rows, iso };
@@ -418,9 +423,13 @@ export function withLightSettings(written, scene, edited) {
 }
 // `depth: true` also records which placement drew each pixel last and who covers whom, for `depth` in the result and
 // for `sceneImage(view, { mode: 'depth' })`.
-export function renderScene(scene, { time = 0, lit = true, density = false, depth = false } = {}) {
+// With `draws`, the result also lists every frame drawn, in drawing order: { instance, cell? (a tilemap cell's index),
+// asset, frame (its index), x, y (its top-left on screen), scale, shift (how far the camera moved it, so x + shift[0] is
+// where it is in the scene), shade?, haze? }. A Tiled map of the scene is made from it.
+export function renderScene(scene, { time = 0, lit = true, density = false, depth = false, draws = false } = {}) {
   if (!Number.isFinite(time) || time < 0) fail('scene.time', 'expected a nonnegative finite time in milliseconds');
   if (typeof lit !== 'boolean' || typeof density !== 'boolean' || typeof depth !== 'boolean') fail('scene.preview', 'lit, density and depth must be booleans');
+  if (typeof draws !== 'boolean') fail('scene.draws', 'expected a boolean');
   const { width, height, background, assets, shifts, lighting } = scene, data = new Uint8ClampedArray(width * height * 4), placements = [];
   // Where the camera is, and how far each placement moves on screen for it: its parallax share of the camera, rounded
   // to whole pixels per plane. An attached placement moves with its target; -1 is the scene itself.
@@ -685,6 +694,11 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
       });
     }
   }
+  const drawn = draws ? [] : null;
+  const record = (i, cell, frame, x, y) => {
+    const instance = scene.instances[i];
+    drawn?.push({ instance: i, ...(cell !== null && { cell }), asset: instance.asset, frame, x, y, scale: instance.scale, shift: shiftOf(i), ...(instance.shade && { shade: instance.shade }), ...(instance.haze && { haze: instance.haze }) });
+  };
   for (const item of order) {
     const { i } = item, instance = scene.instances[i], asset = assets[instance.asset], project = asset.recipe, s = instance.scale, label = instance.name ?? `${instance.asset}#${i}`;
     if (instance.tilemap) {
@@ -692,22 +706,25 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
       const box = { x: left, y: top, w: tilemap.width * s, h: tilemap.height * s };
       if (item.cell !== undefined) {
         // The cells of a sorted tilemap that stand on one row are drawn one after another and share a depth entry.
-        const cell = tilemap.cells[item.cell], x = left + cell.x * s, y = top + cell.y * s, w = project.width * s, h = project.height * s;
+        const cell = tilemap.cells[item.cell], x = left + cell.x * s, y = top + cell.y * s, w = project.width * s;
         let entry = -1;
         if (owner && !instance.shade) {
           const last = entries.at(-1);
           if (last?.spans && last.instance === i && last.ground === item.ground) {
-            const right = Math.max(last.box.x + last.box.w, x + w);
-            last.spans.push([x, w]); last.tiles++; last.box.x = Math.min(last.box.x, x); last.box.w = right - last.box.x;
-          } else entries.push({ instance: i, label, sorted: true, ground: item.ground, tiles: 1, spans: [[x, w]], box: { x, y, w, h }, shift, covers: false });
+            last.spans.push([x, w]); last.tiles++;
+          } else entries.push({ instance: i, label, sorted: true, ground: item.ground, tiles: 1, spans: [[x, w]], shift, covers: false });
           entry = entries.length - 1;
         }
+        record(i, item.cell, frameIndex(project, cell, 0), x, y);
         drawFrame(instance.asset, frameIndex(project, cell, 0), x, y, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
         continue;
       }
       if (!item.record) {
-        const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted: false, box, covers: false }) - 1 : -1;
-        for (const cell of tilemap.cells) drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+        const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted: false, covers: false }) - 1 : -1;
+        for (const [k, cell] of tilemap.cells.entries()) {
+          record(i, k, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s);
+          drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+        }
       }
       placements.push({ name: label, tilemap: true, ...box, tiles: tilemap.cells.length, scale: s, ...(instance.haze && { haze: instance.haze }) });
       continue;
@@ -719,6 +736,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     // A sorted copy stands at its placement point; its y is the ground line it was sorted by.
     const sorted = instance.sort === 'ground', at = [state.position[0] + rx * instance.step[0], state.position[1] + ry * instance.step[1]];
     const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted, ...(sorted && { at }), ...(sorted && state.lift && { lift: state.lift }), box: { x: left, y: top, w: project.width * s, h: project.height * s }, shift, covers: false }) - 1 : -1;
+    record(i, null, state.index, left, top);
     drawFrame(instance.asset, state.index, left, top, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
   }
   if (density) for (const box of placements) {
@@ -752,7 +770,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
   for (const instance of scene.instances) if (instance.name !== undefined) shared.set(instance.name, (shared.get(instance.name) ?? 0) + 1);
   const nameOf = i => { const { name, asset } = scene.instances[i]; return name !== undefined && shared.get(name) === 1 ? name : `${name ?? asset}#${i}`; };
   const shadows = [...casts.values()].slice(0, 16).map(({ i, light, casts: n, pixels, length, toward }) => ({ name: nameOf(i), light, pixels, length: Math.round(length), ...(n === 1 ? { toward: toward.map(round) } : { casts: n }) }));
-  const result = { data, width, height, placements, warnings: [...scene.warnings, ...clipWarning], ...(total && { clipped: Object.fromEntries(named) }), ...(lightsNow.length && { lights: lightsNow }), ...(shadows.length && { shadows }), ...(hazy.length && { haze: hazy }), ...(camera && { camera: camera.map(round) }) };
+  const result = { data, width, height, placements, ...(drawn && { draws: drawn }), warnings: [...scene.warnings, ...clipWarning], ...(total && { clipped: Object.fromEntries(named) }), ...(lightsNow.length && { lights: lightsNow }), ...(shadows.length && { shadows }), ...(hazy.length && { haze: hazy }), ...(camera && { camera: camera.map(round) }) };
   if (depth) {
     // Who covers whom, largest first. Placements that lie straight on the background (a floor, a backdrop, a tilemap
     // under everything) are the ground and are left out as the one behind; sorted placements always count.

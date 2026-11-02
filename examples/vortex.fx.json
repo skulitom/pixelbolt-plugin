@@ -1,0 +1,90 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "vortex",
+  "width": 64,
+  "height": 64,
+  "anchor": [32, 56],
+  "palette": {
+    "k": "#140a26",
+    "d": "#2b1452",
+    "v": "#5a2a9c",
+    "m": "#9a4ad8",
+    "p": "#d58cff",
+    "W": "#fbeaff",
+    "o": "#3a1d66"
+  },
+  "symbols": {
+    "mote": ["W"],
+    "mote-dim": ["p"],
+    "spark": [
+      ".W.",
+      "WpW",
+      ".W."
+    ],
+    "fleck": ["m"]
+  },
+  "effects": {
+    "vortex": {
+      "frames": 16,
+      "duration": 70,
+      "loop": true,
+      "seed": 5,
+      "looks": {
+        "core": { "colors": ["k", "d"], "thresholds": [0.15, 0.5] },
+        "rim": { "colors": ["v", "m", "p", "W"], "thresholds": [0.2, 0.45, 0.7, 0.9], "dither": 0.4, "outline": "o" },
+        "wisp": { "colors": ["v", "m", "p"], "thresholds": [0.3, 0.6, 0.9], "front": true }
+      },
+      "layers": [
+        {
+          "kind": "burst",
+          "look": "core",
+          "at": [32, 32],
+          "radius": 13,
+          "squash": [0.62, 1],
+          "noise": 0.35,
+          "scale": 5,
+          "boil": 6
+        },
+        {
+          "kind": "aura",
+          "look": "rim",
+          "at": [32, 32],
+          "around": [9, 14],
+          "width": 3,
+          "rise": 1,
+          "noise": 0.5,
+          "scale": 4,
+          "boil": 8
+        }
+      ],
+      "emitters": [
+        {
+          "at": [32, 32],
+          "ring": { "radius": [17, 24], "outward": true },
+          "angle": [80, 100],
+          "rate": 2.6,
+          "speed": [0.7, 1],
+          "life": [10, 14],
+          "attract": { "at": [32, 32], "strength": 0.24, "swirl": 0.2 },
+          "drag": 0.04,
+          "trail": { "color": "v", "length": 2 },
+          "shapes": ["mote", "mote-dim", "fleck"]
+        },
+        {
+          "at": [32, 32],
+          "ring": { "radius": [5, 8] },
+          "rate": 0.9,
+          "angle": [0, 360],
+          "speed": [0.2, 0.4],
+          "life": [10, 14],
+          "drag": 0.06,
+          "attract": { "at": [32, 32], "strength": 0.02, "swirl": 0.12 },
+          "turbulence": { "strength": 0.08, "scale": 7 },
+          "blob": { "look": "wisp", "radius": [2, 2.8, 1.6], "power": [1.2, 0.55] }
+        },
+        { "at": [32, 32], "area": [12, 22], "rate": 0.25, "life": [3, 4], "speed": 0, "shapes": ["spark"] }
+      ]
+    }
+  }
+}

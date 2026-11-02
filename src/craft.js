@@ -168,8 +168,10 @@ const FOUR = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 //   when those pixels agree. It needs exactly two perpendicular same-colour neighbours, a different colour on the
 //   diagonal between them (so filled areas are untouched) and at least one arm one pixel long, so real right-angle
 //   corners with longer arms survive. Repeats until stable (at most four passes).
-// `allowed(index)` limits which pixels may change. Returns [{ index, x, y, id, kind }] in scan order.
-export function cleanupIds(ids, width, height, { corners = false, strays = false, allowed = () => true } = {}) {
+// `allowed(index)` limits which pixels may change. `walls(index)` marks pixels that are neither the shape nor the space
+// around it, such as an obstacle a liquid rests against: a corner pixel tucked against one is not a step in the shape's
+// edge, so it stays. Returns [{ index, x, y, id, kind }] in scan order.
+export function cleanupIds(ids, width, height, { corners = false, strays = false, allowed = () => true, walls = () => false } = {}) {
   const work = Uint32Array.from(ids), kinds = new Map();
   const at = (x, y) => (x < 0 || y < 0 || x >= width || y >= height ? -1 : work[y * width + x]);
   if (strays) for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -195,7 +197,9 @@ export function cleanupIds(ids, width, height, { corners = false, strays = false
       if (at(x + ax + bx, y + ay + by) === color) continue; // part of a 2×2 block: a filled area
       const run = (dx, dy) => { let n = 1; while (at(x + dx * (n + 1), y + dy * (n + 1)) === color) n++; return n; };
       if (Math.min(run(ax, ay), run(bx, by)) !== 1) continue;
-      const outside = [at(x - ax, y - ay), at(x - bx, y - by), at(x - ax - bx, y - ay - by)].filter(n => n >= 0);
+      const beyond = [[x - ax, y - ay], [x - bx, y - by], [x - ax - bx, y - ay - by]];
+      if (beyond.some(([px, py]) => px >= 0 && py >= 0 && px < width && py < height && walls(py * width + px))) continue;
+      const outside = beyond.map(([px, py]) => at(px, py)).filter(n => n >= 0);
       if (!outside.length || outside.some(n => n !== outside[0])) continue;
       work[i] = outside[0]; kinds.set(i, 'corner'); changed = true;
     }
@@ -552,7 +556,8 @@ const massMap = ({ pivot: [ox, oy], flipX, squash, cos, sin }) => ([x, y]) => {
   return [ox + roundHalfAway(along * cos - across * sin), oy + roundHalfAway(along * sin + across * cos)];
 };
 export function rasterizeMass(mass, options = {}) {
-  const key = JSON.stringify([mass.size, mass.base, mass.outline, options.angle ?? 0, options.flipX ?? false, options.squash ?? 1, options.light ?? 225, options.ramp]);
+  // A flat mass joins the key only when set, so every ellipse keeps the key (and drawing) it always had.
+  const key = JSON.stringify([mass.size, mass.base, mass.outline, options.angle ?? 0, options.flipX ?? false, options.squash ?? 1, options.light ?? 225, options.ramp, ...(mass.flat === true ? ['flat'] : [])]);
   let cached = massDrawings.get(key);
   if (!cached) {
     const part = drawMass(mass, options), bytes = part.fill.byteLength + part.outlineMask.byteLength + part.width * part.height * 2 + 512;
@@ -565,13 +570,17 @@ export function rasterizeMass(mass, options = {}) {
   const part = cached.part, copy = { ...part, rows: part.rows.slice(), fill: part.fill.slice(), outlineMask: part.outlineMask.slice(), pivot: part.pivot.slice() };
   return { ...copy, map: massMap(copy) };
 }
+// A flat mass is the top half of an ellipse: its anchor is the middle of its base row, which squash and rotation keep
+// in place. `size` is then [width, rows from the base row up]; the half-ellipse's radius is half a pixel short of
+// that height, so the top row is a run of pixels rather than a one-pixel nub.
 function drawMass(mass, { angle = 0, flipX = false, squash = 1, light = 225, ramp } = {}) {
-  const [cos, sin] = unitAt(angle), rx = mass.size[0] / squash / 2, ry = mass.size[1] * squash / 2;
+  const flat = mass.flat === true, [cos, sin] = unitAt(angle), rx = mass.size[0] / squash / 2, ry = (flat ? mass.size[1] - .5 : mass.size[1] / 2) * squash;
   const reachX = Math.ceil(Math.sqrt(rx * rx * cos * cos + ry * ry * sin * sin)) + 2;
   const reachY = Math.ceil(Math.sqrt(rx * rx * sin * sin + ry * ry * cos * cos)) + 2;
   const left = -reachX, top = -reachY, w = reachX * 2 + 1, h = reachY * 2 + 1, candidates = [];
   for (let y = -reachY + 2; y <= reachY - 2; y++) for (let x = -reachX + 2; x <= reachX - 2; x++) {
     const u = (x * cos + y * sin) / rx, v = (-x * sin + y * cos) / ry;
+    if (flat && v > 1e-9) continue;
     candidates.push({ at: (y - top) * w + x - left, score: u * u + v * v, u: flipX ? -u : u, v });
   }
   candidates.sort((a, b) => a.score - b.score || a.v - b.v || a.u - b.u);
@@ -582,17 +591,18 @@ function drawMass(mass, { angle = 0, flipX = false, squash = 1, light = 225, ram
   // Pixel area, including the outline, takes precedence over an exact ellipse under squash (owner decision).
   // Use the unturned, unsquashed ellipse as the area target. Pick the closest ellipse-ranked pixel contour rather
   // than rounding two diameters independently; this also keeps 2px masses stable at extreme squash.
-  const bx = Math.ceil(mass.size[0] / 2) + 2, by = Math.ceil(mass.size[1] / 2) + 2, bw = bx * 2 + 1, bh = by * 2 + 1;
+  const bx = Math.ceil(mass.size[0] / 2) + 2, by = (flat ? mass.size[1] : Math.ceil(mass.size[1] / 2)) + 2, bw = bx * 2 + 1, bh = by * 2 + 1;
   const baseMask = new Uint8Array(bw * bh);
   for (let y = -by; y <= by; y++) for (let x = -bx; x <= bx; x++) {
-    const u = x * 2 / mass.size[0], v = y * 2 / mass.size[1];
-    if (u * u + v * v <= 1 + 1e-9) baseMask[(y + by) * bw + x + bx] = 1;
+    const u = x * 2 / mass.size[0], v = flat ? y / (mass.size[1] - .5) : y * 2 / mass.size[1];
+    if (u * u + v * v <= 1 + 1e-9 && !(flat && y > 0)) baseMask[(y + by) * bw + x + bx] = 1;
   }
+  // Shading needs room for a lit and a shaded side: three pixels across the ellipse, or a dome three rows tall.
   const target = area(paint(baseMask, bw, bh, -bx, -by, Math.min(...mass.size) >= 3));
   const draw = count => {
     const mask = new Uint8Array(w * h);
     for (let i = 0; i < count; i++) mask[candidates[i].at] = 1;
-    return paint(mask, w, h, left, top, Math.min(rx, ry) >= 1.5);
+    return paint(mask, w, h, left, top, flat ? Math.min(rx * 2, ry + .5) >= 3 : Math.min(rx, ry) >= 1.5);
   };
   let low = 1, high = Math.min(candidates.length, target), result = null, error = Infinity, closest = 1;
   const consider = count => {

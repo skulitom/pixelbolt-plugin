@@ -1,0 +1,110 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "healing-circle",
+  "width": 96,
+  "height": 72,
+  "palette": {
+    "d": "#14432f",
+    "g": "#2a8a4f",
+    "m": "#5fd37a",
+    "l": "#b6f5a0",
+    "W": "#f4ffe8",
+    "y": "#ffe07a",
+    "Y": "#fff6c4"
+  },
+  "symbols": {
+    "sparkle-big": [
+      ".Y.",
+      "YWY",
+      ".Y."
+    ],
+    "sparkle": ["Y"],
+    "sparkle-dim": ["y"]
+  },
+  "effects": {
+    "healing-circle": {
+      "frames": 18,
+      "duration": 70,
+      "seed": 2,
+      "looks": {
+        "rune": { "colors": ["d", "g", "m", "l"], "thresholds": [0.1, 0.35, 0.6, 0.82], "dither": 0.8 },
+        "light": { "colors": ["g", "m", "l", "W"], "thresholds": [0.1, 0.35, 0.6, 0.85], "dither": 0.3 }
+      },
+      "cleanup": { "corners": true },
+      "layers": [
+        {
+          "kind": "glyph",
+          "look": "rune",
+          "at": [48, 52],
+          "frames": [0, 18],
+          "radius": 36,
+          "inner": 0.64,
+          "squash": [1, 0.42],
+          "runes": 10,
+          "double": true,
+          "points": 4,
+          "step": 1,
+          "spin": [0, 24],
+          "reveal": 0.35,
+          "glow": 0,
+          "power": [1, 1, 0.9, 0],
+          "fill": [0, 0.06, 0.06, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "ring",
+          "look": "rune",
+          "at": [48, 52],
+          "frames": [6, 12],
+          "radius": [36, 44],
+          "width": [5, 2],
+          "squash": [1, 0.42],
+          "noise": 0.5,
+          "power": [0.9, 0.3]
+        },
+        {
+          "kind": "beam",
+          "look": "light",
+          "at": [48, 52],
+          "to": [48, 2],
+          "frames": [5, 16],
+          "width": [0, 18, 14, 0],
+          "reveal": 0.25,
+          "wobble": 0.06,
+          "wavelength": 10,
+          "waves": -4,
+          "fade": 0.85,
+          "power": [0.65, 0.65, 0.35],
+          "ease": "linear",
+          "squash": [1, 0.42]
+        }
+      ],
+      "emitters": [
+        {
+          "at": [48, 48],
+          "area": [56, 7],
+          "rate": 0.6,
+          "start": 4,
+          "end": 16,
+          "angle": [265, 275],
+          "speed": [0.8, 1.4],
+          "life": [6, 10],
+          "shapes": ["sparkle-big", "sparkle", "sparkle-dim"],
+          "behind": true
+        },
+        {
+          "at": [48, 56],
+          "area": [56, 7],
+          "rate": 0.6,
+          "start": 4,
+          "end": 16,
+          "angle": [265, 275],
+          "speed": [0.8, 1.4],
+          "life": [6, 10],
+          "shapes": ["sparkle-big", "sparkle", "sparkle-dim"]
+        }
+      ]
+    }
+  }
+}

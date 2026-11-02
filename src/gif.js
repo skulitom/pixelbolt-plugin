@@ -74,7 +74,7 @@ function indexFrame(data, area, background, describe) {
 // colour. `loops` is how many times the animation plays: 0 for ever, 1 once (no loop extension), n written as n − 1
 // repeats. An opaque animation needs one spare shared entry to keep pixels (see writeFrames); when that doubles the
 // table, the file is written both ways and the smaller kept.
-function writeGIF(indexed, width, height, options = {}) {
+function writeGIF(indexed, width, height, options) {
   const transparency = indexed.some(frame => frame.transparent), all = new Map();
   for (const frame of indexed) for (const color of frame.colors) if (!all.has(color)) all.set(color, all.size);
   const shared = all.size + (transparency ? 1 : 0) <= 256, write = spare => writeFrames(indexed, width, height, options, all, shared, transparency, spare);
@@ -95,7 +95,7 @@ function writeGIF(indexed, width, height, options = {}) {
 // which showed as opaque black wherever the next frame was transparent. A frame with 256 opaque colours of its own table has no index to
 // spare, so it is cleared without one (browsers and ffmpeg still clear it; Pillow shows a colour of its table) and
 // counted in `backgroundClears`, for the notes.
-function writeFrames(indexed, width, height, { loops = 0, scale = 1 }, all, shared, transparency, spare) {
+function writeFrames(indexed, width, height, { loops, scale = 1 }, all, shared, transparency, spare) {
   const table = (colors, offset, extra) => {
     const bits = bitsFor(colors.length + offset + extra), bytes = new Uint8Array(3 << bits);
     for (const [index, color] of colors.entries()) bytes.set([color >> 16, color >> 8 & 255, color & 255], (index + offset) * 3);
@@ -131,9 +131,13 @@ function writeFrames(indexed, width, height, { loops = 0, scale = 1 }, all, shar
     if (!position) { left = top = 0; right = width - 1; bottom = height - 1; }
     else if (right < 0) left = top = right = bottom = 0;
     const keep = shared ? (transparency ? 0 : spare ? all.size : -1) : transparent ? 0 : colors.length < 256 ? colors.length : -1;
+    // Pillow decodes every later frame as RGB or RGBA by whether the first frame names a transparent index, so an
+    // opaque first frame of an animation with transparency names one that none of its pixels use; otherwise Pillow
+    // showed the later frames' transparent pixels as opaque black.
+    const naming = (clears || (!position && transparency)) && keep >= 0;
     const w = (right - left + 1) * scale, h = (bottom - top + 1) * scale;
     const encode = keeping => {
-      const local = shared ? null : table(colors, offset, (keeping || (clears && keep >= 0)) && !transparent ? 1 : 0), minimum = Math.max(2, (local ?? globalTable).bits), out = new Uint8Array(w * h);
+      const local = shared ? null : table(colors, offset, (keeping || naming) && !transparent ? 1 : 0), minimum = Math.max(2, (local ?? globalTable).bits), out = new Uint8Array(w * h);
       for (let y = top; y <= bottom; y++) {
         const row = (y - top) * scale * w;
         for (let x = left, i = y * width + left; x <= right; x++, i++) out.fill(keeping && !changed[i] ? keep : lookup[indices[i]], row + (x - left) * scale, row + (x - left + 1) * scale);
@@ -144,7 +148,7 @@ function writeFrames(indexed, width, height, { loops = 0, scale = 1 }, all, shar
     };
     let best = encode(false);
     if (position && keep >= 0 && count < (right - left + 1) * (bottom - top + 1)) { const kept = encode(true); if (kept.size < best.size) best = kept; }
-    const named = best.transparent || (clears && keep >= 0);
+    const named = best.transparent || naming;
     if (clears && !named) backgroundClears++;
     push(0x21, 0xf9, 4, (clears ? 2 : 1) << 2 | (named ? 1 : 0), ...word(frame.delay), named ? keep : 0, 0);
     push(0x2c, ...word(left * scale), ...word(top * scale), ...word(w), ...word(h), best.local ? 0x80 | best.local.bits - 1 : 0);

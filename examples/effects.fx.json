@@ -45,15 +45,21 @@
     "ember-dim": ["o"],
     "ember-end": ["r"],
     "puff-big": [
-      ".sss.",
-      "ssssS",
-      "SSSSu"
+      ".ss..",
+      "sssS.",
+      "sSSSu",
+      ".SSu."
     ],
     "puff": [
-      ".sS",
-      "sSu"
+      ".s.",
+      "sSS",
+      ".Su"
     ],
-    "puff-small": ["sS"],
+    "puff-small": [
+      "sS",
+      "Su"
+    ],
+    "puff-end": ["S"],
     "leaf-a": [
       "lg.",
       ".gG"
@@ -125,7 +131,7 @@
       ]
     },
     "dust": {
-      "frames": 8,
+      "frames": 11,
       "duration": 70,
       "seed": 6,
       "emitters": [
@@ -133,27 +139,25 @@
           "at": [22, 35],
           "name": "left",
           "area": [4, 1],
-          "burst": 4,
+          "burst": 6,
           "angle": [178, 196],
-          "speed": [1.2, 2.2],
-          "drag": 0.22,
+          "speed": [0.8, 3.2],
+          "drag": 0.13,
           "gravity": [0, -0.04],
-          "life": [7, 9],
-          "shapes": ["puff-big", "puff", "puff-small"],
-          "dissolve": 0.4
+          "life": [9, 12],
+          "shapes": ["puff", "puff-big", "puff-big", "puff", "puff-small", "puff-end"]
         },
         {
           "at": [26, 35],
           "name": "right",
           "area": [4, 1],
-          "burst": 4,
+          "burst": 6,
           "angle": [344, 362],
-          "speed": [1.2, 2.2],
-          "drag": 0.22,
+          "speed": [0.8, 3.2],
+          "drag": 0.13,
           "gravity": [0, -0.04],
-          "life": [7, 9],
-          "shapes": ["puff-big", "puff", "puff-small"],
-          "dissolve": 0.4
+          "life": [9, 12],
+          "shapes": ["puff", "puff-big", "puff-big", "puff", "puff-small", "puff-end"]
         }
       ]
     },

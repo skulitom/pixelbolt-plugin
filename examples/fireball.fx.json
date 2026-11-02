@@ -1,0 +1,64 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "fireball",
+  "width": 64,
+  "height": 32,
+  "palette": { "W": "#fffbe6", "y": "#ffd34d", "o": "#ff8a2b", "r": "#d6402b", "R": "#8f2a2e" },
+  "symbols": {
+    "ember-big": [
+      "yW",
+      "oy"
+    ],
+    "ember": ["y"],
+    "ember-dim": ["o"],
+    "ember-end": ["r"]
+  },
+  "effects": {
+    "fireball": {
+      "frames": 8,
+      "duration": 60,
+      "loop": true,
+      "seed": 4,
+      "looks": { "fire": { "colors": ["R", "r", "o", "y", "W"], "thresholds": [0.12, 0.3, 0.5, 0.7, 0.88] } },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "beam",
+          "look": "fire",
+          "at": [44, 16],
+          "to": [10, 16],
+          "width": 14,
+          "fade": 0.95,
+          "wobble": 0.25,
+          "wavelength": 7,
+          "waves": 2,
+          "noise": 0.6,
+          "scale": 3
+        },
+        {
+          "kind": "burst",
+          "look": "fire",
+          "at": [45, 16],
+          "radius": 8,
+          "noise": 0.6,
+          "boil": 6,
+          "power": 1.5,
+          "seed": 4
+        }
+      ],
+      "emitters": [
+        {
+          "at": [30, 16],
+          "area": [18, 8],
+          "rate": 0.7,
+          "angle": [160, 200],
+          "speed": [0.5, 1.3],
+          "drag": 0.04,
+          "life": [5, 8],
+          "shapes": ["ember-big", "ember", "ember-dim", "ember-end"]
+        }
+      ]
+    }
+  }
+}

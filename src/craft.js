@@ -136,6 +136,19 @@ export function traceLine(x, y, x2, y2, visit) {
   }
 }
 
+// ---- Colour distance --------------------------------------------------------------------------------------------
+// The one of `candidates` (RGB triples) nearest `rgb` by the red-mean weighted distance, which follows how far apart
+// colours look much better than plain RGB and needs only + − ×; the first of equally near candidates wins.
+export function nearestColor(rgb, candidates) {
+  let best = 0, nearest = Infinity;
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i], mean = (rgb[0] + c[0]) / 2, dr = rgb[0] - c[0], dg = rgb[1] - c[1], db = rgb[2] - c[2];
+    const distance = (512 + mean) * dr * dr + 1024 * dg * dg + (767 - mean) * db * db;
+    if (distance < nearest) { nearest = distance; best = i; }
+  }
+  return candidates[best];
+}
+
 // ---- Colour ids --------------------------------------------------------------------------------------------------
 // Exact RGBA packed into one number; every fully transparent pixel is 0, whatever its hidden RGB.
 export const pixelId = (data, at) => data[at + 3] ? (((data[at] << 24) | (data[at + 1] << 16) | (data[at + 2] << 8) | data[at + 3]) >>> 0) : 0;
@@ -624,12 +637,19 @@ export function ruleVariants(rule, { rotate = false, mirror = false } = {}) {
 // unless they read or write a cell this rule already rewrote in this step (so two overlapping fixes never both apply),
 // fail their seeded chance, or exceed the limit. Matches whose replacement is already in place change nothing and
 // count toward nothing. Stops early when a step changes nothing. Updates `ids` in place and returns the changed indices.
+// Each match is one 64-bit number, its seeded key above its position and variant, so a plain numeric sort gives the
+// order (key, then top, left and variant) at 8 bytes a match; an object per match took about 1.9 GB on a 2048×2048 still.
+const KEY_WORD = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1 ? 1 : 0; // the high 32 bits, by the platform's byte order
 export function rewriteIds(ids, width, height, rules, { x = 0, y = 0, w = width, h = height, steps = 1, chance = 1, limit = Infinity, seed = 0, spend = () => {} } = {}) {
   const changed = new Set(), snapshot = new Uint32Array(ids.length), written = new Uint8Array(width * height);
+  let matches = new BigUint64Array(0), words = new Uint32Array(0);
   for (let step = 0; step < steps; step++) {
     let effective = 0;
     rules.forEach((variants, rule) => {
-      const candidates = [];
+      const kinds = variants.length, most = variants.reduce((sum, v) => sum + Math.max(0, w - v.w + 1) * Math.max(0, h - v.h + 1), 0);
+      // The position and variant share the low 32 bits (a recipe canvas holds at most 4,194,304 pixels, a rule 8 variants).
+      if (width * height * kinds > 4294967296) throw new RangeError(`rewriteIds: ${width}×${height} pixels × ${kinds} variants do not fit 32 bits`);
+      let found = 0;
       snapshot.set(ids); written.fill(0);
       variants.forEach((v, variant) => {
         spend(Math.max(0, w - v.w + 1) * Math.max(0, h - v.h + 1) * v.w * v.h);
@@ -639,24 +659,32 @@ export function rewriteIds(ids, width, height, rules, { x = 0, y = 0, w = width,
             const want = v.match[j * v.w + i];
             if (want >= 0 && snapshot[(top + j) * width + left + i] !== want) { ok = false; break; }
           }
-          if (ok) candidates.push({ left, top, variant, v, key: hash(seed, step, rule, variant, left, top) });
+          if (!ok) continue;
+          if (found === matches.length) {
+            const grown = new BigUint64Array(Math.min(most, Math.max(1024, found * 2)));
+            grown.set(matches); matches = grown; words = new Uint32Array(grown.buffer);
+          }
+          words[2 * found + KEY_WORD] = hash(seed, step, rule, variant, left, top);
+          words[2 * found + 1 - KEY_WORD] = (top * width + left) * kinds + variant;
+          found++;
         }
       });
-      candidates.sort((a, b) => a.key - b.key || a.top - b.top || a.left - b.left || a.variant - b.variant);
+      matches.subarray(0, found).sort();
       let count = 0;
-      for (const c of candidates) {
+      for (let n = 0; n < found; n++) {
         if (count >= limit) break;
-        if (chance < 1 && random(seed, step, rule, c.variant, c.left, c.top, 1) >= chance) continue;
-        const { v } = c;
+        const low = words[2 * n + 1 - KEY_WORD], variant = low % kinds, cell = (low - variant) / kinds, top = Math.floor(cell / width), left = cell - top * width;
+        if (chance < 1 && random(seed, step, rule, variant, left, top, 1) >= chance) continue;
+        const v = variants[variant];
         let clash = false, alters = false;
         for (let j = 0; j < v.h && !clash; j++) for (let i = 0; i < v.w; i++) {
-          const k = j * v.w + i, at = (c.top + j) * width + c.left + i;
+          const k = j * v.w + i, at = (top + j) * width + left + i;
           if ((v.match[k] >= 0 || v.replace[k] >= 0) && written[at]) { clash = true; break; }
           if (v.replace[k] >= 0 && ids[at] !== v.replace[k]) alters = true;
         }
         if (clash || !alters) continue;
         for (let j = 0; j < v.h; j++) for (let i = 0; i < v.w; i++) {
-          const k = j * v.w + i, at = (c.top + j) * width + c.left + i;
+          const k = j * v.w + i, at = (top + j) * width + left + i;
           if (v.replace[k] < 0) continue;
           written[at] = 1;
           if (ids[at] !== v.replace[k]) { ids[at] = v.replace[k]; changed.add(at); effective++; }

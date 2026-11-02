@@ -13,6 +13,10 @@ export const RECIPE_KEYWORD = 'pixelbolt-recipe';
 export const LINK_LIMIT = 16384;
 // Largest recipe text a link or PNG may unpack to: the engine's own request limit (core.js MAX_REQUEST_BYTES).
 export const RECIPE_LIMIT = 16 * 1024 * 1024;
+// Largest recipe text a PNG carries. Pillow, the image library most Python tools use, refuses to open a PNG whose text
+// chunk unpacks to more than 1 MiB, so a larger recipe travels as a file or a link instead. Reading still accepts up
+// to RECIPE_LIMIT, so PNGs written before this limit reopen.
+export const EMBED_LIMIT = 1024 * 1024;
 // The first engine version the playground can load; links and PNGs name a version at least this new.
 export const FIRST_VERSION = '0.9.0';
 
@@ -24,7 +28,6 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
 
 // Source formats and the kind each one is; a recipe without `format` is a plain project.
 const KINDS = { 'pixelforge-poses': 'poses', 'pixelforge-scene': 'scene', 'pixelforge-fx': 'fx', 'pixelforge-fluid': 'fluid', 'pixelforge-normals': 'normals', 'pixelforge-autotile': 'autotile' };
-export const RECIPE_KINDS = Object.freeze(['project', ...Object.values(KINDS)]);
 export function recipeKind(document) {
   if (!isObject(document)) fail('A recipe must be a JSON object.');
   if (document.format === undefined) return 'project';
@@ -161,9 +164,10 @@ const isRecipeChunk = chunk => chunk.type === 'iTXt' && chunk.data.length > RECI
 // The PNG with its recipe embedded: any earlier recipe chunk is replaced, and the new one goes just before IEND.
 export async function embedRecipe(png, recipe, version) {
   const kind = recipeKind(recipe); checkVersion(version);
-  // The reader refuses more than RECIPE_LIMIT bytes, so never write a PNG it couldn't reopen.
+  // Never write a PNG that a common reader refuses to open (see EMBED_LIMIT). The error's code lets a caller that
+  // embeds by default write the PNG without the recipe instead.
   const envelope = encoder.encode(JSON.stringify({ v: version, kind, recipe }));
-  if (envelope.length > RECIPE_LIMIT) fail(`The recipe is too large to carry in a PNG (over ${RECIPE_LIMIT.toLocaleString('en')} bytes).`);
+  if (envelope.length > EMBED_LIMIT) throw Object.assign(new ShareError(`The recipe is too large to carry in a PNG: ${envelope.length.toLocaleString('en')} bytes, over the ${EMBED_LIMIT.toLocaleString('en')} a PNG can carry and still open in Pillow. Share the recipe file or a link instead.`), { code: 'too-large' });
   const text = await compress(envelope, 'deflate');
   const data = new Uint8Array(RECIPE_KEYWORD.length + 5 + text.length);
   data.set(encoder.encode(RECIPE_KEYWORD)); data.set([0, 1, 0, 0, 0], RECIPE_KEYWORD.length); data.set(text, RECIPE_KEYWORD.length + 5);

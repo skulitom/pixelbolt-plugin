@@ -34,7 +34,9 @@ Then restart Claude Code in your project folder and ask in your own words, for e
   browser.
 - **What the MCP server reads and writes:** only files under the folder you opened in Claude Code. It reads the recipes and PNGs
   you name there, saves recipe revisions in `output/.revisions/`, and writes each export into a new folder under
-  `output/`.
+  `output/`. When asked, `pixel_render` also saves copies of an export (PNG, GIF, JSON or Godot `.tres` files) at
+  paths named inside that folder, never in hidden files or folders, and replaces an existing file there only when
+  asked to overwrite it.
 - **What it sends:** nothing. The MCP server uses no network and no external service.
 - **What else is here:** `studio/` and `src/server.js` are that preview studio; the MCP server never starts it. `examples/` and `docs/`
   are recipes and guides the tools can point to. `evals/` holds test cases with mocked replies for

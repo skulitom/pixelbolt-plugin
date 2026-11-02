@@ -239,8 +239,7 @@ a{
 }
 .library-note h3{
   margin-top:10px;
-  font-size:14px;
-  color-scheme:dark
+  font-size:14px
 }
 .library-note p{
   margin:10px 0 14px;
@@ -340,6 +339,12 @@ select{
   padding:5px;
   border-radius:4px
 }
+/* An open list is drawn on its options' background, which a transparent select leaves white on Windows: light text
+   on white. Give the options the dark surface. */
+select option,select optgroup{
+  background:var(--surface);
+  color:var(--ink)
+}
 .zoom-label{
   border-left:1px solid var(--line);
   padding-left:7px;
@@ -376,6 +381,37 @@ select{
 #canvas{
   image-rendering:pixelated;
   display:block
+}
+/* A picture larger than the artboard pans by dragging. */
+.artboard.pannable{
+  cursor:grab
+}
+.artboard.panning{
+  cursor:grabbing;
+  user-select:none
+}
+/* Full screen: the preview alone over the whole window, its artboard taking the height the tools and playback bar
+   leave. The toast stays above it. */
+.artboard-section.expanded{
+  position:fixed;
+  inset:0;
+  z-index:4;
+  display:flex;
+  flex-direction:column;
+  border:0;
+  border-radius:0
+}
+.artboard-section.expanded .artboard{
+  flex:1;
+  height:auto;
+  min-height:0
+}
+body.stage-open{
+  overflow:hidden
+}
+/* A large still fitted below 1×: scaled down smoothly so dither reads as a tone, not as noise. */
+#canvas.smooth,.frame img.smooth{
+  image-rendering:auto
 }
 .artboard-caption{
   position:absolute;
@@ -667,7 +703,6 @@ dialog code{
   border-radius:6px;
   padding:8px 10px;
   background:var(--raised);
-  color:var(--ink);
   font-size:13px
 }
 .frames-call-label{
@@ -843,9 +878,6 @@ dialog code{
   .button.primary{
     gap:6px
   }
-  .local{
-    display:none
-  }
   .workspace{
     display:flex;
     flex-direction:column
@@ -949,4 +981,63 @@ dialog code{
 }
 .motion-tools:not([hidden]) { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; font-size:12px; }
 .motion-tools input { width:72px; color:inherit; background:#18212b; border:1px solid #506473; border-radius:4px; padding:4px; }
-.motion-summary { margin:0; padding:4px 16px 10px; font-size:12px; color:#c9d8ce; }
+.motion-summary { padding:4px 16px 10px; font-size:12px; color:#c9d8ce; }
+/* One screen on a desktop-sized window: the page itself does not scroll. The projects, preview and source columns
+   scroll on their own, the artboard takes the height the preview column leaves, and the recipe editor fills its
+   column. Narrower or shorter windows keep the stacked layout, which scrolls as a page. */
+@media(min-width:901px) and (min-height:600px){
+  .studio-page{
+    height:100vh;
+    height:100dvh;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column
+  }
+  .studio-page .app-header{
+    flex:none
+  }
+  .studio-page .workspace{
+    flex:1;
+    min-height:0;
+    width:100%;
+    margin:0 auto;
+    grid-template-rows:minmax(0,1fr)
+  }
+  .studio-page .library,.studio-page .inspector{
+    min-height:0;
+    overflow-y:auto;
+    scrollbar-width:thin
+  }
+  .studio-page .main-workspace{
+    min-height:0;
+    overflow-y:auto;
+    scrollbar-width:thin;
+    display:flex;
+    flex-direction:column
+  }
+  .studio-page .project-heading{
+    margin-bottom:16px
+  }
+  .studio-page .artboard-section{
+    flex:1 0 300px;
+    display:flex;
+    flex-direction:column
+  }
+  .studio-page .artboard-section .artboard{
+    flex:1;
+    height:auto;
+    min-height:0
+  }
+  .studio-page .timeline-section{
+    margin-top:16px
+  }
+  .studio-page .workspace-footer{
+    margin-top:12px;
+    padding-top:12px
+  }
+  .studio-page #source{
+    flex:1 0 200px;
+    height:auto;
+    resize:none
+  }
+}

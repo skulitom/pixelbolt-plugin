@@ -1,0 +1,123 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "hero",
+  "width": 32,
+  "height": 36,
+  "palette": {
+    "k": "#1b1626",
+    "x": "#6e3f3a",
+    "y": "#c27b5c",
+    "z": "#f0b98e",
+    "r": "#3f1c2c",
+    "s": "#7f2b3d",
+    "t": "#b8463f",
+    "u": "#e07e52",
+    "p": "#222844",
+    "q": "#39476b",
+    "o": "#5a6f99",
+    "b": "#3a2421",
+    "c": "#6e4430",
+    "h": "#f2c14e",
+    "g": "#c08a2a"
+  },
+  "ramps": [["x", "y", "z"], ["r", "s", "t", "u"], ["p", "q", "o"]],
+  "light": 225,
+  "parts": {
+    "torso": {
+      "mass": { "size": [7, 9], "ramp": 1, "base": 2, "outline": "k" },
+      "points": { "hip": [0, 4], "shoulder": [1, -3], "neck": [1, -4] }
+    },
+    "head": {
+      "rows": [
+        "..kkkk..",
+        ".kghhhk.",
+        "kgghhhhk",
+        "kghzzkzk",
+        ".kgzzzzk",
+        ".kyzzzyk",
+        "..kyyyk.",
+        "...kkk.."
+      ],
+      "anchor": [4, 7]
+    },
+    "thigh": {
+      "bone": { "length": 5, "width": [3, 3], "ramp": 2, "base": 1, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "shin": {
+      "bone": { "length": 5, "width": [3, 2], "ramp": 2, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farThigh": {
+      "bone": { "length": 5, "width": [3, 3], "ramp": 2, "base": 0, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "farShin": {
+      "bone": { "length": 5, "width": [3, 2], "ramp": 2, "base": 0, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "upper": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 2, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "fore": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 0, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farUpper": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 1, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "farFore": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 0, "base": 0, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "boot": {
+      "rows": [
+        "kcck.",
+        "kbcck",
+        "kkkkk"
+      ],
+      "anchor": [1, 2]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand",
+      "duration": 200,
+      "origin": [15, 35],
+      "parts": [
+        { "name": "farUpper", "part": "farUpper", "attach": { "part": "torso", "point": "shoulder" }, "angle": 95 },
+        { "name": "farFore", "part": "farFore", "attach": { "part": "farUpper", "point": "end" }, "angle": -15 },
+        { "name": "farThigh", "part": "farThigh", "attach": { "part": "torso", "point": "hip" }, "angle": 90 },
+        { "name": "farShin", "part": "farShin", "attach": { "part": "farThigh", "point": "end" }, "angle": 0 },
+        { "name": "farBoot", "part": "boot", "attach": { "part": "farShin", "point": "end" } },
+        { "name": "torso", "part": "torso", "at": [0, -15] },
+        { "name": "head", "part": "head", "attach": { "part": "torso", "point": "neck" } },
+        { "name": "nearThigh", "part": "thigh", "attach": { "part": "torso", "point": "hip" }, "angle": 90 },
+        { "name": "nearShin", "part": "shin", "attach": { "part": "nearThigh", "point": "end" }, "angle": 0 },
+        { "name": "nearBoot", "part": "boot", "attach": { "part": "nearShin", "point": "end" } },
+        { "name": "nearUpper", "part": "upper", "attach": { "part": "torso", "point": "shoulder" }, "angle": 95 },
+        { "name": "nearFore", "part": "fore", "attach": { "part": "nearUpper", "point": "end" }, "angle": -15 }
+      ]
+    }
+  ],
+  "rig": {
+    "body": "torso",
+    "head": "head",
+    "ground": 34,
+    "rest": "stand",
+    "legs": [["nearThigh", "nearShin"], ["farThigh", "farShin"]],
+    "arms": [["nearUpper", "nearFore"], ["farUpper", "farFore"]]
+  },
+  "motions": {
+    "idle": { "template": "idle" },
+    "walk": { "template": "walk", "speed": 24, "stride": 10, "lift": 2, "bob": 1 },
+    "run": { "template": "run", "speed": 48, "stride": 10, "lift": 4, "bob": 1, "lean": 8 },
+    "jump": { "template": "jump" },
+    "attack": { "template": "attack" },
+    "hurt": { "template": "hurt" }
+  },
+  "sheet": { "columns": 8 }
+}

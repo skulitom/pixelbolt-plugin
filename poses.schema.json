@@ -739,7 +739,7 @@
             },
             "maxItems": 2,
             "minItems": 2,
-            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+            "description": "The canvas point the pose stands on (often where the feet meet the ground), exported as the frame anchor. Parts without attach are placed from it. Default [0, 0]."
           },
           "mirror": {
             "type": "string",
@@ -814,7 +814,7 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                  "description": "Offset [x, y] of the part anchor from the pose origin, or with attach from the named point; not a canvas position. Default [0, 0]."
                 },
                 "attach": {
                   "type": "object",
@@ -959,8 +959,8 @@
     "animations": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 65527,
-      "description": "ZIP32 bundle budget: animation count + frame count + 7 support files must not exceed 65,535.",
+      "maxProperties": 65525,
+      "description": "ZIP32 bundle budget: animation count + frame count + 9 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",

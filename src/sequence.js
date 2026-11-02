@@ -20,7 +20,7 @@ export function parseFrameRate(value, path = 'sequence.fps') {
   let numerator, denominator;
   if (NTSC[text]) [numerator, denominator] = NTSC[text];
   else if (fraction) [numerator, denominator] = [Number(fraction[1]), Number(fraction[2])];
-  else if (decimal) { denominator = 10 ** (decimal[1]?.length - 1 || 0); numerator = Math.round(Number(text) * denominator); }
+  else if (decimal) { denominator = [1, 10, 100, 1000][decimal[1]?.length - 1 || 0]; numerator = Math.round(Number(text) * denominator); }
   else fail(path, 'expected a frame rate such as 24, 25, 29.97, 30, 60 or 30000/1001');
   if (!numerator || !denominator || numerator > 240 * denominator) fail(path, 'expected a frame rate above 0 and up to 240 frames per second');
   const shared = gcd(numerator, denominator);

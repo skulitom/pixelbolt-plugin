@@ -1,0 +1,111 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "fire-explosion",
+  "width": 96,
+  "height": 96,
+  "palette": {
+    "W": "#fffbe6",
+    "y": "#ffd34d",
+    "o": "#ff8a2b",
+    "r": "#d6402b",
+    "R": "#8f2a2e",
+    "s": "#b3a5ad",
+    "S": "#867882",
+    "k": "#5a4e5b",
+    "d": "#3b3140"
+  },
+  "symbols": {
+    "ember-big": [
+      "yW",
+      "oy"
+    ],
+    "ember": ["y"],
+    "ember-dim": ["o"],
+    "ember-end": ["r"]
+  },
+  "effects": {
+    "fire-explosion": {
+      "frames": 16,
+      "duration": { "from": 45, "to": 100, "ease": "in" },
+      "seed": 7,
+      "looks": {
+        "shock": { "colors": ["o", "y", "W"], "thresholds": [0.25, 0.5, 0.8] },
+        "fire": { "colors": ["R", "r", "o", "y", "W"], "thresholds": [0.18, 0.32, 0.46, 0.64, 0.84] },
+        "smoke": {
+          "colors": ["k", "S"],
+          "thresholds": [0.3, 0.75],
+          "lit": { "colors": ["s"], "thresholds": [0.2] },
+          "shade": { "colors": ["k"], "thresholds": [0.15] },
+          "outline": "d"
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "shock",
+          "at": [48, 62],
+          "frames": [1, 8],
+          "radius": [10, 46],
+          "width": [9, 5, 3],
+          "squash": [1, 0.42],
+          "noise": 0.85,
+          "scale": 5,
+          "power": [1.3, 0.9, 0.3]
+        },
+        {
+          "kind": "star",
+          "look": "fire",
+          "at": [48, 56],
+          "frames": [0, 2],
+          "radius": [26, 14],
+          "points": 8,
+          "width": [4, 3],
+          "ratio": 0.5,
+          "power": 1.2,
+          "cue": "boom"
+        },
+        {
+          "kind": "burst",
+          "look": "fire",
+          "at": [48, 56],
+          "frames": [0, 9],
+          "radius": [10, 24, 26],
+          "noise": 0.75,
+          "scale": 5,
+          "power": [1.5, 1.15, 0.5, 0.2]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "smoke",
+          "at": [48, 48],
+          "area": [32, 14],
+          "burst": 18,
+          "start": 4,
+          "angle": [240, 300],
+          "speed": [0.3, 0.9],
+          "gravity": [0, -0.05],
+          "drag": 0.1,
+          "life": [10, 14],
+          "blob": { "look": "smoke", "radius": [4, 8, 7, 2.5] }
+        },
+        {
+          "at": [48, 56],
+          "burst": 14,
+          "start": 1,
+          "angle": [190, 350],
+          "speed": [1.8, 3.6],
+          "gravity": [0, 0.3],
+          "drag": 0.03,
+          "life": [7, 12],
+          "floor": 78,
+          "bounce": 0.3,
+          "shapes": ["ember-big", "ember", "ember-dim", "ember-end"],
+          "trail": { "color": "r", "length": 1 }
+        }
+      ]
+    }
+  }
+}

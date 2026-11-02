@@ -44,15 +44,21 @@
     "ember-dim": ["o"],
     "ember-end": ["r"],
     "puff-big": [
-      ".sss.",
-      "ssssS",
-      "SSSSu"
+      ".ss..",
+      "sssS.",
+      "sSSSu",
+      ".SSu."
     ],
     "puff": [
-      ".sS",
-      "sSu"
+      ".s.",
+      "sSS",
+      ".Su"
     ],
-    "puff-small": ["sS"],
+    "puff-small": [
+      "sS",
+      "Su"
+    ],
+    "puff-end": ["S"],
     "leaf-a": [
       "lg.",
       ".gG"
@@ -501,172 +507,186 @@
       "name": "dust-0",
       "duration": 70,
       "ops": [
-        { "op": "stamp", "symbol": "puff-big", "x": 19, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 19, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 21, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 20, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 24, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 24, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 24, "y": 34 }
+        { "op": "stamp", "symbol": "puff", "x": 20, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 20, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 22, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 21, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 21, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 22, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 25, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 26, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 25, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 25, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 24, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 26, "y": 34 }
       ]
     },
     {
       "name": "dust-1",
       "duration": 70,
       "ops": [
-        { "op": "stamp", "symbol": "puff-big", "x": 17, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 20, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 34 }
+        { "op": "stamp", "symbol": "puff", "x": 18, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 18, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 20, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 18, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 21, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 20, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 25, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 27, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 26, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 26, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 25, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 28, "y": 34 }
       ]
     },
     {
       "name": "dust-2",
       "duration": 70,
       "ops": [
-        { "op": "stamp", "symbol": "puff-big", "x": 16, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 17, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 17, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 34 },
-        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 34 }
+        { "op": "stamp", "symbol": "puff-big", "x": 16, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 16, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 16, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 15, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 19, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 25, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 28, "y": 33 }
       ]
     },
     {
       "name": "dust-3",
       "duration": 70,
       "ops": [
-        { "op": "stamp", "symbol": "puff", "x": 17, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 17, "y": 33 },
-        { "op": "stamp", "symbol": "puff", "x": 18, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 17, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 27, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 28, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 28, "y": 34 },
-        { "op": "stamp", "symbol": "puff", "x": 28, "y": 33 }
+        { "op": "stamp", "symbol": "puff-big", "x": 14, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 15, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 14, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 14, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 17, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 30, "y": 33 }
       ]
     },
     {
       "name": "dust-4",
       "duration": 70,
       "ops": [
-        { "op": "stamp", "symbol": "puff", "x": 16, "y": 34 },
-        {
-          "op": "grid",
-          "x": 16,
-          "y": 33,
-          "rows": [
-            ".sS",
-            "sS."
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 18,
-          "y": 33,
-          "rows": [
-            ".sS",
-            ".S."
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 16,
-          "y": 33,
-          "rows": [
-            ".sS",
-            ".S."
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 27,
-          "y": 34,
-          "rows": [
-            ".sS",
-            "sSu"
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 29,
-          "y": 33,
-          "rows": [
-            ".sS",
-            "s.u"
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 28,
-          "y": 33,
-          "rows": [
-            ".sS",
-            ".S."
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 28,
-          "y": 33,
-          "rows": [
-            ".sS",
-            ".S."
-          ]
-        }
+        { "op": "stamp", "symbol": "puff-big", "x": 13, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 14, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 12, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 12, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 18, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 16, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 28, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 28, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 32 },
+        { "op": "stamp", "symbol": "puff-big", "x": 26, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 31, "y": 33 }
       ]
     },
     {
       "name": "dust-5",
       "duration": 70,
       "ops": [
-        {
-          "op": "grid",
-          "x": 16,
-          "y": 34,
-          "rows": [
-            ".s.",
-            "sSu"
-          ]
-        },
-        {
-          "op": "grid",
-          "x": 16,
-          "y": 33,
-          "rows": [
-            "..S",
-            ".S."
-          ]
-        },
-        { "op": "grid", "x": 17, "y": 34, "rows": ["s."] },
-        { "op": "grid", "x": 16, "y": 34, "rows": [".S"] },
-        {
-          "op": "grid",
-          "x": 28,
-          "y": 33,
-          "rows": [
-            "..S",
-            ".S."
-          ]
-        },
-        { "op": "grid", "x": 29, "y": 34, "rows": ["s."] },
-        { "op": "grid", "x": 28, "y": 34, "rows": [".S"] },
-        { "op": "grid", "x": 28, "y": 34, "rows": [".S"] }
+        { "op": "stamp", "symbol": "puff-big", "x": 12, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 14, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 12, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 12, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 17, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 16, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 28, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 28, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 27, "y": 33 },
+        { "op": "stamp", "symbol": "puff-big", "x": 32, "y": 32 }
       ]
     },
     {
       "name": "dust-6",
       "duration": 70,
-      "ops": [{ "op": "grid", "x": 15, "y": 35, "rows": [".S"] }, { "op": "grid", "x": 28, "y": 34, "rows": [".S"] }]
+      "ops": [
+        { "op": "stamp", "symbol": "puff", "x": 12, "y": 34 },
+        { "op": "stamp", "symbol": "puff", "x": 13, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 11, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 11, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 18, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 15, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 28, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 30, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 30, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 28, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 34, "y": 33 }
+      ]
     },
-    { "name": "dust-7", "duration": 70, "ops": [{ "op": "grid", "x": 15, "y": 35, "rows": [".S"] }] },
+    {
+      "name": "dust-7",
+      "duration": 70,
+      "ops": [
+        { "op": "stamp", "symbol": "puff", "x": 11, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 12, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 9, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 10, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 17, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 14, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 30, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 30, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 32 },
+        { "op": "stamp", "symbol": "puff", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff", "x": 34, "y": 33 }
+      ]
+    },
+    {
+      "name": "dust-8",
+      "duration": 70,
+      "ops": [
+        { "op": "stamp", "symbol": "puff-small", "x": 11, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 12, "y": 32 },
+        { "op": "stamp", "symbol": "puff-end", "x": 9, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 10, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 17, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 15, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 31, "y": 34 },
+        { "op": "stamp", "symbol": "puff-end", "x": 32, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 31, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 35, "y": 33 }
+      ]
+    },
+    {
+      "name": "dust-9",
+      "duration": 70,
+      "ops": [
+        { "op": "stamp", "symbol": "puff-small", "x": 10, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 12, "y": 32 },
+        { "op": "stamp", "symbol": "puff-small", "x": 17, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 30, "y": 34 },
+        { "op": "stamp", "symbol": "puff-small", "x": 29, "y": 33 },
+        { "op": "stamp", "symbol": "puff-small", "x": 36, "y": 33 }
+      ]
+    },
+    {
+      "name": "dust-10",
+      "duration": 70,
+      "ops": [
+        { "op": "stamp", "symbol": "puff-end", "x": 11, "y": 34 },
+        { "op": "stamp", "symbol": "puff-end", "x": 18, "y": 33 },
+        { "op": "stamp", "symbol": "puff-end", "x": 30, "y": 34 },
+        { "op": "stamp", "symbol": "puff-end", "x": 37, "y": 33 }
+      ]
+    },
     {
       "name": "leaves-0",
       "duration": 70,
@@ -1245,7 +1265,19 @@
       ]
     },
     "dust": {
-      "frames": ["dust-0", "dust-1", "dust-2", "dust-3", "dust-4", "dust-5", "dust-6", "dust-7"],
+      "frames": [
+        "dust-0",
+        "dust-1",
+        "dust-2",
+        "dust-3",
+        "dust-4",
+        "dust-5",
+        "dust-6",
+        "dust-7",
+        "dust-8",
+        "dust-9",
+        "dust-10"
+      ],
       "loop": false
     },
     "leaves": {

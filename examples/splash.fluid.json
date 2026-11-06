@@ -31,19 +31,11 @@
         }
       ],
       "whitewater": [
-        {
-          "impact": 1.5,
-          "chance": 0.45,
-          "throw": 1.8,
-          "spread": 30,
-          "life": [12, 20],
-          "colors": ["w", "w", "c"],
-          "trail": true
-        },
+        { "impact": 1.5, "chance": 0.45, "throw": 1.3, "spread": 30, "life": [12, 20], "colors": ["w", "w", "c"] },
         {
           "impact": 2.5,
           "chance": 0.3,
-          "throw": 1.6,
+          "throw": 1.2,
           "spread": 20,
           "life": [12, 20],
           "colors": ["w", "w", "c"],

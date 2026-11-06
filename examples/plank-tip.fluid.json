@@ -1,0 +1,64 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "plank-tip",
+  "width": 64,
+  "height": 40,
+  "subpixels": 3,
+  "palette": {
+    "a": "#f6dc9c",
+    "b": "#ddb46a",
+    "c": "#b8864a",
+    "d": "#8a5f34",
+    "o": "#5a3c22",
+    "h": "#c98c4f",
+    "O": "#3b2414",
+    "k": "#6b6470"
+  },
+  "symbols": {
+    "peg": [
+      "kkkk",
+      "kkkk",
+      "kkkk",
+      "kkkk",
+      "kkkk",
+      "kkkk",
+      "kkkk",
+      "kkkk"
+    ],
+    "ground": ["kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"]
+  },
+  "effects": {
+    "plank-tip": {
+      "kind": "liquid",
+      "frames": 110,
+      "duration": 50,
+      "seed": 4,
+      "walls": ["left", "right", "bottom"],
+      "granular": { "repose": 33 },
+      "obstacles": [{ "symbol": "peg", "x": 30, "y": 31 }, { "symbol": "ground", "x": 0, "y": 39 }],
+      "emitters": [{ "name": "pour", "at": [20, 2], "radius": 1.5, "rate": 1, "velocity": [0, 0.6], "end": 34 }],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.35], "dither": 0 },
+        { "field": "depth", "colors": ["c", "d"], "thresholds": [5, 11], "dither": 0.9, "pattern": "noise" },
+        { "field": "shadow", "colors": ["c"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["a"], "thresholds": [0.6], "dither": 0 }
+      ],
+      "outline": "o",
+      "cleanup": { "strays": true },
+      "bodies": [
+        {
+          "name": "plank",
+          "shape": "box",
+          "size": [34, 3],
+          "at": [32, 29.5],
+          "density": 0.6,
+          "friction": 0.7,
+          "asleep": true,
+          "fill": "h",
+          "outline": "O"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,975 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt rigid bodies",
+  "description": "Rigid bodies (balls, boxes, convex polygons, fixed or spinning hoops) with gravity, walls and pixel obstacles, simulated and baked into editable palette grids: they bounce, slide, roll, stack, knock each other about and come to rest. Units: pixels and frames. One-shot; deterministic.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-bodies"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 256
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 4,
+      "maximum": 256
+    },
+    "subpixels": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "description": "Draw the bodies this many times finer than the world's pixels: each pixel of a body's picture turns as a square and the body sits where it is to a fraction of a pixel, so it turns and moves smoothly without changing shape; the obstacles and background are drawn in blocks this size. The recipe's canvas is width and height times this, at most 256 a side and 4,194,304 pixels over its frames. Default 1, bodies at whole pixels."
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "anchor": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "symbols": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "maxItems": 256,
+        "minItems": 1
+      },
+      "description": "Named rows of palette keys for obstacles and body sprites; dot or space is empty."
+    },
+    "effects": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "description": "Names become animations and frame names; unique ignoring case. At most 256 frames in all.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 18000,
+            "description": "At most 256 in a recipe (and in all of a source's effects); a longer match goes out as numbered video frames: pixelbolt sequence, or pixel_compile with sequence."
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 1000,
+            "description": "Milliseconds per frame. Default 40."
+          },
+          "substeps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "Solver steps a frame. Default 8."
+          },
+          "iterations": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "Contact passes a step. Default 6."
+          },
+          "gravity": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -2,
+              "maximum": 2
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Pixels a frame² [x, y]. Default [0, 0.15]."
+          },
+          "background": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "Fills the canvas under everything."
+          },
+          "walls": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "left",
+                "right",
+                "top",
+                "bottom"
+              ]
+            },
+            "maxItems": 4,
+            "description": "Canvas edges that hold bodies in; a body far past an open edge leaves for good."
+          },
+          "obstacles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "symbol": {
+                  "type": "string"
+                },
+                "x": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "y": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "draw": {
+                  "enum": [
+                    "over",
+                    "under",
+                    "none"
+                  ],
+                  "description": "over (default), under the bodies, or none (an invisible wall)."
+                },
+                "solid": {
+                  "type": "boolean",
+                  "description": "false: a decoration the bodies pass."
+                },
+                "bounce": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How much of its approach speed a body keeps in a bounce: 0 lands dead, 1 bounces back as fast. A pair bounces with the larger. Default 0.3."
+                },
+                "friction": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "Sliding friction; a pair uses the square root of the product. Default 0.4."
+                }
+              },
+              "required": [
+                "symbol"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 32,
+            "description": "Symbols stamped on the canvas whose pixels are solid. Bodies slide along their edges without catching on the seams between pixels."
+          },
+          "territory": {
+            "type": "object",
+            "properties": {
+              "cell": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 64,
+                "description": "Pixels a side. Default 4."
+              },
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "Top-left on the canvas. Default [0, 0]."
+              },
+              "size": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "With split: [columns, rows]. Default: as many as fit the canvas."
+              },
+              "teams": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,59}$",
+                      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                    },
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    "label": {
+                      "type": "string",
+                      "maxLength": 40,
+                      "description": "Shown by {leader}. Default the name in capitals."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 8,
+                "minItems": 2
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 4096,
+                "description": "One character a cell: a team's colour, or . for a cell no one owns."
+              },
+              "split": {
+                "enum": [
+                  "columns",
+                  "rows"
+                ],
+                "description": "Instead of rows: the board shared out among the teams in order, side by side or one above the next."
+              },
+              "bounce": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Default 1."
+              },
+              "friction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "Default 0."
+              }
+            },
+            "required": [
+              "teams"
+            ],
+            "additionalProperties": false,
+            "description": "Cells owned by teams, drawn in their colours: a team's body passes its own and bounces off the others', claiming each it hits (the metadata counts them each frame)."
+          },
+          "bodies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Names the body in the metadata (its path, frame by frame, and when it leaves the canvas). Copies are numbered name-0, name-1, …",
+                  "maxLength": 60
+                },
+                "shape": {
+                  "enum": [
+                    "circle",
+                    "box",
+                    "polygon",
+                    "hoop"
+                  ],
+                  "description": "circle (radius; 0.5 is one pixel), box (size), polygon (convex points) or hoop (a ring of thin walls with an optional gap, for a fixed container)."
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 128,
+                  "description": "circle: 0.5–32 pixels, drawn as an ellipse of diameter round(2 × radius). hoop: 2–128."
+                },
+                "size": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 64
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "box: [width, height] in pixels."
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "minimum": -64,
+                      "maximum": 64
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  },
+                  "maxItems": 8,
+                  "minItems": 3,
+                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid."
+                },
+                "sides": {
+                  "type": "integer",
+                  "minimum": 3,
+                  "maximum": 96,
+                  "description": "hoop: straight walls around it. Default: its radius, from 8 to 64."
+                },
+                "gap": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 330,
+                  "description": "hoop: degrees left open, centred on the hoop's angle (0 points right, 90 down). Default 0, closed."
+                },
+                "thickness": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 8,
+                  "description": "hoop: wall thickness in pixels. Default 1."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid."
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": -3600,
+                  "maximum": 3600,
+                  "description": "Degrees clockwise. Default 0. Drawn to the whole degree with straight, even sides (under 6 pixels across, always square); collisions use the exact angle."
+                },
+                "velocity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -8,
+                    "maximum": 8
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Starting velocity [x, y] in pixels a frame; for a fixed body, how it moves for ever. Speeds stop at 8."
+                },
+                "spin": {
+                  "type": "number",
+                  "minimum": -45,
+                  "maximum": 45,
+                  "description": "Starting spin in degrees a frame, clockwise; for a fixed body, how it turns for ever."
+                },
+                "fixed": {
+                  "type": "boolean",
+                  "description": "Never pushed: a wall, peg or container. With velocity or spin it moves exactly so, pushing what it meets."
+                },
+                "weightless": {
+                  "type": "boolean",
+                  "description": "Gravity doesn't pull it: it floats where it is put, drifting only when hit."
+                },
+                "asleep": {
+                  "type": "boolean",
+                  "description": "Starts asleep: holds exactly still, even in the air, until something moves into it."
+                },
+                "tireless": {
+                  "type": "boolean",
+                  "description": "Every hit gives back the energy (speed plus height against gravity) the hit cost, so a ball keeps bouncing at full height among loose blocks. An open cheat; off by default."
+                },
+                "speed": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 8,
+                  "description": "Held speed, pixels a frame: set back to it along its heading after every step, so a ball crossing a board never tires. An open cheat, like tireless."
+                },
+                "team": {
+                  "type": "string",
+                  "description": "A territory team's name: the body passes through that team's cells, bounces off the other teams' and claims each one it hits."
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 100,
+                  "description": "Mass per square pixel. Default 1. A heavier body pushes lighter ones about and keeps its own speed."
+                },
+                "bounce": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How much of its approach speed a body keeps in a bounce: 0 lands dead, 1 bounces back as fast. A pair bounces with the larger. Default 0.3."
+                },
+                "friction": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "Sliding friction; a pair uses the square root of the product. Default 0.4."
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "About the share of its speed lost each frame. Default 0."
+                },
+                "spinDrag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "About the share of its spin lost each frame. Default 0.02."
+                },
+                "fill": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key; dot and space are reserved."
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "Palette key, or a list the body steps through at each hit."
+                },
+                "outline": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Key for the pixels on the shape's edge."
+                },
+                "symbol": {
+                  "type": "string",
+                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns)."
+                },
+                "trail": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 16,
+                      "description": "Frames of trail. Default 2."
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                "ring": {
+                  "type": "object",
+                  "properties": {
+                    "radius": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 256
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 256
+                    },
+                    "from": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees of the first copy. Default 0."
+                    },
+                    "to": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees of the last; default a full turn, spaced evenly."
+                    }
+                  },
+                  "required": [
+                    "radius",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "grid": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[columns, rows]."
+                    },
+                    "step": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -256,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[x, y] between copies."
+                    },
+                    "stagger": {
+                      "type": "number",
+                      "minimum": -256,
+                      "maximum": 256,
+                      "description": "Shifts odd rows across. Default 0."
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "step"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "shape",
+                "at"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "At most 256 bodies with their copies."
+          },
+          "pickups": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Centre [x, y] in canvas pixels."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 64,
+                  "description": "Pixels a side; default the symbol's size, or 5."
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18000,
+                  "description": "First frame it waits. Default 0."
+                },
+                "until": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18001
+                },
+                "symbol": {
+                  "type": "string",
+                  "description": "Drawn while it waits."
+                },
+                "color": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Or a plain square."
+                },
+                "power": {
+                  "enum": [
+                    "split",
+                    "grow",
+                    "speed",
+                    "warp",
+                    "magnet"
+                  ],
+                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames."
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "For {news}. Default the power in capitals."
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 8,
+                  "description": "split: bodies after. Default 3."
+                },
+                "spread": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 180,
+                  "description": "split: degrees between headings. Default 30."
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 1.25,
+                  "maximum": 4,
+                  "description": "grow. Default 2."
+                },
+                "factor": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 4,
+                  "description": "speed. Default 1.5."
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 8192
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "warp, magnet: a canvas point [x, y], each from minus the canvas side to twice it."
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1,
+                  "description": "magnet: pixels a frame² . Default 0.05."
+                },
+                "frames": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "grow, speed, magnet: how long. Default 120."
+                }
+              },
+              "required": [
+                "at",
+                "power"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64,
+            "description": "Power-ups the first body to reach one takes."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "frame": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000
+                },
+                "body": {
+                  "type": "string",
+                  "description": "A named body."
+                },
+                "power": {
+                  "enum": [
+                    "split",
+                    "grow",
+                    "speed",
+                    "warp",
+                    "magnet"
+                  ],
+                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames."
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "For {news}. Default the power in capitals."
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 8,
+                  "description": "split: bodies after. Default 3."
+                },
+                "spread": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 180,
+                  "description": "split: degrees between headings. Default 30."
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 1.25,
+                  "maximum": 4,
+                  "description": "grow. Default 2."
+                },
+                "factor": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 4,
+                  "description": "speed. Default 1.5."
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 8192
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "warp, magnet: a canvas point [x, y], each from minus the canvas side to twice it."
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1,
+                  "description": "magnet: pixels a frame² . Default 0.05."
+                },
+                "frames": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "grow, speed, magnet: how long. Default 120."
+                }
+              },
+              "required": [
+                "frame",
+                "body",
+                "power"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64,
+            "description": "Powers given to a named body at the end of a frame."
+          },
+          "hud": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 80,
+                      "description": "{team} cells, {team%} share, {leader}, {news} (the last power's label, for news frames), {frame}."
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    },
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    "align": {
+                      "enum": [
+                        "left",
+                        "center",
+                        "right"
+                      ]
+                    },
+                    "back": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A box behind the text."
+                    },
+                    "pad": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 16
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8,
+                      "description": "Default 1; at most 16 divided by subpixels."
+                    },
+                    "news": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 18000,
+                      "description": "Frames {news} shows. Default 45."
+                    },
+                    "from": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 18000
+                    },
+                    "until": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 18001
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "at",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bar": {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 4096
+                          },
+                          "maxItems": 2,
+                          "minItems": 2,
+                          "description": "Top-left [x, y] in canvas pixels."
+                        },
+                        "size": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 512
+                          },
+                          "maxItems": 2,
+                          "minItems": 2,
+                          "description": "[width, height] in canvas pixels; at most 512 divided by subpixels."
+                        }
+                      },
+                      "required": [
+                        "at",
+                        "size"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "empty": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    "from": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 18000
+                    },
+                    "until": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 18001
+                    }
+                  },
+                  "required": [
+                    "bar"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 16,
+            "description": "With a territory: the score drawn over everything, every frame."
+          }
+        },
+        "required": [
+          "frames",
+          "bodies"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "palette",
+    "effects"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,64 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "crate-splash",
+  "width": 64,
+  "height": 48,
+  "subpixels": 3,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "o": "#3b2414",
+    "h": "#c98c4f",
+    "k": "#14141c",
+    "r": "#e0475a",
+    "s": "#8a8f99",
+    "S": "#5d626b"
+  },
+  "effects": {
+    "crate-splash": {
+      "kind": "liquid",
+      "frames": 120,
+      "duration": 50,
+      "seed": 3,
+      "walls": ["left", "right", "bottom"],
+      "flip": 0.2,
+      "drag": 0.08,
+      "fill": [{ "x": 0, "y": 30, "w": 64, "h": 18 }],
+      "emitters": [],
+      "whitewater": [
+        { "impact": 1.5, "chance": 0.4, "throw": 1.2, "spread": 30, "life": [10, 18], "colors": ["w", "w", "c"] }
+      ],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 5, 10], "dither": 0 }
+      ],
+      "cleanup": { "strays": true },
+      "bodies": [
+        { "name": "crate", "shape": "box", "size": [8, 8], "at": [14, 14], "density": 0.2, "fill": "h", "outline": "o" },
+        {
+          "name": "stone",
+          "shape": "box",
+          "size": [6, 5],
+          "at": [33, 10],
+          "angle": 10,
+          "density": 2.5,
+          "fill": "s",
+          "outline": "S"
+        },
+        {
+          "name": "ball",
+          "shape": "circle",
+          "radius": 3,
+          "at": [51, 16],
+          "velocity": [-0.2, 0],
+          "density": 0.5,
+          "fill": "r",
+          "outline": "k"
+        }
+      ]
+    }
+  }
+}

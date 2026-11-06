@@ -5,5 +5,5 @@ import { parentPort, workerData } from 'node:worker_threads';
 import { createToolRunner } from './mcp.js';
 
 const runTool = createToolRunner(workerData);
-parentPort.on('message', async ({ name, args }) => parentPort.postMessage(await runTool(name, args)));
+parentPort.on('message', async ({ name, args, ui }) => parentPort.postMessage(await runTool(name, args, ui)));
 parentPort.postMessage('ready');

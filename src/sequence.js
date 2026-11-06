@@ -3,6 +3,7 @@
 // arithmetic on the frame rate as a fraction, so 29.97 means 30000/1001 and a sequence is the same on every machine.
 import { PixelError, parseColor } from './core.js';
 import { renderScene } from './scene.js';
+import { bodiesFrames } from './bodies.js';
 import { encodePNG } from './png.js';
 
 const fail = (path, message) => { throw new PixelError(path, message); };
@@ -242,6 +243,48 @@ export function createSequence(project, options = {}) {
   if (built.place.cropped) notes.push(cropNote('sprite', built.info));
   Object.assign(built.info, { loop: { loops: options.loops ?? 1, plays: sequence.loop ? 'loops' : 'once', passFrames: Math.round(plan.exactFrames / (options.loops ?? 1) * 1e6) / 1e6, seamless: sequence.loop && plan.seamless && options.seconds === undefined }, timing });
   return finish(built, notes);
+}
+
+// A pixelforge-bodies match as a sequence: one effect (`animation` names it; the first by default) stepped frame after
+// frame and drawn straight to video frames, never kept as a recipe, so it may run past a recipe's 256 frames (up to
+// MATCH_FRAMES). It plays once and holds its last frame. info.figures carries the match's metadata (hits, the score).
+// `budget`, for a caller with a time limit (MCP), is the most pixels of different frames it may write; past it the call
+// is refused before simulating, naming the command line, which has no limit.
+export function createBodiesSequence(source, options = {}, { budget = Infinity } = {}) {
+  const rate = common(options, KEYS.filter(key => key !== 'loops' && key !== 'step')), match = bodiesFrames(source, options.animation);
+  const plan = planSequence(new Array(match.frames).fill(match.duration), { fps: rate, loop: false, seconds: options.seconds });
+  // Every frame of a match differs, and the sequence keeps each different frame's PNG: say so before simulating, not a
+  // minute in.
+  const place = placeSprite(match.width, match.height, options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
+  if (different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second), so use a smaller size, a lower frame rate or fewer frames`);
+  const most = Math.floor(budget / (place.width * place.height));
+  if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
+  let shown = -1, picture = null;
+  const built = build(`${match.name}-${match.effect}`, match.width, match.height, plan.count, frame => {
+    const pose = plan.poses[frame];
+    if (pose !== shown) { picture = match.image(pose); shown = pose; }
+    const data = picture;
+    return { key: pose, pixels: () => data };
+  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect });
+  const notes = [];
+  if (built.place.cropped) notes.push(cropNote('match', built.info));
+  const steps = plan.timing.filter(entry => entry.frames > 0).length;
+  if (steps < match.frames && options.seconds === undefined) notes.push(`${match.frames - steps} of the match's ${match.frames} frames (${match.duration} ms each) fall between video frames at ${rate.label} frames per second and are not shown; give the effect a duration of at least one video frame (${Math.ceil(1000 * rate.denominator / rate.numerator)} ms at this rate).`);
+  Object.assign(built.info, { loop: { loops: 1, plays: 'once', passFrames: Math.round(plan.exactFrames * 1e6) / 1e6, seamless: false }, figures: match.figures() });
+  return finish(built, notes);
+}
+
+// A match's figures for a reply: the last frame's cells per team and the leader, totals, and the first powers taken.
+// Every frame's figures stay in sequence.json; a reply that carried them grew with the match (90 KB at 9000 frames).
+export function figuresSummary(figures) {
+  if (!figures) return figures;
+  const { territory, powers, escaped, ...rest } = figures, total = value => (Array.isArray(value) ? value.reduce((sum, n) => sum + (Array.isArray(n) ? n.reduce((a, b) => a + b, 0) : Number(n) || 0), 0) : value);
+  return {
+    ...rest, ...(escaped?.length && { escaped: escaped.slice(0, 8), ...(escaped.length > 8 && { escapedInAll: escaped.length }) }),
+    ...(territory && { territory: { teams: territory.teams, cells: territory.counts.at(-1), leader: territory.leader, changedHands: total(territory.flips) } }),
+    ...(powers?.length && { powers: powers.slice(0, 8), ...(powers.length > 8 && { powersInAll: powers.length }) }),
+    every: 'sequence.json has every frame\'s figures'
+  };
 }
 
 // A prepared scene as a sequence. Every video frame is the scene at that frame's start time; the scene repeats after

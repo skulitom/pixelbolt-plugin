@@ -1,6 +1,6 @@
 {
   "name": "pixelbolt",
-  "version": "0.10.0",
+  "version": "0.12.1",
   "description": "Agent-first pixel art and animation toolkit with a CLI, MCP server and local studio. Deterministic JSON recipes to PNG, APNG and sprite atlases; zero dependencies.",
   "homepage": "https://github.com/skulitom/Pixelbolt#readme",
   "repository": { "type": "git", "url": "git+https://github.com/skulitom/Pixelbolt.git" },
@@ -10,8 +10,8 @@
   "license": "MIT",
   "engines": { "node": ">=20" },
   "bin": { "pixelbolt": "./bin/pixelbolt.js", "pixelforge": "./bin/pixelforge.js" },
-  "exports": { ".": "./src/index.js", "./core": "./src/core.js", "./runtime": "./src/runtime.js", "./authoring": "./src/authoring.js", "./scene": "./src/scene.js", "./autotile": "./src/autotile.js", "./fx": "./src/fx.js", "./fluid": "./src/fluid.js", "./wave": "./src/wave.js", "./craft": "./src/craft.js", "./gif": "./src/gif.js", "./font": "./src/font.js" },
-  "files": ["bin", "src", "studio", "examples", "schema.json", "poses.schema.json", "scene.schema.json", "autotile.schema.json", "fx.schema.json", "fluid.schema.json", "wave.schema.json", "normals.schema.json", "docs", "skills", "README.md", "README.zh-CN.md", "README.ja.md", "AGENTS.md", "CONTRIBUTING.md", "llms.txt", "LICENSE"],
+  "exports": { ".": "./src/index.js", "./core": "./src/core.js", "./runtime": "./src/runtime.js", "./authoring": "./src/authoring.js", "./scene": "./src/scene.js", "./autotile": "./src/autotile.js", "./terrain": "./src/terrain.js", "./fx": "./src/fx.js", "./fluid": "./src/fluid.js", "./wave": "./src/wave.js", "./bodies": "./src/bodies.js", "./craft": "./src/craft.js", "./gif": "./src/gif.js", "./font": "./src/font.js" },
+  "files": ["bin", "src", "studio", "examples", "schema.json", "poses.schema.json", "scene.schema.json", "autotile.schema.json", "fx.schema.json", "fluid.schema.json", "wave.schema.json", "bodies.schema.json", "normals.schema.json", "docs", "skills", "README.md", "README.zh-CN.md", "README.ja.md", "AGENTS.md", "CONTRIBUTING.md", "llms.txt", "LICENSE"],
   "scripts": {
     "test": "node --test",
     "start": "node bin/pixelbolt.js preview",
@@ -25,6 +25,8 @@
     "check:fluid": "node showcase/fluid/build.mjs --check",
     "art:waves": "node showcase/waves/build.mjs",
     "check:waves": "node showcase/waves/build.mjs --check",
+    "art:bodies": "node showcase/bodies/build.mjs",
+    "check:bodies": "node showcase/bodies/build.mjs --check",
     "review:quality": "node bin/pixelbolt.js preview examples/quality/hollow.scene.json",
     "play:tidewatch": "node scripts/serve-tidewatch.mjs",
     "art:tidewatch": "node showcase/tidewatch/tools/build-assets.mjs",

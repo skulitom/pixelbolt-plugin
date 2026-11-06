@@ -249,7 +249,7 @@
               "frames": {
                 "type": "integer",
                 "minimum": 2,
-                "maximum": 4
+                "maximum": 16
               },
               "duration": {
                 "type": "integer",
@@ -260,6 +260,12 @@
                 "type": "number",
                 "minimum": 0,
                 "maximum": 0.5
+              },
+              "squash": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 0.5,
+                "description": "Instead of breath: the body stretches, then squashes, by this share over the loop while its lowest drawn pixel stays on rig.ground. Not with breath or legs."
               }
             },
             "required": [
@@ -677,7 +683,11 @@
                     },
                     "maxItems": 2,
                     "minItems": 2,
-                    "description": "Unsquashed ellipse diameters [width, height]."
+                    "description": "Unsquashed ellipse diameters [width, height]; with flat, the dome's width and its rows from the base up."
+                  },
+                  "flat": {
+                    "type": "boolean",
+                    "description": "Draw the top half of the ellipse: a dome with a flat base, anchored at the middle of its base row, which squash and rotation keep in place (slimes, mounds). Default false."
                   }
                 },
                 "required": [
@@ -959,8 +969,8 @@
     "animations": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 65525,
-      "description": "ZIP32 bundle budget: animation count + frame count + 9 support files must not exceed 65,535.",
+      "maxProperties": 65524,
+      "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",

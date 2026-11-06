@@ -1,0 +1,79 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "sand-gate",
+  "width": 64,
+  "height": 40,
+  "palette": {
+    "a": "#f6dc9c",
+    "b": "#ddb46a",
+    "c": "#b8864a",
+    "d": "#8a5f34",
+    "o": "#5a3c22",
+    "p": "#8a5a36",
+    "P": "#5a3825",
+    "G": "#4d4038",
+    "K": "#3a302a"
+  },
+  "symbols": {
+    "ground": [
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"
+    ],
+    "board": [
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP"
+    ]
+  },
+  "effects": {
+    "sand-gate": {
+      "kind": "liquid",
+      "frames": 64,
+      "duration": 60,
+      "seed": 5,
+      "walls": ["left", "right", "bottom"],
+      "granular": { "repose": 33 },
+      "obstacles": [
+        { "symbol": "ground", "x": 0, "y": 37 },
+        { "symbol": "board", "x": 18, "y": 9, "keys": [{ "frame": 6, "y": -24, "over": 8 }] }
+      ],
+      "fill": [{ "x": 0, "y": 11, "w": 18, "h": 26 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.35], "dither": 0 },
+        { "field": "depth", "colors": ["c", "d"], "thresholds": [5, 11], "dither": 0.9, "pattern": "noise" },
+        { "field": "shadow", "colors": ["c"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["a"], "thresholds": [0.6], "dither": 0 }
+      ],
+      "outline": "o",
+      "cleanup": { "strays": true }
+    }
+  }
+}

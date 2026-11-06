@@ -1,0 +1,868 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "ice-spells",
+  "width": 64,
+  "height": 64,
+  "palette": {
+    "W": "#ffffff",
+    "p": "#d8f6ff",
+    "c": "#8fe0ff",
+    "b": "#4aa8e8",
+    "B": "#2f5fb3",
+    "n": "#1d2f6b",
+    "s": "#4a4e63"
+  },
+  "symbols": {
+    "stand-in": [
+      ".....ssssss.....",
+      "....ssssssss....",
+      "....ssssssss....",
+      "....ssssssss....",
+      "....ssssssss....",
+      ".....ssssss.....",
+      "......ssss......",
+      "...ssssssssss...",
+      "..ssssssssssss..",
+      "..ssssssssssss..",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".sss.ssssss.sss.",
+      ".ss..ssssss..ss.",
+      ".ss..ssssss..ss.",
+      ".....ssssss.....",
+      ".....ssssss.....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "....sss..sss....",
+      "...ssss..ssss..."
+    ],
+    "shard-0": [
+      ".bpp..",
+      "BbccpW",
+      "..bb.."
+    ],
+    "shard-45": [
+      "B....",
+      ".bp..",
+      ".bcp.",
+      "..bp.",
+      "....W"
+    ],
+    "shard-90": [
+      ".B.",
+      "bb.",
+      "pcb",
+      "pcb",
+      ".p.",
+      ".W."
+    ],
+    "shard-135": [
+      "....B",
+      "..pb.",
+      ".pcb.",
+      ".pb..",
+      "W...."
+    ],
+    "shard-180": [
+      "..ppb.",
+      "WpccbB",
+      "..bb.."
+    ],
+    "shard-225": [
+      "W....",
+      ".pp..",
+      ".bcp.",
+      "..bb.",
+      "....B"
+    ],
+    "shard-270": [
+      ".W.",
+      ".p.",
+      "pcb",
+      "pcb",
+      "bb.",
+      ".B."
+    ],
+    "shard-315": [
+      "....W",
+      "..pp.",
+      ".pcb.",
+      ".bb..",
+      "B...."
+    ],
+    "chip-0": ["bcp"],
+    "chip-45": [
+      "b..",
+      ".c.",
+      "..p"
+    ],
+    "chip-90": [
+      "b",
+      "c",
+      "p"
+    ],
+    "chip-135": [
+      "..b",
+      ".c.",
+      "p.."
+    ],
+    "chip-180": ["pcb"],
+    "chip-225": [
+      "p..",
+      ".c.",
+      "..b"
+    ],
+    "chip-270": [
+      "p",
+      "c",
+      "b"
+    ],
+    "chip-315": [
+      "..p",
+      ".c.",
+      "b.."
+    ],
+    "bit-0": ["bc"],
+    "bit-45": [
+      "b.",
+      ".c"
+    ],
+    "bit-90": [
+      "b",
+      "c"
+    ],
+    "bit-135": [
+      ".b",
+      "c."
+    ],
+    "bit-180": ["cb"],
+    "bit-225": [
+      "c.",
+      ".b"
+    ],
+    "bit-270": [
+      "c",
+      "b"
+    ],
+    "bit-315": [
+      ".c",
+      "b."
+    ],
+    "glint-1": ["p"],
+    "glint-3": [
+      ".p.",
+      "pWp",
+      ".p."
+    ],
+    "glint-5": [
+      "..p..",
+      "..c..",
+      "pcWcp",
+      "..c..",
+      "..p.."
+    ],
+    "flake": [
+      "..p..",
+      "p.c.p",
+      ".cWc.",
+      "p.c.p",
+      "..p.."
+    ],
+    "flake-s": [
+      "p.p",
+      ".c.",
+      "p.p"
+    ],
+    "flake-far": [
+      "b.b",
+      ".c.",
+      "b.b"
+    ],
+    "mote": ["c"],
+    "mote-dim": ["b"]
+  },
+  "anchor": [32, 40],
+  "effects": {
+    "projectile": {
+      "frames": 8,
+      "duration": 60,
+      "loop": true,
+      "seed": 5,
+      "turn": { "angles": [0, 45, 90, 135, 180, 225, 270, 315], "about": [32, 40] },
+      "looks": {
+        "tail": { "colors": ["n", "B", "b", "c"], "thresholds": [0.12, 0.25, 0.5, 0.8] },
+        "shard": {
+          "colors": ["c"],
+          "thresholds": [0.12],
+          "lit": { "colors": ["p"], "thresholds": [0.45] },
+          "shade": { "colors": ["b", "B"], "thresholds": [0.12, 0.45] },
+          "outline": "n"
+        },
+        "gleam": { "colors": ["p", "W"], "thresholds": [0.4, 0.75] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "beam",
+          "look": "tail",
+          "at": [30, 40],
+          "to": [10, 40],
+          "width": 7,
+          "fade": 0.95,
+          "wobble": 0.3,
+          "wavelength": 6.5,
+          "waves": 2,
+          "noise": 0.5,
+          "scale": 3,
+          "power": 1.6
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [33.5, 40],
+          "points": 2,
+          "angle": 0,
+          "radius": 19,
+          "ratio": 0.38,
+          "width": 5,
+          "core": 0,
+          "power": 1.4
+        },
+        {
+          "kind": "star",
+          "look": "gleam",
+          "at": [36, 37],
+          "points": 4,
+          "angle": 0,
+          "ratio": 1,
+          "radius": [1, 1, 1, 3, 5, 3, 1, 1],
+          "width": 0.8,
+          "core": 0.8,
+          "power": [0, 0, 0, 1.1, 1.2, 1.1, 0, 0],
+          "ease": "linear"
+        }
+      ],
+      "emitters": [
+        {
+          "name": "streaks",
+          "at": [26, 40],
+          "area": [4, 8],
+          "rate": 1,
+          "angle": [177, 183],
+          "speed": [1.6, 2.2],
+          "drag": 0.03,
+          "life": [4, 6],
+          "shapes": [["mote", "mote", "mote-dim"]],
+          "trail": { "color": "b", "length": 2 }
+        },
+        {
+          "name": "sparkle",
+          "at": [26, 40],
+          "area": [12, 9],
+          "rate": 0.5,
+          "angle": [165, 195],
+          "speed": [0.4, 0.9],
+          "drag": 0.08,
+          "life": [4, 6],
+          "shapes": ["glint-1", "glint-3", "glint-5", "glint-3", "glint-1"]
+        },
+        {
+          "name": "flakes",
+          "at": [22, 40],
+          "area": [8, 10],
+          "rate": 0.6,
+          "angle": [160, 200],
+          "speed": [0.5, 0.9],
+          "drag": 0.05,
+          "life": [4, 7],
+          "shapes": [["mote", "mote", "mote-dim"], ["flake-s", "mote", "mote-dim"]]
+        }
+      ]
+    },
+    "impact": {
+      "frames": 12,
+      "duration": { "from": 40, "to": 100, "ease": "in" },
+      "seed": 9,
+      "looks": {
+        "chill": { "colors": ["b", "c", "p"], "thresholds": [0.25, 0.5, 0.8] },
+        "crystal": { "colors": ["b", "c", "p", "W"], "thresholds": [0.15, 0.35, 0.62, 0.92], "outline": "n" },
+        "flash": { "colors": ["c", "p", "W"], "thresholds": [0.3, 0.55, 0.8] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "chill",
+          "at": [32, 40],
+          "frames": [1, 5],
+          "radius": [9, 21],
+          "width": [5, 3, 2],
+          "noise": 0.9,
+          "scale": 4,
+          "power": [1.3, 0.8, 0.3]
+        },
+        {
+          "kind": "star",
+          "look": "crystal",
+          "at": [32, 40],
+          "frames": [0, 2],
+          "points": 12,
+          "ratio": 0.5,
+          "radius": [16, 19],
+          "width": [3.5, 3],
+          "core": 3.5,
+          "angle": -90,
+          "power": [1.2, 1.1],
+          "cue": "hit"
+        },
+        {
+          "kind": "star",
+          "look": "crystal",
+          "at": [32, 40],
+          "frames": [2, 4],
+          "points": 12,
+          "ratio": 0.5,
+          "radius": [15, 11],
+          "width": [3, 2.5],
+          "core": 3,
+          "angle": -90,
+          "noise": 0.9,
+          "scale": 4,
+          "power": [0.65, 0.25],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "flash",
+          "at": [32, 40],
+          "frames": [0, 2],
+          "points": 4,
+          "ratio": 0.5,
+          "radius": [8, 4],
+          "width": 1.5,
+          "angle": 45,
+          "power": [1.2, 0.8]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "frost",
+          "at": [32, 40],
+          "ring": { "radius": 4, "even": true, "outward": true },
+          "burst": 12,
+          "start": 2,
+          "angle": [-15, 15],
+          "speed": [1.4, 2.4],
+          "drag": 0.18,
+          "life": [3, 4],
+          "shapes": [["glint-3", "glint-1", "glint-1"], ["flake-s", "mote", "mote"]]
+        },
+        {
+          "name": "shards",
+          "at": [32, 40],
+          "ring": { "radius": 6, "arc": [185, 355], "even": true, "outward": true },
+          "burst": 8,
+          "start": 2,
+          "angle": [-20, 20],
+          "speed": [3.2, 4.3],
+          "gravity": [0, 0.4],
+          "drag": 0.08,
+          "life": [7, 9],
+          "face": true,
+          "shapes": [
+            ["shard-0", "shard-0", "shard-0", "chip-0", "bit-0"],
+            ["shard-45", "shard-45", "shard-45", "chip-45", "bit-45"],
+            ["shard-90", "shard-90", "shard-90", "chip-90", "bit-90"],
+            ["shard-135", "shard-135", "shard-135", "chip-135", "bit-135"],
+            ["shard-180", "shard-180", "shard-180", "chip-180", "bit-180"],
+            ["shard-225", "shard-225", "shard-225", "chip-225", "bit-225"],
+            ["shard-270", "shard-270", "shard-270", "chip-270", "bit-270"],
+            ["shard-315", "shard-315", "shard-315", "chip-315", "bit-315"]
+          ],
+          "remaps": [{}, {}, { "W": "p", "p": "c" }]
+        },
+        {
+          "name": "shards-low",
+          "at": [32, 40],
+          "ring": { "radius": 6, "arc": [15, 165], "even": true, "outward": true },
+          "burst": 5,
+          "start": 2,
+          "angle": [-20, 20],
+          "speed": [2, 2.7],
+          "gravity": [0, 0.3],
+          "drag": 0.12,
+          "life": [6, 8],
+          "face": true,
+          "shapes": [
+            ["shard-0", "shard-0", "chip-0", "bit-0"],
+            ["shard-45", "shard-45", "chip-45", "bit-45"],
+            ["shard-90", "shard-90", "chip-90", "bit-90"],
+            ["shard-135", "shard-135", "chip-135", "bit-135"],
+            ["shard-180", "shard-180", "chip-180", "bit-180"],
+            ["shard-225", "shard-225", "chip-225", "bit-225"],
+            ["shard-270", "shard-270", "chip-270", "bit-270"],
+            ["shard-315", "shard-315", "chip-315", "bit-315"]
+          ],
+          "remaps": [{}, { "W": "p", "p": "c" }]
+        },
+        {
+          "name": "glints",
+          "at": [32, 38],
+          "area": [28, 20],
+          "burst": 4,
+          "start": 4,
+          "life": [4, 6],
+          "shapes": ["glint-1", "glint-3", "glint-5", "glint-3", "glint-1"]
+        }
+      ]
+    },
+    "area": {
+      "frames": 22,
+      "duration": { "from": 45, "to": 100, "ease": "in" },
+      "seed": 3,
+      "looks": {
+        "frost": { "colors": ["B", "b", "c", "p"], "thresholds": [0.25, 0.4, 0.6, 0.85] },
+        "shard": {
+          "colors": ["c"],
+          "thresholds": [0.12],
+          "lit": { "colors": ["p"], "thresholds": [0.45] },
+          "shade": { "colors": ["b", "B"], "thresholds": [0.12, 0.45] },
+          "outline": "n"
+        }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "burst",
+          "look": "frost",
+          "at": [32, 40],
+          "frames": [0, 22],
+          "radius": [6, 20, 23, 24, 24, 24, 24, 24],
+          "squash": [1, 0.3],
+          "noise": 0.75,
+          "scale": 3,
+          "boil": 2,
+          "power": [1.4, 1.35, 1.3, 1.25, 1.2, 0.8, 0.4, 0.05],
+          "ease": "linear",
+          "cue": "hit"
+        },
+        {
+          "kind": "ring",
+          "look": "frost",
+          "at": [32, 40],
+          "frames": [0, 8],
+          "radius": [4, 27],
+          "width": [4, 3, 2],
+          "squash": [1, 0.32],
+          "noise": 0.85,
+          "scale": 4,
+          "power": [1.3, 0.9, 0.25]
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [32.5, 41],
+          "frames": [1, 15],
+          "points": 2,
+          "angle": 270,
+          "ratio": 0.1,
+          "radius": [2, 30, 30, 30, 30, 30, 27, 15],
+          "width": 5,
+          "core": 0,
+          "floor": 41,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [23.5, 40],
+          "frames": [2, 15],
+          "points": 2,
+          "angle": 254,
+          "ratio": 0.1,
+          "radius": [2, 19, 19, 19, 19, 19, 17.1, 9.5],
+          "width": 4,
+          "core": 0,
+          "floor": 40,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [41.5, 40],
+          "frames": [2, 15],
+          "points": 2,
+          "angle": 287,
+          "ratio": 0.1,
+          "radius": [2, 21, 21, 21, 21, 21, 18.9, 10.5],
+          "width": 4,
+          "core": 0,
+          "floor": 40,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [16.5, 43],
+          "frames": [3, 15],
+          "points": 2,
+          "angle": 243,
+          "ratio": 0.1,
+          "radius": [2, 12, 12, 12, 12, 12, 10.8, 6],
+          "width": 3,
+          "core": 0,
+          "floor": 43,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [48.5, 43],
+          "frames": [3, 15],
+          "points": 2,
+          "angle": 298,
+          "ratio": 0.1,
+          "radius": [2, 13, 13, 13, 13, 13, 11.7, 6.5],
+          "width": 3,
+          "core": 0,
+          "floor": 43,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [27.5, 46],
+          "frames": [3, 15],
+          "points": 2,
+          "angle": 262,
+          "ratio": 0.1,
+          "radius": [2, 11, 11, 11, 11, 11, 9.9, 5.5],
+          "width": 3,
+          "core": 0,
+          "floor": 46,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [38.5, 46],
+          "frames": [4, 15],
+          "points": 2,
+          "angle": 279,
+          "ratio": 0.1,
+          "radius": [2, 13, 13, 13, 13, 13, 11.7, 6.5],
+          "width": 3,
+          "core": 0,
+          "floor": 46,
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.4, 1.4, 1.4, 1.4, 1.4, 1.3, 0.7, 0],
+          "ease": "linear"
+        }
+      ],
+      "emitters": [
+        {
+          "name": "shatter",
+          "at": [18, 34],
+          "line": { "to": [46, 34], "even": true },
+          "burst": 11,
+          "start": 13,
+          "angle": [230, 310],
+          "speed": [3.5, 5.2],
+          "gravity": [0, 0.4],
+          "drag": 0.03,
+          "floor": 45,
+          "bounce": 0.25,
+          "life": [6, 7],
+          "face": true,
+          "shapes": [
+            ["shard-0", "shard-0", "chip-0"],
+            ["shard-45", "shard-45", "chip-45"],
+            ["shard-90", "shard-90", "chip-90"],
+            ["shard-135", "shard-135", "chip-135"],
+            ["shard-180", "shard-180", "chip-180"],
+            ["shard-225", "shard-225", "chip-225"],
+            ["shard-270", "shard-270", "chip-270"],
+            ["shard-315", "shard-315", "chip-315"]
+          ],
+          "remaps": [{}, {}, { "W": "p", "p": "c" }]
+        },
+        {
+          "name": "shatter-tip",
+          "at": [32, 16],
+          "line": { "to": [32, 26] },
+          "burst": 4,
+          "start": 13,
+          "angle": [230, 310],
+          "speed": [1.8, 3],
+          "gravity": [0, 0.32],
+          "drag": 0.03,
+          "floor": 45,
+          "bounce": 0.25,
+          "life": [6, 7],
+          "face": true,
+          "shapes": [
+            ["shard-0", "chip-0", "chip-0"],
+            ["shard-45", "chip-45", "chip-45"],
+            ["shard-90", "chip-90", "chip-90"],
+            ["shard-135", "chip-135", "chip-135"],
+            ["shard-180", "chip-180", "chip-180"],
+            ["shard-225", "chip-225", "chip-225"],
+            ["shard-270", "chip-270", "chip-270"],
+            ["shard-315", "chip-315", "chip-315"]
+          ]
+        },
+        {
+          "name": "lingering",
+          "at": [32, 40],
+          "area": [34, 6],
+          "burst": 3,
+          "start": 15,
+          "life": [4, 5],
+          "shapes": ["glint-1", "glint-3", "glint-5", "glint-3", "glint-1"]
+        },
+        {
+          "name": "glints",
+          "at": [32, 28],
+          "area": [24, 22],
+          "rate": 0.4,
+          "start": 4,
+          "end": 13,
+          "life": [4, 5],
+          "shapes": ["glint-1", "glint-3", "glint-5", "glint-3", "glint-1"]
+        }
+      ]
+    },
+    "buff": {
+      "frames": 12,
+      "duration": 80,
+      "loop": true,
+      "seed": 7,
+      "looks": {
+        "rime": { "colors": ["B", "b", "c"], "thresholds": [0.2, 0.5, 0.8] },
+        "shard": {
+          "colors": ["c"],
+          "thresholds": [0.12],
+          "lit": { "colors": ["p"], "thresholds": [0.45] },
+          "shade": { "colors": ["b", "B"], "thresholds": [0.12, 0.45] },
+          "outline": "n"
+        },
+        "gleam": { "colors": ["p", "W"], "thresholds": [0.4, 0.75] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "rime",
+          "at": [32, 40],
+          "radius": 16,
+          "width": 4,
+          "fill": 0.22,
+          "squash": [1, 0.33],
+          "noise": 0.5,
+          "scale": 3,
+          "power": [1.15, 1, 1.15],
+          "depth": "split"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [25.5, 37],
+          "points": 2,
+          "angle": 265,
+          "ratio": 0.1,
+          "radius": 5,
+          "width": 1.5,
+          "core": 0,
+          "floor": 37,
+          "depth": "back"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [42.5, 38],
+          "points": 2,
+          "angle": 281,
+          "ratio": 0.1,
+          "radius": 10,
+          "width": 2.2,
+          "core": 0,
+          "floor": 38,
+          "depth": "back"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [45.5, 39],
+          "points": 2,
+          "angle": 298,
+          "ratio": 0.1,
+          "radius": 6,
+          "width": 1.8,
+          "core": 0,
+          "floor": 39,
+          "depth": "back"
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [17.5, 43],
+          "points": 2,
+          "angle": 240,
+          "ratio": 0.1,
+          "radius": 6,
+          "width": 1.8,
+          "core": 0,
+          "floor": 43
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [20.5, 44],
+          "points": 2,
+          "angle": 257,
+          "ratio": 0.1,
+          "radius": 12,
+          "width": 2.4,
+          "core": 0,
+          "floor": 44
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [23.5, 45],
+          "points": 2,
+          "angle": 273,
+          "ratio": 0.1,
+          "radius": 7,
+          "width": 2,
+          "core": 0,
+          "floor": 45
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [37.5, 46],
+          "points": 2,
+          "angle": 270,
+          "ratio": 0.1,
+          "radius": 4,
+          "width": 1.5,
+          "core": 0,
+          "floor": 46
+        },
+        {
+          "kind": "star",
+          "look": "shard",
+          "at": [40.5, 45],
+          "points": 2,
+          "angle": 287,
+          "ratio": 0.1,
+          "radius": 8,
+          "width": 2,
+          "core": 0,
+          "floor": 45
+        },
+        {
+          "kind": "star",
+          "look": "gleam",
+          "at": [18, 33],
+          "frames": [2, 5],
+          "points": 4,
+          "ratio": 1,
+          "radius": [2, 4, 1],
+          "width": 0.8,
+          "core": 0.8,
+          "power": [0.9, 1.2, 0.6],
+          "ease": "linear"
+        },
+        {
+          "kind": "star",
+          "look": "gleam",
+          "at": [44, 29],
+          "frames": [8, 11],
+          "points": 4,
+          "ratio": 1,
+          "radius": [2, 4, 1],
+          "width": 0.8,
+          "core": 0.8,
+          "power": [0.9, 1.2, 0.6],
+          "ease": "linear"
+        }
+      ],
+      "emitters": [
+        {
+          "name": "rise-back",
+          "at": [32, 38],
+          "area": [16, 3],
+          "rate": 0.2,
+          "angle": [266, 274],
+          "speed": [0.9, 1.3],
+          "life": [24, 30],
+          "sway": { "amplitude": [8, 2], "period": 16 },
+          "behind": true,
+          "depth": "back",
+          "shapes": [
+            ["mote-dim", "flake-far", "flake-far", "flake-far", "flake-far", "mote", "mote-dim", "mote-dim"],
+            ["mote", "mote", "mote", "mote-dim", "mote-dim"]
+          ]
+        },
+        {
+          "name": "rise-front",
+          "at": [32, 42],
+          "area": [16, 3],
+          "rate": 0.25,
+          "angle": [266, 274],
+          "speed": [0.9, 1.3],
+          "life": [24, 30],
+          "sway": { "amplitude": [9, 2], "period": 16 },
+          "shapes": [
+            ["mote", "flake-s", "flake", "flake", "flake", "flake-s", "mote", "mote-dim"],
+            ["mote", "flake-s", "flake-s", "flake-s", "mote", "mote-dim"]
+          ]
+        },
+        {
+          "name": "glints",
+          "at": [32, 22],
+          "area": [20, 30],
+          "rate": 0.3,
+          "life": [4, 5],
+          "shapes": ["glint-1", "glint-3", "glint-5", "glint-3", "glint-1"]
+        },
+        { "name": "stand-in", "sprite": { "symbol": "stand-in", "draw": true }, "at": [24, 6], "depth": "between" }
+      ]
+    }
+  }
+}

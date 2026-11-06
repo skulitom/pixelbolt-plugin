@@ -32,7 +32,10 @@ function regionPixels(recipe, frameIndex, verb, value, where) {
   if (verb !== 'grid') data = renderProject(recipe).frames[frameIndex].data;
   if (verb === 'move') {
     for (const key of ['dx', 'dy']) if (!Number.isInteger(value[key]) || Math.abs(value[key]) > 256) fail(`${where}.${key}`, 'expected an integer offset from -256 to 256');
-  } else if (verb === 'recolor') { from = parseColor(value.from, recipe.palette, `${where}.from`); to = value.to; parseColor(to, recipe.palette, `${where}.to`); }
+  } else if (verb === 'recolor') {
+    // A key means its colour as this frame draws it: a frame palette recolours the frame's own drawing.
+    from = parseColor(value.from, { ...recipe.palette, ...recipe.frames[frameIndex].palette }, `${where}.from`); to = value.to; parseColor(to, recipe.palette, `${where}.to`);
+  }
   const pixels = [], moved = [];
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     if (value.mask && value.mask[y][x] !== 'x') continue;
@@ -195,12 +198,13 @@ export function patchRecipe(recipe, changes) {
         const current = renderProject(next); edit.protected = [];
         for (let index = slot + 1; index < next.frames.length; index++) {
           const original = protectedFrames[index].data, changed = current.frames[index].data;
-          const restore = new Map((next.frames[index].pixels ?? []).map(pixel => [`${pixel.x},${pixel.y}`, pixel]));
+          const restore = new Map((next.frames[index].pixels ?? []).map(pixel => [`${pixel.x},${pixel.y}`, pixel])), named = frameColorNamer(next, index);
           let count = 0;
           for (let at = 0; at < original.length; at += 4) {
             if (original.subarray(at, at + 4).every((c, i) => c === changed[at + i])) continue;
             const x = at / 4 % next.width, y = Math.floor(at / 4 / next.width);
-            restore.set(`${x},${y}`, { x, y, color: hex(original.subarray(at, at + 4)) }); count++;
+            // Named by the palette key that draws it where one does, so a later palette edit still reaches it.
+            restore.set(`${x},${y}`, { x, y, color: named(pixelId(original, at)) }); count++;
           }
           if (count) { next.frames[index].pixels = [...restore.values()]; edit.protected.push({ frame: next.frames[index].name, pixels: count }); }
         }

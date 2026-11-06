@@ -1,0 +1,68 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "shield",
+  "width": 48,
+  "height": 48,
+  "anchor": [24, 40],
+  "palette": { "n": "#1b2f6b", "b": "#2f6fd6", "c": "#5fc8ff", "W": "#e8fbff", "d": "#16244f" },
+  "symbols": {
+    "glint": [
+      ".W.",
+      "WcW",
+      ".W."
+    ],
+    "mote": ["c"],
+    "mote-hot": ["W"]
+  },
+  "effects": {
+    "shield": {
+      "frames": 12,
+      "duration": 80,
+      "loop": true,
+      "seed": 4,
+      "looks": {
+        "bubble": {
+          "colors": ["n", "b", "c", "W"],
+          "thresholds": [0.18, 0.4, 0.68, 0.9],
+          "dither": 0.35,
+          "halo": { "color": "d", "width": 2 }
+        },
+        "shine": { "colors": ["c", "W"], "thresholds": [0.3, 0.75] }
+      },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "bubble",
+          "at": [24, 24],
+          "radius": 16,
+          "width": 3,
+          "noise": 0.45,
+          "scale": 5,
+          "boil": 10
+        },
+        { "kind": "slash", "look": "shine", "at": [24, 24], "radius": 13, "width": 2.5, "arc": [195, 255], "reveal": 0 }
+      ],
+      "emitters": [
+        {
+          "at": [24, 24],
+          "ring": { "radius": [6, 15], "fill": true },
+          "rate": 0.4,
+          "life": [3, 4],
+          "speed": 0,
+          "shapes": ["glint"]
+        },
+        {
+          "at": [24, 24],
+          "ring": { "radius": 17, "outward": true },
+          "angle": 90,
+          "rate": 1.2,
+          "speed": [0.6, 0.9],
+          "life": [6, 9],
+          "attract": { "at": [24, 24], "strength": 0.06, "swirl": 0.05 },
+          "shapes": ["mote-hot", "mote"]
+        }
+      ]
+    }
+  }
+}

@@ -51,11 +51,12 @@ MCP: `pixel_help` with `topic: "wave"` returns the schema; `pixel_compile` with 
 | `mask` | Elliptical amplitude envelope: centre `at`, x/y `radius`, and inward `feather` fraction. Zero feather clips hard. |
 | `look.colors`, `thresholds` | Increasing positive thresholds mapped to palette keys. Values below the first threshold are transparent. |
 | `look.negative` | Optional matching palette keys for the magnitude of negative troughs. Otherwise troughs remain transparent. |
+| `look.hold` | Keeps bands from flickering where the field wavers at a threshold (default 0.3, 0–0.45): a pixel enters a new band at once, but returns to the band it just left only once the value has passed the threshold by this share of the gap between thresholds. `0` colours each frame from its own values alone. |
 | `underlay`, `overlay` | Optional full-canvas grids below and above the moving field. Keep the portal rim, runes and silhouette steady. |
 
 `duration` is milliseconds per frame, default 80; a 40-frame loop at 60 ms lasts 2.4 seconds. The compiler samples the loop without duplicating its endpoint. Change duration for playback speed, or increase frames for smoother sampling. Integer cycles preserve the loop period without crossfading.
 
-For each pixel and source, the compiler evaluates `amplitude × cos(360 × (distance / wavelength − cycles × frame / frames) + phase)`. Radial distance includes stretch; directional distance is the projection along its angle. Sum the signed results, multiply by the mask, then map to colours. Fixed-order arithmetic and Pixelbolt's polynomial trigonometry make the output repeatable. Node and Chromium are checked against the same recipes and RGBA frames.
+For each pixel and source, the compiler evaluates `amplitude × cos(360 × (distance / wavelength − cycles × frame / frames) + phase)`. Radial distance includes stretch; directional distance is the projection along its angle. Sum the signed results, multiply by the mask, then map to colours. With a `hold`, a pixel whose value wavers at a threshold keeps the band it last moved into; each pixel goes into the first frame holding what the last frame leaves it, so the loop still closes exactly, but a frame then depends on the frames before it as well as its time. Fixed-order arithmetic and Pixelbolt's polynomial trigonometry make the output repeatable. Node and Chromium are checked against the same recipes and RGBA frames.
 
 ## Scope and review
 

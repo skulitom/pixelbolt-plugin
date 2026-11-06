@@ -7,10 +7,12 @@
 // shockwave rings, slashes, beams, lightning, magic circles, impact stars, fireballs) bake into one grid per frame
 // between `behind` particles and the rest. Browser-compatible and deterministic: seeded hashing and polynomial
 // trigonometry, no Math.random.
-import { PixelError, parseColor, renderProject, FRAME_AREA } from './core.js';
+import { PixelError, parseColor, renderProject, FRAME_AREA, joinErrors } from './core.js';
 import { fields, point, compilePoses } from './authoring.js';
-import { patternProblem, ditherThreshold, traceLine, random, hash, sinDeg, cosDeg, ease, EASINGS } from './craft.js';
-import { readShapes, renderShapes, tween, sample, sequenceFrame } from './shapes.js';
+import { patternProblem, ditherThreshold, traceLine, random, hash, sinDeg, cosDeg, ease, EASINGS, rotateRows } from './craft.js';
+import { readShapes, renderShapes, holdBands, settleHolds, tween, sample, sequenceFrame, atan2Deg, pathWalker } from './shapes.js';
+import { compileFluid } from './fluid.js';
+import { compileWaves } from './wave.js';
 
 const fail = (path, message) => { throw new PixelError(path, message); };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -45,14 +47,22 @@ const pair = (value, path, min, max) => {
 const pick = ([a, b], r) => a + (b - a) * r;
 const pickWhole = ([a, b], r) => a + Math.min(b - a, Math.floor(r * (b - a + 1)));
 // Salts keep each sampled property independent, so changing one range does not reshuffle the others.
-const SALT = { x: 1, y: 2, angle: 3, speed: 4, life: 5, variant: 6, remap: 7, phase: 8, offset: 9, ring: 10, radius: 11, along: 12, pixel: 13, release: 14, share: 15 };
+const SALT = { x: 1, y: 2, angle: 3, speed: 4, life: 5, variant: 6, remap: 7, phase: 8, offset: 9, ring: 10, radius: 11, along: 12, pixel: 13, release: 14, share: 15, size: 16, turn: 17, spin: 18 };
 // Which of a sprite's pixels its emitter spawns from: every visible pixel, the visible pixels on its edge, or the empty
 // pixels just outside it (as a look's outline takes them).
 export const SPRITE_PIXELS = ['all', 'edge', 'outline'];
 const clear = char => char === '.' || char === ' ';
 const LIMITS = { effects: 64, emitters: 16, spawned: 4096, alive: 1024, operations: 20000 };
+// The most visible width plus height a spinning particle's symbol may have, so its 45° turns fit a recipe symbol.
+const SPIN_SPAN = 360;
 // When a child emitter spawns: where a parent particle ends, where it first lands on its floor, or every frame it lives.
 export const FX_EVENTS = ['death', 'floor', 'life'];
+// Where an emitter's particles draw relative to a character standing in the effect: in front, behind, split by where
+// each is born (above its spawn centre behind, the rest in front), or `between`, a stand-in sprite drawn between the two.
+export const EMITTER_DEPTHS = ['front', 'back', 'split', 'between'];
+// The canvas sides, and the direction each faces in degrees clockwise (0 right, 90 down), for turning `edges`.
+export const EDGE_SIDES = ['left', 'right', 'top', 'bottom'];
+const SIDE_ANGLE = { right: 0, bottom: 90, left: 180, top: 270 };
 const flag = (value, path) => {
   if (value !== undefined && typeof value !== 'boolean') fail(path, 'expected true or false');
   return value === true;
@@ -93,7 +103,7 @@ function readSprite(sprite, path, symbols, sequences, [x, y], loop) {
 
 // `earlier` holds the effect's emitters read so far: a child names one of them as its parent.
 function readEmitter(emitter, path, context, earlier) {
-  fields(emitter, ['name', 'at', 'area', 'ring', 'line', 'burst', 'rate', 'start', 'end', 'life', 'angle', 'speed', 'gravity', 'drag', 'attract', 'sway', 'floor', 'bounce', 'shapes', 'face', 'play', 'remaps', 'tint', 'trail', 'dissolve', 'pattern', 'from', 'when', 'inherit', 'behind', 'cue', 'blob', 'sprite', 'release'], path);
+  fields(emitter, ['name', 'at', 'area', 'ring', 'line', 'burst', 'rate', 'start', 'end', 'life', 'angle', 'speed', 'gravity', 'drag', 'attract', 'sway', 'floor', 'bounce', 'rest', 'shapes', 'face', 'play', 'remaps', 'tint', 'trail', 'dissolve', 'pattern', 'from', 'when', 'inherit', 'behind', 'cue', 'blob', 'sprite', 'release', 'turbulence', 'path', 'curve', 'ease', 'spin', 'sweep', 'throttle', 'ground', 'kick', 'depth'], path);
   const { frames, symbols, sequences, palette, loop, seed, looks } = context;
   // A sprite emitter spawns on a symbol's pixels, its top-left corner at `at` (whole pixels); with release, every one of
   // them leaves once while the rest stays drawn.
@@ -126,17 +136,24 @@ function readEmitter(emitter, path, context, earlier) {
   let blob = null;
   if (emitter.blob !== undefined) {
     if (emitter.blob === null || typeof emitter.blob !== 'object' || Array.isArray(emitter.blob)) fail(`${path}.blob`, 'expected { look, radius }');
-    fields(emitter.blob, ['look', 'radius'], `${path}.blob`);
-    const look = emitter.blob.look ?? (looks.length === 1 ? looks[0] : undefined);
-    if (!looks.includes(look)) fail(`${path}.blob.look`, emitter.blob.look === undefined ? `name the look this blob is drawn into: ${looks.join(', ')}` : `no look is named ${JSON.stringify(emitter.blob.look)}`);
-    blob = { look, radius: tween(emitter.blob.radius ?? 3, `${path}.blob.radius`, 0, 64) };
-    for (const key of ['shapes', 'face', 'play', 'remaps', 'tint', 'trail', 'dissolve', 'pattern', 'behind']) if (emitter[key] !== undefined) fail(`${path}.${key}`, `${key} applies to particles drawn as symbols; a blob particle is drawn into its look`);
+    fields(emitter.blob, ['look', 'radius', 'size', 'power'], `${path}.blob`);
+    // looks is null while the effect's layers have errors of their own: the look is checked once they read.
+    const look = emitter.blob.look ?? (looks?.length === 1 ? looks[0] : undefined);
+    if (looks !== null && !looks.includes(look)) fail(`${path}.blob.look`, emitter.blob.look === undefined ? `name the look this blob is drawn into: ${looks.join(', ')}` : `no look is named ${JSON.stringify(emitter.blob.look)}`);
+    // power scales each disc's field over the particle's life: a hot drop climbs no higher than the look's dimmer bands
+    // as it cools, from white through yellow to red, while its radius keys shrink it.
+    blob = { look, radius: tween(emitter.blob.radius ?? 3, `${path}.blob.radius`, 0, 64), size: range(emitter.blob.size ?? 1, `${path}.blob.size`, 0.1, 8), power: emitter.blob.power === undefined ? null : tween(emitter.blob.power, `${path}.blob.power`, 0, 4) };
+    for (const key of ['shapes', 'face', 'play', 'remaps', 'tint', 'trail', 'dissolve', 'pattern', 'behind', 'spin']) if (emitter[key] !== undefined) fail(`${path}.${key}`, `${key} applies to particles drawn as symbols; a blob particle is drawn into its look`);
   }
   if (emitter.name !== undefined) identifier(emitter.name, `${path}.name`);
   const schedules = ['burst', 'rate', 'release'].filter(key => emitter[key] !== undefined);
   // A sprite emitter with draw: true and no schedule only draws the sprite (an animation frame for frame, say).
   const drawOnly = sprite !== null && sprite.draw === true && !schedules.length;
   if (schedules.length !== 1 && !drawOnly) fail(path, sprite ? 'use exactly one of burst (particles at start), rate (particles per frame) or release (each pixel leaves once)' : 'use exactly one of burst (particles at start) or rate (particles per frame)');
+  // depth: null when unset, so a child takes its parent particle's side.
+  const depth = emitter.depth === undefined ? null : EMITTER_DEPTHS.includes(emitter.depth) ? emitter.depth : fail(`${path}.depth`, 'expected front, back, split (particles born above the spawn centre go behind a character, the rest in front) or between (a stand-in sprite drawn between the two, to review the effect on a character)');
+  if (depth === 'between' && !drawOnly) fail(`${path}.depth`, 'between is for a stand-in: a sprite emitter that only draws (sprite with draw: true, and no burst, rate or release); the game draws its own character there');
+  if (depth === 'split' && sprite) fail(`${path}.depth`, 'split goes by where each particle is born, above or below its spawn centre; a sprite emitter\'s pixels go to one side, so use back or front');
   // A child spawns from the particles of an earlier emitter, at an event, instead of on a schedule of its own.
   let parent = null, when = null;
   if (emitter.from !== undefined) {
@@ -149,25 +166,58 @@ function readEmitter(emitter, path, context, earlier) {
     if (!FX_EVENTS.includes(when)) fail(`${path}.when`, 'expected death (where a parent particle ends), floor (where it first lands) or life (every frame it lives)');
     if (when === 'life' && emitter.rate === undefined) fail(`${path}.burst`, 'a child spawning while its parent lives uses rate: particles per frame for each parent particle');
     if (when !== 'life' && emitter.burst === undefined) fail(`${path}.rate`, `a child spawning at its parent's ${when} uses burst: particles per event`);
-    if (when === 'floor' && earlier[parent].floor === null) fail(`${path}.when`, `emitter ${JSON.stringify(emitter.from)} has no floor to land on`);
+    if (when === 'floor' && earlier[parent].floor === null && earlier[parent].ground === null) fail(`${path}.when`, `emitter ${JSON.stringify(emitter.from)} has no floor to land on`);
     for (const key of ['start', 'end']) if (emitter[key] !== undefined) fail(`${path}.${key}`, 'a child spawns when its parent particles do; start and end apply to emitters with their own schedule');
   } else {
-    for (const key of ['when', 'inherit']) if (emitter[key] !== undefined) fail(`${path}.${key}`, `${key} applies to a child emitter; set from to the emitter it spawns from`);
+    // A moving emitter (one with a path) may inherit its own motion along the path; otherwise inherit is a child's.
+    for (const key of ['when', 'inherit']) if (emitter[key] !== undefined && !(key === 'inherit' && emitter.path !== undefined)) fail(`${path}.${key}`, `${key} applies to a child emitter or one moving along a path; set from to the emitter it spawns from`);
   }
   const start = integer(emitter.start ?? 0, `${path}.start`, 0, frames - 1);
   if (emitter.end !== undefined && emitter.rate === undefined && !release) fail(`${path}.end`, 'end applies to rate emitters and releases');
   const end = integer(emitter.end ?? frames, `${path}.end`, start + 1, frames);
+  // A keyed rate, 2–8 values spread from start to end, ramps the emission (thick at first and tapering, say); what each
+  // frame spawns is what the running total adds, so fractions carry over as with a steady rate.
+  let rateTotals = null;
+  if (Array.isArray(emitter.rate)) {
+    if (parent !== null) fail(`${path}.rate`, 'a child\'s rate is per frame for each parent particle; keys apply to emitters with their own schedule');
+    if (emitter.rate.length < 2 || emitter.rate.length > 8) fail(`${path}.rate`, 'expected particles per frame, or 2–8 of them as keys spread from start to end');
+    const keys = emitter.rate.map((v, i) => number(v, `${path}.rate[${i}]`, 0, 64));
+    if (!keys.some(v => v > 0)) fail(`${path}.rate`, 'every key is 0, so nothing would spawn');
+    if (end - start < 2) fail(`${path}.rate`, 'keys ramp the rate from start to end; give the emitter a window of two or more frames');
+    rateTotals = [0];
+    for (let c = 0; c < end - start; c++) rateTotals.push(rateTotals[c] + sample(keys, end - start > 1 ? c / (end - start - 1) : 0));
+  }
   // A child's at is an offset from its parent particle (default none); a sprite's cues sit at its middle; everyone
   // else's is the spawn centre.
-  const at = sprite ? [sprite.x + sprite.frames[0].w / 2, sprite.y + sprite.frames[0].h / 2] : parent !== null && emitter.at === undefined ? [0, 0] : pair(emitter.at, `${path}.at`, -4096, 4096);
+  // path moves the spawn centre along 2–16 points spread over the emitter's window, start to end, as a layer's keys
+  // are over its frames: a meteor shedding smoke as it falls, a spark tracing a circle.
+  let route = null;
+  if (emitter.path !== undefined) {
+    if (sprite || parent !== null) fail(`${path}.path`, sprite ? 'a sprite emitter spawns on its sprite, which stays put; path moves other emitters' : 'a child spawns on its parent particles; path moves an emitter with its own schedule');
+    if (emitter.at !== undefined) fail(`${path}.at`, 'a moving emitter starts at its path\'s first point; leave at out');
+    if (!Array.isArray(emitter.path) || emitter.path.length < 2 || emitter.path.length > 16) fail(`${path}.path`, 'expected 2–16 points [x, y] for the spawn centre to move through');
+    route = emitter.path.map((p, i) => pair(p, `${path}.path[${i}]`, -4096, 4096));
+  }
+  // curve: true runs the path through a smooth curve, so a three-point arc has no corner at its middle point.
+  const curve = flag(emitter.curve, `${path}.curve`);
+  if (curve && (!route || route.length < 3)) fail(`${path}.curve`, 'curve smooths a path; give path three or more points');
+  // The spawn centre moves at a steady speed along the path's length (pathWalker).
+  if (route) route = { walk: pathWalker(route, curve), points: route };
+  const at = sprite ? [sprite.x + sprite.frames[0].w / 2, sprite.y + sprite.frames[0].h / 2] : route ? route.points[0] : parent !== null && emitter.at === undefined ? [0, 0] : pair(emitter.at, `${path}.at`, -4096, 4096);
   const spawnShapes = ['area', 'ring', 'line'].filter(key => emitter[key] !== undefined);
   if (spawnShapes.length > 1) fail(`${path}.${spawnShapes[1]}`, `use one of area (a box), ring (a circle or arc) or line (a segment); this emitter already has ${spawnShapes[0]}`);
   let ring = null, line = null;
   if (emitter.ring !== undefined) {
-    fields(emitter.ring, ['radius', 'arc', 'even', 'outward'], `${path}.ring`);
+    fields(emitter.ring, ['radius', 'arc', 'even', 'outward', 'squash', 'grow', 'fill'], `${path}.ring`);
     const arc = emitter.ring.arc === undefined ? [0, 360] : pair(emitter.ring.arc, `${path}.ring.arc`, -3600, 3600);
     if (arc[1] < arc[0] || arc[1] - arc[0] > 360) fail(`${path}.ring.arc`, 'expected [from, to] in degrees clockwise (0 right, 90 down), from no more than to and at most 360 apart');
-    ring = { radius: range(emitter.ring.radius, `${path}.ring.radius`, 0, 256), arc, even: flag(emitter.ring.even, `${path}.ring.even`), outward: flag(emitter.ring.outward, `${path}.ring.outward`) };
+    ring = { radius: range(emitter.ring.radius, `${path}.ring.radius`, 0, 256), arc, even: flag(emitter.ring.even, `${path}.ring.even`), outward: flag(emitter.ring.outward, `${path}.ring.outward`),
+      // squash lays the ring on the ground as a ring layer's squash does: sparks rise from a magic circle's ellipse.
+      squash: emitter.ring.squash === undefined ? null : pair(emitter.ring.squash, `${path}.ring.squash`, 0.125, 8),
+      // fill picks the distance in a radius range evenly by area, so a disc of motes isn't crowded at its middle.
+      fill: flag(emitter.ring.fill, `${path}.ring.fill`),
+      // grow scales the radius by 2–8 keys over the emitter's window, start to end, so sparks ride a shockwave's edge out.
+      grow: emitter.ring.grow === undefined ? null : Array.isArray(emitter.ring.grow) && emitter.ring.grow.length >= 2 && emitter.ring.grow.length <= 8 ? emitter.ring.grow.map((v, i) => number(v, `${path}.ring.grow[${i}]`, 0, 16)) : fail(`${path}.ring.grow`, 'expected 2–8 keys scaling the radius from start to end, such as [0.2, 1]') };
   }
   if (emitter.line !== undefined) {
     fields(emitter.line, ['to', 'even'], `${path}.line`);
@@ -176,7 +226,7 @@ function readEmitter(emitter, path, context, earlier) {
   }
   // A sprite's particles without shapes are its own pixels, each drawn in its pixel's colour.
   const pixel = sprite !== null && !blob && emitter.shapes === undefined;
-  if (pixel) for (const key of ['face', 'play']) if (emitter[key] !== undefined) fail(`${path}.${key}`, `${key} picks among shapes; a sprite's particles without shapes are its own pixels`);
+  if (pixel) for (const key of ['face', 'play', 'spin']) if (emitter[key] !== undefined) fail(`${path}.${key}`, `${key} picks among shapes; a sprite's particles without shapes are its own pixels`);
   if (!blob && !pixel && (!Array.isArray(emitter.shapes) || !emitter.shapes.length || emitter.shapes.length > 64)) fail(`${path}.shapes`, 'expected 1–64 symbol names (one sequence) or lists of them (variants picked per particle), or a blob drawn into a look');
   const nested = !blob && !pixel && Array.isArray(emitter.shapes[0]);
   const variants = blob || pixel ? [] : (nested ? emitter.shapes : [emitter.shapes]).map((sequence, v) => {
@@ -190,6 +240,32 @@ function readEmitter(emitter, path, context, earlier) {
   // With face, the sequences are directions of travel: the first faces right and the rest turn clockwise, evenly.
   const face = flag(emitter.face, `${path}.face`);
   if (face && (!nested || variants.length < 2 || variants.length > 16)) fail(`${path}.shapes`, 'face picks a sequence by direction of travel: give 2–16 sequences, the first facing right (0°) and the rest turning clockwise, evenly spaced');
+  // spin turns each particle's symbol by that many degrees a frame, from a seeded start, in 45° RotSprite steps (debris
+  // that tumbles); the turned symbols join the recipe as <symbol>_r<degrees>.
+  const spinRange = emitter.spin === undefined ? null : range(emitter.spin, `${path}.spin`, -180, 180), spin = spinRange && (spinRange[0] || spinRange[1]) ? spinRange : null;
+  if (spin && face) fail(`${path}.spin`, 'face already turns the particle to its direction of travel; use one or the other');
+  if (spin) for (const name of new Set(variants.flat())) {
+    if (name.length > 59) fail(`${path}.spin`, `turned symbols are named <symbol>_r<degrees>; shorten ${name} to 59 characters or fewer`);
+    // Turned 45°, a symbol's visible pixels span (width + height) / √2 each way, and a recipe symbol has at most 256
+    // rows and columns: a visible width plus height of 360 turns into at most 254.
+    let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+    symbols[name].forEach((row, j) => { for (let i = 0; i < row.length; i++) if (!clear(row[i])) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; } });
+    if (x1 >= 0 && x1 - x0 + y1 - y0 + 2 > SPIN_SPAN) fail(`${path}.spin`, `spin turns ${name} in 45° steps, and turned 45° its visible ${x1 - x0 + 1} × ${y1 - y0 + 1} pixels would pass the 256 rows and columns a symbol may have; a spinning symbol's visible width plus height may be at most ${SPIN_SPAN} pixels`);
+  }
+  // sweep: 2–8 keys in degrees added to the launch angle over the emitter's window, start to end, so a flamethrower
+  // swings across or a fountain sways.
+  const sweep = emitter.sweep === undefined ? null : Array.isArray(emitter.sweep) && emitter.sweep.length >= 2 && emitter.sweep.length <= 8 ? emitter.sweep.map((v, i) => number(v, `${path}.sweep[${i}]`, -3600, 3600)) : fail(`${path}.sweep`, 'expected 2–8 keys in degrees added to the launch angle from start to end, such as [-30, 30]');
+  if (sweep && parent !== null) fail(`${path}.sweep`, 'a child launches from its parent particles; sweep turns an emitter with its own schedule');
+  // throttle: 2–8 keys scaling the launch speed over the window, so a fountain weakens or a flamethrower dies out.
+  const throttle = emitter.throttle === undefined ? null : Array.isArray(emitter.throttle) && emitter.throttle.length >= 2 && emitter.throttle.length <= 8 ? emitter.throttle.map((v, i) => number(v, `${path}.throttle[${i}]`, 0, 8)) : fail(`${path}.throttle`, 'expected 2–8 keys scaling the launch speed from start to end, such as [1, 0.3]');
+  if (throttle && parent !== null) fail(`${path}.throttle`, 'a child launches from its parent particles; throttle scales an emitter with its own schedule');
+  // A burst spawns at one moment, so it would only ever read the first key of these.
+  if (emitter.burst !== undefined && emitter.rate === undefined && !release) for (const [key, value] of [['path', emitter.path], ['sweep', emitter.sweep], ['throttle', emitter.throttle], ['ring.grow', emitter.ring?.grow]]) if (value !== undefined) fail(`${path}.${key}`, `a burst spawns at one moment, so ${key} would only use its first key; give the emitter a rate from start to end`);
+  if (emitter.ring?.grow !== undefined && parent !== null) fail(`${path}.ring.grow`, 'a child spawns on its parent particles; grow scales the ring of an emitter with its own schedule');
+  // ease shapes the emitter's progress over its window for path, ring grow, sweep and throttle, as a layer's ease does
+  // its keys (default linear), so a trail given its head's ease keeps pace with it.
+  const easing = emitter.ease === undefined ? null : EASINGS.includes(emitter.ease) ? emitter.ease : fail(`${path}.ease`, `expected ${EASINGS.join(', ')}`);
+  if (easing && emitter.path === undefined && emitter.ring?.grow === undefined && sweep === null && throttle === null) fail(`${path}.ease`, 'ease shapes path, ring grow, sweep and throttle over the window; this emitter has none of them');
   const play = emitter.play ?? 'life';
   if (!['life', 'loop', 'once'].includes(play)) fail(`${path}.play`, 'expected life (spread over the lifetime), loop (one per frame, cycling) or once (one per frame, holding the last)');
   const life = emitter.life === undefined ? null : range(emitter.life, `${path}.life`, 1, 256, true);
@@ -223,15 +299,28 @@ function readEmitter(emitter, path, context, earlier) {
   }
   let attract = null;
   if (emitter.attract !== undefined) {
-    fields(emitter.attract, ['at', 'strength'], `${path}.attract`);
-    attract = { at: pair(emitter.attract.at, `${path}.attract.at`, -4096, 4096), strength: number(emitter.attract.strength ?? 0.5, `${path}.attract.strength`, -8, 8) };
+    fields(emitter.attract, ['at', 'strength', 'swirl'], `${path}.attract`);
+    // swirl pushes each particle across the line to the point (clockwise when positive), so it spirals in or circles.
+    attract = { at: pair(emitter.attract.at, `${path}.attract.at`, -4096, 4096), strength: number(emitter.attract.strength ?? 0.5, `${path}.attract.strength`, -8, 8), swirl: number(emitter.attract.swirl ?? 0, `${path}.attract.swirl`, -8, 8) };
   }
   let sway = null;
   if (emitter.sway !== undefined) {
     fields(emitter.sway, ['amplitude', 'period'], `${path}.sway`);
     sway = { amplitude: pair(emitter.sway.amplitude, `${path}.sway.amplitude`, 0, 32), period: number(emitter.sway.period ?? 8, `${path}.sway.period`, 1, 256) };
   }
-  if (emitter.bounce !== undefined && emitter.floor === undefined) fail(`${path}.bounce`, 'bounce applies at a floor');
+  if (emitter.bounce !== undefined && emitter.floor === undefined && emitter.ground === undefined) fail(`${path}.bounce`, 'bounce applies at a floor or ground');
+  if (emitter.rest !== undefined && emitter.floor === undefined && emitter.ground === undefined) fail(`${path}.rest`, 'rest applies at a floor or ground');
+  if (emitter.floor !== undefined && emitter.ground !== undefined) fail(`${path}.ground`, 'a particle lands on one floor: a canvas row (floor) or pixels below where it was born (ground), not both');
+  // turbulence pushes each particle by a smooth seeded field that stays put, `scale` pixels to a swirl, so smoke and
+  // embers wander organically instead of swinging in step. A still field keeps loops seamless.
+  let turbulence = null;
+  if (emitter.turbulence !== undefined) {
+    if (!isObject(emitter.turbulence)) fail(`${path}.turbulence`, 'expected { strength, scale }');
+    fields(emitter.turbulence, ['strength', 'scale'], `${path}.turbulence`);
+    const strength = number(emitter.turbulence.strength ?? 0.3, `${path}.turbulence.strength`, 0, 4), scale = number(emitter.turbulence.scale ?? 8, `${path}.turbulence.scale`, 2, 64);
+    const salt = hash(context.seed, earlier.length, 0x7475);
+    if (strength) turbulence = { strength, x: ditherThreshold('value', [0, 0], hash(salt, 1), scale), y: ditherThreshold('value', [0, 0], hash(salt, 2), scale) };
+  }
   // The dissolve pattern takes the same forms as the dither operation: a Bayer name, noise (ordered by the effect's
   // seed) or a matrix of ranks.
   const pattern = emitter.pattern ?? 'bayer4', problem = patternProblem(pattern);
@@ -240,18 +329,27 @@ function readEmitter(emitter, path, context, earlier) {
   const area = emitter.area === undefined ? [1, 1] : point(emitter.area, `${path}.area`);
   if (area.some(n => n < 1 || n > 256)) fail(`${path}.area`, 'expected a spawn box from 1 to 256 pixels per side');
   return {
-    name: emitter.name, at, area, ring, line, start, end, variants, face, play, life, remaps, tint, trail, attract, sway, parent, when, cue, blob, sprite, release, pixel, drawOnly,
+    name: emitter.name, at, area, ring, line, start, end, variants, face, play, life, remaps, tint, trail, attract, sway, turbulence, route, spin, sweep, throttle, ease: easing, parent, when, cue, blob, sprite, release, pixel, drawOnly, depth,
     directions: face ? variants.map((_, k) => [cosDeg(360 * k / variants.length), sinDeg(360 * k / variants.length)]) : null,
     inherit: number(emitter.inherit ?? 0, `${path}.inherit`, 0, 2), behind: flag(emitter.behind, `${path}.behind`),
     burst: emitter.burst === undefined ? null : integer(emitter.burst, `${path}.burst`, 1, 1024),
-    rate: emitter.rate === undefined ? null : number(emitter.rate, `${path}.rate`, 0.001, 64),
+    rate: emitter.rate === undefined ? null : rateTotals ? rateTotals.at(-1) / (end - start) : number(emitter.rate, `${path}.rate`, 0.001, 64), rateTotals,
     // Measured from each particle's outward direction on an outward ring, where it defaults to straight out.
     angle: range(emitter.angle ?? (ring?.outward ? 0 : [0, 360]), `${path}.angle`, -3600, 3600),
     speed: range(emitter.speed ?? 0, `${path}.speed`, 0, 64),
     gravity: emitter.gravity === undefined ? [0, 0] : pair(emitter.gravity, `${path}.gravity`, -8, 8),
     drag: number(emitter.drag ?? 0, `${path}.drag`, 0, 1),
     floor: emitter.floor === undefined ? null : integer(emitter.floor, `${path}.floor`, -4096, 4096),
+    // ground: a floor that many pixels below where each particle was born, so particles thrown up from a ring laid on the
+    // ground land back on their own patch of it.
+    ground: emitter.ground === undefined ? null : number(emitter.ground, `${path}.ground`, -256, 256),
+    // kick: a velocity [x, y] added to every launch, whatever its angle: outward shards on a ring laid on the ground pop
+    // up as they fly out. It turns with a turned copy, as launch angles do.
+    kick: emitter.kick === undefined ? null : pair(emitter.kick, `${path}.kick`, -64, 64),
     bounce: number(emitter.bounce ?? 0, `${path}.bounce`, 0, 1),
+    // rest: a particle that lands stays where it lands (no slide, sway, spin or loop); with bounce, once a rebound
+    // can't lift it.
+    rest: flag(emitter.rest, `${path}.rest`),
     dissolve: emitter.dissolve === undefined ? 0 : number(emitter.dissolve, `${path}.dissolve`, 0, 1),
     threshold: ditherThreshold(pattern, [0, 0], seed)
   };
@@ -267,11 +365,58 @@ function facing(e, vx, vy, previous) {
 }
 // The k-th of `count` angles spread evenly over an arc: a full circle has no repeat at its end; a shorter arc reaches
 // both ends (a single particle takes the middle).
+// A share of a squashed ring's perimeter as a parametric angle: random or even angles land evenly along the ellipse
+// instead of crowding its narrow ends. Angles in degrees; the table is built once per squash.
+const perimeters = new Map();
+function perimeterAngle(theta, [sx, sy]) {
+  const key = `${sx},${sy}`;
+  if (!perimeters.has(key)) {
+    const lengths = [0];
+    for (let k = 1; k <= 360; k++) { const dx = sx * (cosDeg(k) - cosDeg(k - 1)), dy = sy * (sinDeg(k) - sinDeg(k - 1)); lengths.push(lengths[k - 1] + Math.sqrt(dx * dx + dy * dy)); }
+    perimeters.set(key, lengths);
+  }
+  const lengths = perimeters.get(key), turns = Math.floor(theta / 360), d = (theta - turns * 360) / 360 * lengths[360];
+  let low = 0, high = 359;
+  while (low < high) { const mid = (low + high + 1) >> 1; if (lengths[mid] <= d) low = mid; else high = mid - 1; }
+  const span = lengths[low + 1] - lengths[low];
+  return turns * 360 + low + (span > 0 ? (d - lengths[low]) / span : 0);
+}
 const evenAngle = ([from, to], k, count) => (to - from >= 360 ? from + 360 * k / count : count === 1 ? (from + to) / 2 : from + (to - from) * k / (count - 1));
 
 // Simulates one effect and returns its frames' operations plus counts for the metadata.
 function simulate(effect, context) {
-  const { frames, loop, seed, emitters } = effect, { width, height, symbols } = context;
+  const { frames, loop, seed, emitters, view } = effect, { width, height, symbols } = context;
+  // A symbol turned k × 45°, made once per compile and added to the recipe's symbols after every effect is read, so no
+  // effect can name one another effect happened to make.
+  const spun = (name, k) => {
+    const key = `${name}_r${k * 45}`;
+    if (!context.spun.has(key)) {
+      if (Object.hasOwn(symbols, key)) fail(`fx.symbols.${key}`, `a spinning particle names its turned ${name} ${key}; rename this symbol`);
+      const rows = symbols[name], { rows: out, pivot } = rotateRows(rows, k * 45, [Math.floor(rows[0].length / 2), Math.floor(rows.length / 2)]);
+      context.spun.set(key, { name: key, pivot, rows: out });
+    }
+    return context.spun.get(key);
+  };
+  // The direction this copy of the effect is turned to (null as drawn): spawn places, spawn offsets, launch angles and
+  // attract points turn with it; gravity, drag, floors, sway and turbulence stay as they are, so particles still fall down
+  // the canvas.
+  const offset = view ? (dx, dy) => view.vec(dx, dy) : (dx, dy) => [dx, dy], heading = view ? theta => view.dir(theta) : theta => theta;
+  // A moving emitter's centre in frame `cycle`: along its path, spread over its window from start to end as a layer's
+  // keys are over its frames (progress (cycle − start) / (end − start)), so a trail keeps pace with a layer that has the
+  // same window, and a loop's path closes on itself.
+  const along = (route, cycle, e) => {
+    // A path round the whole loop wraps, so spawns spread back from frame 0 come from the end of the path.
+    const x = (cycle - e.start) / (e.end - e.start), whole = loop && e.start === 0 && e.end === frames;
+    const share = whole ? x - Math.floor(x) : Math.min(1, Math.max(0, x)), t = e.ease ? ease(e.ease, share) : share;
+    return route.walk(t);
+  };
+  // A moving emitter's velocity at spawn time `at`: its step over the frame before, read inside its window (before start
+  // the first frame's step, after end the last's), so every spawn of a frame inherits the same speed and a pause inherits 0.
+  const velocity = (e, at) => {
+    const b = loop && e.start === 0 && e.end === frames ? at : Math.min(e.end, Math.max(at, e.start + 1)), [ax, ay] = centre(e, b - 1), [bx, by] = centre(e, b);
+    return { vx: bx - ax, vy: by - ay };
+  };
+  const centre = (e, cycle) => { const at = e.route ? along(e.route, cycle, e) : e.at; return view ? view.point(at) : at; }, pulls = emitters.map(e => (e.attract && view ? view.point(e.attract.at) : e.attract?.at));
   // A loop warms up for as many whole cycles as the longest chain of lives (a child's particles can outlive their parent's
   // by their own life), with spawns keyed by their frame within the cycle and children by their parent, so the particles
   // in flight at frame 0 are exactly those still alive at the end.
@@ -281,7 +426,12 @@ function simulate(effect, context) {
   const warmup = loop ? Math.ceil(Math.max(...chain) / frames) : 0, total = (warmup + 1) * frames, first = warmup * frames;
   // The child emitters of each emitter, by the event they spawn at.
   const children = emitters.map((_, i) => Object.fromEntries(['death', 'floor'].map(when => [when, emitters.flatMap((e, j) => (e.parent === i && e.when === when ? [j] : []))])));
-  const alive = [], output = Array.from({ length: frames }, () => []), behind = Array.from({ length: frames }, () => []), blobs = Array.from({ length: frames }, () => []), cues = Array.from({ length: frames }, () => ({}));
+  // A loop draws one frame more, the next cycle's first, which the seam review compares with frame 0 (see `next`).
+  const perFrame = () => Array.from({ length: frames + (loop ? 1 : 0) }, () => []);
+  const alive = [], output = perFrame(), behind = perFrame(), blobs = perFrame(), cues = Array.from({ length: frames }, () => ({}));
+  // Behind a character: the back particles' own two passes; between: stand-in sprites. Both stay empty unless an emitter
+  // asks for them.
+  const back = { output: perFrame(), behind: perFrame() }, between = perFrame();
   const stats = emitters.map(e => ({ ...(e.name && { name: e.name }), spawned: 0, maxAlive: 0, ...(e.sprite && { pixels: e.sprite.frames[0].cells.length }) }));
   let operations = 0, culled = 0;
   // A release gives each of the sprite's pixels the frame it leaves on: where the sweep's front reaches it between start
@@ -325,26 +475,41 @@ function simulate(effect, context) {
   // identifies it to its own children. A child adds `inherit` times its parent's velocity.
   const launch = (e, index, cx, cy, k, count, r, tag, born, parent, cell = null) => {
     let x, y, out = null, key = null;
+    const raw = Math.min(1, Math.max(0, (born % frames - e.start) / (e.end - e.start))), share = e.ease ? ease(e.ease, raw) : raw;
     if (e.sprite) {
       // On one of the sprite's pixels (of the frame showing): the released one, or a seeded pick.
       const { cells } = e.sprite.frame(born % frames), c = cell ?? cells[Math.min(cells.length - 1, Math.floor(r(SALT.pixel) * cells.length))];
       x = e.sprite.x + c.x; y = e.sprite.y + c.y; key = c.key;
     } else if (e.ring) {
-      const { radius, arc, even, outward } = e.ring, theta = even ? evenAngle(arc, k, count) : pick(arc, r(SALT.ring)), d = pick(radius, r(SALT.radius));
-      x = cx + cosDeg(theta) * d; y = cy + sinDeg(theta) * d;
-      if (outward) out = theta;
+      const { radius, arc, even, outward, squash, grow, fill } = e.ring;
+      // A full even ring on a rate emitter turns to a fresh seeded angle each frame, so its spokes don't repeat.
+      const turnBy = even && e.rate !== null && arc[1] - arc[0] >= 360 ? random(seed, index, loop ? born % frames : born, -SALT.ring) * 360 / count : 0, picked = even ? evenAngle(arc, k, count) + turnBy : pick(arc, r(SALT.ring));
+      const theta = squash ? perimeterAngle(picked, squash) : picked;
+      const spread = fill ? Math.sqrt(radius[0] * radius[0] + r(SALT.radius) * (radius[1] * radius[1] - radius[0] * radius[0])) : pick(radius, r(SALT.radius));
+      const d = grow ? spread * sample(grow, share) : spread;
+      const [ox, oy] = squash ? offset(cosDeg(theta) * d * squash[0], sinDeg(theta) * d * squash[1]) : offset(cosDeg(theta) * d, sinDeg(theta) * d);
+      x = cx + ox; y = cy + oy;
+      // Outward on a squashed ring points away from its middle, along the squashed offset.
+      if (outward) out = squash ? atan2Deg(sinDeg(theta) * squash[1], cosDeg(theta) * squash[0]) : theta;
     } else if (e.line) {
       const s = e.line.even ? (count === 1 ? 0.5 : k / (count - 1)) : r(SALT.along);
-      x = cx + e.line.dx * s; y = cy + e.line.dy * s;
-    } else { x = cx + (r(SALT.x) - 0.5) * (e.area[0] - 1); y = cy + (r(SALT.y) - 0.5) * (e.area[1] - 1); }
-    const angle = out === null ? pick(e.angle, r(SALT.angle)) : out + pick(e.angle, r(SALT.angle)), speed = pick(e.speed, r(SALT.speed));
+      const [ox, oy] = offset(e.line.dx * s, e.line.dy * s);
+      x = cx + ox; y = cy + oy;
+    } else { const [ox, oy] = offset((r(SALT.x) - 0.5) * (e.area[0] - 1), (r(SALT.y) - 0.5) * (e.area[1] - 1)); x = cx + ox; y = cy + oy; }
+    const turned = e.sweep ? sample(e.sweep, share) : 0;
+    const angle = heading(out === null ? (e.sweep ? pick(e.angle, r(SALT.angle)) + turned : pick(e.angle, r(SALT.angle))) : e.sweep ? out + pick(e.angle, r(SALT.angle)) + turned : out + pick(e.angle, r(SALT.angle))), speed = e.throttle ? pick(e.speed, r(SALT.speed)) * sample(e.throttle, share) : pick(e.speed, r(SALT.speed));
     const life = e.life ? pickWhole(e.life, r(SALT.life)) : Infinity, variant = e.face ? null : e.variants[Math.min(e.variants.length - 1, Math.floor(r(SALT.variant) * e.variants.length))];
     let vx = cosDeg(angle) * speed, vy = sinDeg(angle) * speed;
+    if (e.kick) { const [kx, ky] = offset(e.kick[0], e.kick[1]); vx += kx; vy += ky; }
     if (parent && e.inherit) { vx += parent.vx * e.inherit; vy += parent.vy * e.inherit; }
+    // Behind a character: a back emitter's particles, a split one's born above its spawn centre, and a child with no
+    // depth of its own whose parent particle is behind.
+    const behindCharacter = e.depth === 'back' || (e.depth === 'split' && y < cy) || (e.depth === null && e.parent !== null && parent?.back === true);
     return {
-      emitter: e, index, born, life, variant, age: 0, x, y, vx, vy, tag, key,
+      emitter: e, index, born, life, variant, age: 0, x, y, vx, vy, tag, key, back: behindCharacter,
       remap: e.remaps.length ? e.remaps[Math.min(e.remaps.length - 1, Math.floor(r(SALT.remap) * e.remaps.length))] : null,
-      phase: r(SALT.phase) * 360, offset: Math.floor(r(SALT.offset) * 64), trail: [], landed: false, facing: 0
+      phase: r(SALT.phase) * 360, offset: Math.floor(r(SALT.offset) * 64), trail: [], landed: false, facing: 0, size: e.blob ? pick(e.blob.size, r(SALT.size)) : 1, floor: e.ground !== null ? y + e.ground : e.floor,
+      ...(e.spin && { turn: r(SALT.turn) * 360, spin: pick(e.spin, r(SALT.spin)) })
     };
   };
   // Every new particle comes through here, so child emitters that multiply within one frame fail at the limit instead
@@ -355,18 +520,25 @@ function simulate(effect, context) {
   };
   // Children of particle q, born in frame `born`: keyed by the parent's tag and age, so a looping parent has the same
   // children every cycle.
-  const spawnChildren = (index, q, count, born) => {
+  // While a parent lives (spread), the children a frame spawns spread along the stretch it moved since the last frame,
+  // the last where it is now, so a fast parent leaves an even trail instead of one clump per frame.
+  const spawnChildren = (index, q, count, born, spread = false) => {
     const e = emitters[index];
+    const [ox, oy] = offset(e.at[0], e.at[1]);
     for (let k = 0; k < count; k++) {
-      const r = salt => random(q.tag, index, q.age, k, salt);
-      add(launch(e, index, q.x + e.at[0], q.y + e.at[1], k, count, r, hash(q.tag, index, q.age, k), born, q));
-      if (born >= first) stats[index].spawned++;
+      const r = salt => random(q.tag, index, q.age, k, salt), back = spread && q.px !== undefined && k < count - 1;
+      const x = back ? q.px + (q.x - q.px) * (k + 1) / count : q.x, y = back ? q.py + (q.y - q.py) * (k + 1) / count : q.y;
+      add(launch(e, index, x + ox, y + oy, k, count, r, hash(q.tag, index, q.age, k), born, q));
+      if (born >= first && born <= total) stats[index].spawned++;
     }
-    if (count) mark(e, born, q.x + e.at[0], q.y + e.at[1]);
+    if (count) mark(e, born, q.x + ox, q.y + oy);
   };
   const layered = emitters.some(e => e.behind);
-  for (let t = 0; t < total; t++) {
-    const cycle = t % frames, drawing = t >= first;
+  let counted = null;
+  for (let t = 0; t < total + (loop ? 1 : 0); t++) {
+    // recording: one of the effect's own frames; the frame after a loop's last is drawn but not counted.
+    const cycle = t % frames, drawing = t >= first, recording = drawing && t < total;
+    if (t === total) counted = { operations, culled };
     emitters.forEach((e, index) => {
       if (e.parent !== null) return;
       // A release spawns from the pixels leaving this frame, each keyed by its place in the sprite.
@@ -374,7 +546,7 @@ function simulate(effect, context) {
         const due = releases[index].due[cycle];
         due.forEach((i, k) => {
           add(launch(e, index, 0, 0, k, due.length, salt => random(seed, index, -1, i, salt), hash(seed, index, -1, i), t, null, e.sprite.frames[0].cells[i]));
-          if (drawing) stats[index].spawned++;
+          if (recording) stats[index].spawned++;
         });
         if (due.length) mark(e, t, e.at[0], e.at[1]);
         return;
@@ -383,30 +555,41 @@ function simulate(effect, context) {
       if ((e.burst === null && e.rate === null) || (e.sprite && !e.sprite.frame(cycle).cells.length)) return;
       let count = 0;
       if (e.burst !== null) count = cycle === e.start ? e.burst : 0;
-      else if (cycle >= e.start && cycle < e.end) { const c = cycle - e.start; count = Math.floor((c + 1) * e.rate + 1e-9) - Math.floor(c * e.rate + 1e-9); }
+      else if (cycle >= e.start && cycle < e.end) {
+        const c = cycle - e.start, totals = e.rateTotals;
+        count = totals ? Math.floor(totals[c + 1] + 1e-9) - Math.floor(totals[c] + 1e-9) : Math.floor((c + 1) * e.rate + 1e-9) - Math.floor(c * e.rate + 1e-9);
+      }
       const key = loop ? cycle : t;
       for (let k = 0; k < count; k++) {
-        add(launch(e, index, e.at[0], e.at[1], k, count, salt => random(seed, index, key, k, salt), hash(seed, index, key, k), t, null));
-        if (drawing) stats[index].spawned++;
+        // A moving emitter spreads a frame's spawns along the stretch it travelled since the last frame, the last at its
+        // place now, so a fast trail stays even instead of leaving one clump per frame.
+        const at = cycle - 1 + (k + 1) / count, [cx, cy] = e.route ? centre(e, at) : centre(e, cycle);
+        // With inherit, a moving emitter hands its particles that share of its own velocity along the path.
+        const moving = e.route && e.inherit ? velocity(e, at) : null;
+        add(launch(e, index, cx, cy, k, count, salt => random(seed, index, key, k, salt), hash(seed, index, key, k), t, moving));
+        if (recording) stats[index].spawned++;
       }
-      if (count) mark(e, t, e.at[0], e.at[1]);
+      if (count) mark(e, t, centre(e, cycle)[0], centre(e, cycle)[1]);
     });
     // Children that spawn while their parents live: `rate` per frame for each parent particle, from where it is.
     emitters.forEach((e, index) => {
       if (e.when !== 'life') return;
       for (let i = 0, parents = alive.length; i < parents; i++) {
         const q = alive[i];
-        if (q.index === e.parent) spawnChildren(index, q, Math.floor((q.age + 1) * e.rate + 1e-9) - Math.floor(q.age * e.rate + 1e-9), t);
+        if (q.index === e.parent) spawnChildren(index, q, Math.floor((q.age + 1) * e.rate + 1e-9) - Math.floor(q.age * e.rate + 1e-9), t, true);
       }
     });
-    if (drawing) emitters.forEach((e, index) => { stats[index].maxAlive = Math.max(stats[index].maxAlive, alive.filter(p => p.index === index).length); });
+    if (recording) emitters.forEach((e, index) => { stats[index].maxAlive = Math.max(stats[index].maxAlive, alive.filter(p => p.index === index).length); });
     // Every live particle's rounded (and swayed) position. Sway never carries a particle below its floor. A facing
     // particle turns with its velocity in every frame, warm-up included, so a loop's frame 0 continues its last frame.
     const places = alive.map(p => {
       const e = p.emitter, sway = e.sway;
-      const sx = sway ? sway.amplitude[0] * sinDeg(360 * p.age / sway.period + p.phase) : 0, sy = sway ? sway.amplitude[1] * cosDeg(360 * p.age / sway.period + p.phase) : 0;
-      const x = p.x + sx, y = e.floor !== null && p.y + sy > e.floor ? e.floor : p.y + sy, X = Math.floor(x + 0.5), Y = Math.floor(y + 0.5);
+      // A particle at rest holds the sideways sway it had when it stopped, and lies on its floor.
+      const age = p.still ?? p.age, sx = sway ? sway.amplitude[0] * sinDeg(360 * age / sway.period + p.phase) : 0, sy = sway && p.still === undefined ? sway.amplitude[1] * cosDeg(360 * age / sway.period + p.phase) : 0;
+      const x = p.x + sx, y = p.floor !== null && p.y + sy > p.floor ? p.floor : p.y + sy, X = Math.floor(x + 0.5), Y = Math.floor(y + 0.5);
       p.trail.push([X, Y]);
+      // Where it stands as its dissolve begins: the pattern it thins through is anchored there and moves with it.
+      if (e.dissolve && p.faded === undefined && p.age >= p.life - Math.ceil(e.dissolve * p.life)) p.faded = [X, Y];
       if (p.trail.length > 17) p.trail.shift();
       if (e.face) p.facing = facing(e, p.vx, p.vy, p.facing);
       return [X, Y, x, y];
@@ -417,18 +600,21 @@ function simulate(effect, context) {
     if (drawing) for (const pass of layered ? [true, false] : [null]) alive.forEach((p, i) => {
       const e = p.emitter;
       if (pass !== null && e.behind !== pass) return;
-      const [X, Y] = places[i], ops = (pass === true ? behind : output)[t - first], span = Number.isFinite(p.life) ? p.life : frames - (p.born - first);
+      const [X, Y] = places[i], side = p.back ? back : { output, behind }, ops = (pass === true ? side.behind : side.output)[t - first], span = Number.isFinite(p.life) ? p.life : frames - (p.born - first);
       if (e.blob) {
         // Its radius moves through the keys over its life; the shape layers' grid draws it.
-        const radius = sample(e.blob.radius, Math.min(1, p.age / Math.max(1, span - 1))), [, , x, y] = places[i];
-        if (radius > 0 && x + radius > 0 && y + radius > 0 && x - radius < width && y - radius < height) blobs[t - first].push({ look: e.blob.look, x, y, radius });
+        const age = Math.min(1, p.age / Math.max(1, span - 1)), radius = sample(e.blob.radius, age) * p.size, [, , x, y] = places[i], power = e.blob.power ? sample(e.blob.power, age) : 1;
+        if (radius > 0 && power > 0 && x + radius > 0 && y + radius > 0 && x - radius < width && y - radius < height) blobs[t - first].push({ look: e.blob.look, x, y, radius, ...(power !== 1 && { power }), ...(p.back && { back: true }) });
         else culled++;
         return;
       }
       const share = stages => Math.min(stages - 1, Math.floor(p.age / span * stages));
-      // The last `dissolve` share of a life thins out through an ordered-dither pattern anchored to the canvas.
+      // The last `dissolve` share of a life thins out through an ordered-dither pattern, laid on the canvas where the
+      // particle stood as it began to dissolve and moving with it from there: particles that stay put thin out in step
+      // with each other, and one that travels loses its pixels in one fixed order instead of blinking as it crosses the
+      // pattern. (x, y) is a pixel on the canvas.
       const fading = e.dissolve ? Math.ceil(e.dissolve * p.life) : 0, into = p.age - (p.life - fading);
-      const progress = fading && into >= 0 ? (into + 1) / (fading + 1) : 0;
+      const progress = fading && into >= 0 ? (into + 1) / (fading + 1) : 0, gone = (x, y) => progress > 0 && e.threshold(x - X + p.faded[0], y - Y + p.faded[1]) < progress;
       if (e.trail) {
         const [fromX, fromY] = p.trail[Math.max(0, p.trail.length - 1 - e.trail.length)];
         const pixels = [];
@@ -445,26 +631,31 @@ function simulate(effect, context) {
       // A sprite's own pixel, in its colour (or the one its tint or remap turns it to), goes into the emitter's grid.
       if (e.pixel) {
         if (!inside(X, Y)) { culled++; return; }
-        if (progress && e.threshold(X, Y) < progress) return;
+        if (progress && gone(X, Y)) return;
         const s = sheets[p.index];
         s.chars[Y * width + X] = (whole ? stage : colours?.[p.key] ?? p.key).charCodeAt(0); s.any = true;
         return;
       }
       const sequence = e.face ? e.variants[p.facing] : p.variant;
-      const step = e.play === 'loop' ? (p.age + p.offset) % sequence.length : e.play === 'once' ? Math.min(p.age, sequence.length - 1) : share(sequence.length);
-      const symbol = sequence[step], rows = symbols[symbol], w = rows[0].length, h = rows.length, left = X - Math.floor(w / 2), top = Y - Math.floor(h / 2);
+      const step = e.play === 'loop' ? ((p.still ?? p.age) + p.offset) % sequence.length : e.play === 'once' ? Math.min(p.age, sequence.length - 1) : share(sequence.length);
+      // A spinning particle draws its symbol turned to the nearest 45° step (the other way in a mirrored copy), its middle
+      // pixel kept on the particle.
+      const k = e.spin ? (((Math.round((p.turn + p.spin * (p.still ?? p.age)) / 45) % 8) + 8) % 8) : 0, turned = k ? spun(sequence[step], view?.mirror ? 8 - k : k) : null;
+      const symbol = turned ? turned.name : sequence[step], rows = turned ? turned.rows : symbols[symbol], w = rows[0].length, h = rows.length;
+      const left = X - (turned ? turned.pivot[0] : Math.floor(w / 2)), top = Y - (turned ? turned.pivot[1] : Math.floor(h / 2));
       if (left >= width || top >= height || left + w <= 0 || top + h <= 0) { culled++; return; }
       const recolour = whole ? { ...p.remap, ...Object.fromEntries([...new Set(rows.join(''))].filter(char => !clear(char)).map(char => [char, stage])) } : colours;
       const remap = recolour && Object.keys(recolour).length ? { remap: recolour } : {};
       const x0 = Math.max(0, -left), y0 = Math.max(0, -top), x1 = Math.min(w, width - left), y1 = Math.min(h, height - top);
       if (!progress && x0 === 0 && y0 === 0 && x1 === w && y1 === h) { ops.push({ op: 'stamp', symbol, x: left, y: top, ...remap }); operations++; return; }
-      const kept = rows.slice(y0, y1).map((row, j) => [...row.slice(x0, x1)].map((char, i) => (char === ' ' || e.threshold(left + x0 + i, top + y0 + j) < progress ? '.' : char)).join(''));
+      const kept = rows.slice(y0, y1).map((row, j) => [...row.slice(x0, x1)].map((char, i) => (char === ' ' || gone(left + x0 + i, top + y0 + j) ? '.' : char)).join(''));
       if (kept.some(row => /[^.]/.test(row))) { ops.push({ op: 'grid', x: left + x0, y: top + y0, rows: kept, ...remap }); operations++; }
     });
     // Each sprite emitter's grid (what is left of its sprite, under its pixel particles, oldest first) is cropped to its
     // drawn pixels and goes first in its pass, in emitter order, under the particles drawn as symbols.
+    // A stand-in (depth between) draws only between the back and the front, never in either.
     if (drawing) {
-      const leading = { true: [], false: [] };
+      const leading = { true: [], false: [] }, leadingBack = { true: [], false: [] };
       emitters.forEach((e, index) => {
         const s = sheets[index];
         if (!s?.any) return;
@@ -472,11 +663,15 @@ function simulate(effect, context) {
         for (let c = 0; c < s.chars.length; c++) if (s.chars[c]) { const x = c % width, y = (c - x) / width; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
         const rows = [];
         for (let y = y0; y <= y1; y++) { let row = ''; for (let x = x0; x <= x1; x++) { const code = s.chars[y * width + x]; row += code ? String.fromCharCode(code) : '.'; } rows.push(row); }
-        leading[e.behind].push({ op: 'grid', x: x0, y: y0, rows });
+        const grid = { op: 'grid', x: x0, y: y0, rows };
+        if (e.depth === 'between') between[t - first].push(grid);
+        else (e.depth === 'back' ? leadingBack : leading)[e.behind].push(grid);
         operations++;
       });
       output[t - first].unshift(...leading.false);
       behind[t - first].unshift(...leading.true);
+      back.output[t - first].unshift(...leadingBack.false);
+      back.behind[t - first].unshift(...leadingBack.true);
     }
     // Advance: velocity gains gravity and attraction, loses drag, moves the particle, then meets the floor. A particle
     // that ends or first lands hands the event to its children, which appear there in the next frame.
@@ -485,24 +680,42 @@ function simulate(effect, context) {
       const p = alive[i], e = p.emitter;
       p.age++;
       if (p.age >= p.life) { if (children[p.index].death.length) events.push([p, 'death']); alive.splice(i, 1); continue; }
+      // At rest on its floor (rest), nothing moves it again, and children it trails spawn where it lies.
+      if (p.still !== undefined) { p.px = p.x; p.py = p.y; continue; }
       p.vx += e.gravity[0]; p.vy += e.gravity[1];
+      if (e.turbulence) { const { strength, x, y } = e.turbulence; p.vx += (x(p.x, p.y) - 0.5) * 2 * strength; p.vy += (y(p.x, p.y) - 0.5) * 2 * strength; }
       if (e.attract) {
-        const dx = e.attract.at[0] - p.x, dy = e.attract.at[1] - p.y, distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance > 0.5) { p.vx += dx / distance * e.attract.strength; p.vy += dy / distance * e.attract.strength; }
+        const pull = pulls[p.index], dx = pull[0] - p.x, dy = pull[1] - p.y, distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 0.5) {
+          // A mirrored copy swirls the other way, as its mirror image would.
+          const swirl = view?.mirror ? -e.attract.swirl : e.attract.swirl;
+          p.vx += dx / distance * e.attract.strength; p.vy += dy / distance * e.attract.strength;
+          if (swirl) { p.vx += dy / distance * swirl; p.vy -= dx / distance * swirl; }
+        }
       }
       p.vx *= 1 - e.drag; p.vy *= 1 - e.drag;
+      p.px = p.x; p.py = p.y;
       p.x += p.vx; p.y += p.vy;
-      if (e.floor !== null && p.y > e.floor) {
-        p.y = e.floor;
+      if (p.floor !== null && p.y > p.floor) {
+        p.y = p.floor;
         if (p.vy > 0) p.vy = -p.vy * e.bounce;
         if (!p.landed) { p.landed = true; if (children[p.index].floor.length) events.push([p, 'floor']); }
+        // With rest, a landing whose rebound can't lift it (slower than its gravity or half a pixel a frame; every
+        // landing, without bounce) stops it. Children it lands with (when: floor) still inherit the landing's velocity.
+        if (e.rest && p.vy > -Math.max(0.5, e.gravity[1])) {
+          if (events.at(-1)?.[0] === p) events[events.length - 1] = [{ ...p }, 'floor'];
+          p.vx = 0; p.vy = 0; p.still = p.age;
+        }
       }
     }
     // In the parents' drawing order.
     for (let k = events.length - 1; k >= 0; k--) { const [q, when] = events[k]; for (const index of children[q.index][when]) spawnChildren(index, q, emitters[index].burst, t + 1); }
+    if (counted) ({ operations, culled } = counted);
     if (operations > LIMITS.operations) fail(context.path, `the effect needs more than ${LIMITS.operations} drawing operations; lower counts or frames`);
   }
-  return { output, behind, blobs, operations, culled, stats, cues };
+  // The next cycle's first frame, drawn as the recorded ones are, for the seam review only.
+  const next = loop ? { output: output.pop(), behind: behind.pop(), back: { output: back.output.pop(), behind: back.behind.pop() }, between: between.pop(), blobs: blobs.pop() } : null;
+  return { output, behind, back, between, blobs, next, operations, culled, stats, cues };
 }
 
 // Frame durations eased from `from` to `to` milliseconds across the effect: `in` stays quick and slows at the end,
@@ -518,13 +731,16 @@ function curve(value, path, count) {
 // Letters first: JavaScript lists digit keys before all others, which would reorder the palette.
 const SPARE_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&*+-/:;<=>?@^_~0123456789';
 const hexOf = rgba => '#' + [...rgba].slice(0, rgba[3] === 255 ? 3 : 4).map(v => v.toString(16).padStart(2, '0')).join('');
-// An inline recipe or pose source (a pose source compiles first), rendered, with its poses' metadata when it has some.
+// The sources a symbol, sprite or trail may take frames from: a recipe, or a pose, fluid or wave source compiled first
+// (a fluid's or wave's effects are its animations, so a simulated explosion can sit inside an effect).
+const SOURCES = { 'pixelforge-poses': compilePoses, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves };
+// An inline recipe or source, compiled and rendered, with its poses' metadata when it has some.
 function loadSource(spec, path) {
   if (typeof spec === 'string' || (isObject(spec) && spec.revision !== undefined && spec.version === undefined)) fail(path, 'file and revision references are resolved by the CLI and MCP; inline the recipe to compile here');
-  if (!isObject(spec)) fail(path, 'expected a recipe or a pixelforge-poses source, inline or as a file reference');
-  if (spec.format !== undefined && spec.format !== 'pixelforge-poses') fail(path, `expected a recipe or a pixelforge-poses source, not ${spec.format}`);
-  const compiled = spec.format === 'pixelforge-poses' ? compilePoses(spec) : null, recipe = compiled?.recipe ?? spec;
-  return { recipe, project: renderProject(recipe), poses: compiled?.metadata.poses ?? null };
+  if (!isObject(spec)) fail(path, 'expected a recipe or a pixelforge-poses, pixelforge-fluid or pixelforge-wave source, inline or as a file reference');
+  if (spec.format !== undefined && !Object.hasOwn(SOURCES, spec.format)) fail(path, `expected a recipe or a pixelforge-poses, pixelforge-fluid or pixelforge-wave source, not ${spec.format}`);
+  const compiled = spec.format === undefined ? null : SOURCES[spec.format](spec), recipe = compiled?.recipe ?? spec;
+  return { recipe, project: renderProject(recipe), poses: spec.format === 'pixelforge-poses' ? compiled.metadata.poses : null };
 }
 // The frames `entry` names: one `frame` (default the first) or every frame of an `animation`, in playing order.
 function framesOf(entry, source, path) {
@@ -546,7 +762,7 @@ function framesOf(entry, source, path) {
  * takes a spare key. Translucent overlaps become their own colour.
  */
 export function recipeSprite(entry, palette, path) {
-  if (!isObject(entry)) fail(path, 'expected rows, or { recipe, frame } or { recipe, animation }: a frame or an animation of a recipe or pose source');
+  if (!isObject(entry)) fail(path, 'expected rows, or { recipe, frame } or { recipe, animation }: a frame or an animation of a recipe or a pose, fluid or wave source');
   fields(entry, ['recipe', 'frame', 'animation'], path);
   const source = loadSource(entry.recipe, `${path}.recipe`), { project } = source;
   if (project.height > 256) fail(`${path}.recipe`, `its canvas is ${project.width}×${project.height}; a symbol has at most 256 rows`);
@@ -607,6 +823,68 @@ export function recipePoints(entry, path, key = 'point') {
   return points;
 }
 
+// Turned copies of an effect: `turn: { angles, about, mirror }` compiles one copy per angle (and a mirrored one of each),
+// named <effect>-<angle> and <effect>-<angle>-mirror, with its geometry turned about `about` (default the canvas centre)
+// instead of its pixels rotated, so every direction is drawn crisp. The copy at 0 unmirrored is the effect as drawn.
+const QUARTERS = { 0: [1, 0], 90: [0, 1], 180: [-1, 0], 270: [0, -1] };
+function turnsOf(effect, base, path, width, height) {
+  if (effect.turn === undefined) return [{ name: base }];
+  const turn = effect.turn;
+  if (!isObject(turn)) fail(`${path}.turn`, 'expected { angles, about, mirror }: the directions to compile copies of this effect in');
+  fields(turn, ['angles', 'about', 'mirror'], `${path}.turn`);
+  const angles = turn.angles ?? [0];
+  if (!Array.isArray(angles) || !angles.length || angles.length > 16) fail(`${path}.turn.angles`, 'expected 1–16 whole degrees, clockwise from the direction the effect is drawn in (0) to 359: [0, 90, 180, 270] for four directions');
+  angles.forEach((angle, i) => integer(angle, `${path}.turn.angles[${i}]`, 0, 359));
+  if (new Set(angles).size !== angles.length) fail(`${path}.turn.angles`, 'list each angle once');
+  const about = turn.about === undefined ? [width / 2, height / 2] : pair(turn.about, `${path}.turn.about`, -4096, 4096), mirror = flag(turn.mirror, `${path}.turn.mirror`);
+  // A sprite's pixels are drawn as they are, so an effect built on one can't turn.
+  if (Array.isArray(effect.emitters) && effect.emitters.some(e => isObject(e) && e.sprite !== undefined)) fail(`${path}.turn`, 'a sprite emitter can\'t turn: its sprite is drawn as it is; leave turn off this effect');
+  if (Array.isArray(effect.layers) && effect.layers.some(l => isObject(l) && l.kind === 'aura')) fail(`${path}.turn`, 'an aura can\'t turn: its sprite is drawn as it is; leave turn off this effect');
+  const copies = [];
+  for (const angle of angles) for (const flip of mirror ? [false, true] : [false]) {
+    const name = `${base}-${angle}${flip ? '-mirror' : ''}`;
+    if (name.length > 64) fail(`${path}.turn`, `${name} would be longer than 64 characters; shorten the effect's name`);
+    copies.push({ name, view: angle === 0 && !flip ? null : turnView(angle, flip, about) });
+  }
+  return copies;
+}
+// Mirroring flips across the upright line through `about`, then the turn goes clockwise; quarter turns are exact.
+function turnView(turn, mirror, [ax, ay]) {
+  const [c, s] = QUARTERS[turn] ?? [cosDeg(turn), sinDeg(turn)];
+  const vec = (dx, dy) => { const x = mirror ? -dx : dx; return [x * c - dy * s, x * s + dy * c]; };
+  // Back from the copy to the drawn effect: turned back, then flipped.
+  const unvec = (dx, dy) => { const x = dx * c + dy * s; return [mirror ? -x : x, -dx * s + dy * c]; };
+  return {
+    turn, mirror, vec, point: ([x, y]) => { const [vx, vy] = vec(x - ax, y - ay); return [ax + vx, ay + vy]; }, dir: theta => (mirror ? 180 - theta : theta) + turn,
+    unpoint: ([x, y]) => { const [ux, uy] = unvec(x - ax, y - ay); return [ax + ux, ay + uy]; }
+  };
+}
+const isPair = value => Array.isArray(value) && value.length === 2 && value.every(v => typeof v === 'number' && Number.isFinite(v));
+const negated = value => (Array.isArray(value) ? value.map(v => (typeof v === 'number' ? -v : v)) : typeof value === 'number' ? -value : value);
+// A shape layer in a turned copy: its places turn about the copy's pivot and the kinds drawn round a centre take the
+// turn as tilt, so a slash keeps its crescent and a beam its caps; mirroring also reverses arcs and spins. Fields that
+// are not well formed are left for the layer reader to report. Floors and the looks' light stay as they are.
+function turnLayer(layer, view) {
+  if (!view || !isObject(layer)) return layer;
+  const out = { ...layer }, place = p => (isPair(p) ? view.point(p) : p), shift = p => (isPair(p) ? view.vec(p[0], p[1]) : p);
+  out.at = place(layer.at);
+  if (layer.kind === 'trail') {
+    if (Array.isArray(layer.points)) out.points = layer.points.map(shift);
+    if (layer.pivot !== undefined) out.pivot = isPair(layer.pivot) ? shift(layer.pivot) : Array.isArray(layer.pivot) ? layer.pivot.map(shift) : layer.pivot;
+  }
+  if (layer.to !== undefined) out.to = place(layer.to);
+  if (Array.isArray(layer.through)) out.through = layer.through.map(place);
+  if (Array.isArray(layer.path)) out.path = layer.path.map(place);
+  if (layer.drift !== undefined) out.drift = isPair(layer.drift) ? shift(layer.drift) : Array.isArray(layer.drift) ? layer.drift.map(key => (isPair(key) ? shift(key) : key)) : layer.drift;
+  if (['ring', 'slash', 'beam', 'glyph', 'star', 'burst'].includes(layer.kind)) { const tilt = typeof layer.tilt === 'number' ? layer.tilt : 0; out.tilt = view.turn + (view.mirror ? -tilt : tilt); }
+  if (view.mirror) {
+    if (layer.kind === 'slash' && isPair(layer.arc)) out.arc = [180 - layer.arc[0], 180 - layer.arc[1]];
+    if (layer.kind === 'star') out.angle = 180 - (typeof layer.angle === 'number' ? layer.angle : 0);
+    if ((layer.kind === 'star' || layer.kind === 'glyph') && layer.spin !== undefined) out.spin = negated(layer.spin);
+  }
+  return out;
+}
+
 // A trail layer with follow: { recipe, animation, point } takes that point's place in each frame of the animation as its
 // points, frame for frame (null where the point is missing; the frames after the animation have none).
 function followed(layer, path, frames) {
@@ -628,7 +906,7 @@ export function compileEffects(source) {
   const width = integer(source.width, 'fx.width', 1, 256), height = integer(source.height, 'fx.height', 1, 256);
   if (source.symbols !== undefined && (!isObject(source.symbols) || !Object.keys(source.symbols).length)) fail('fx.symbols', 'expected named symbols for the particles to draw');
   // An animation's frames are a sequence for sprites and auras, never stamped, so they stay out of the recipe's symbols.
-  const symbols = { ...source.symbols }, sequences = {};
+  const symbols = { ...source.symbols }, sequences = {}, spun = new Map();
   for (const [name, rows] of Object.entries(symbols)) {
     identifier(name, `fx.symbols.${name}`);
     if (isObject(rows)) {
@@ -637,58 +915,247 @@ export function compileEffects(source) {
       continue;
     }
     if (!Array.isArray(rows) || !rows.length || rows.length > 256 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string' || row.length !== rows[0].length)) fail(`fx.symbols.${name}`, 'expected 1–256 equal-width text rows, or { recipe, frame } or { recipe, animation }: a frame or an animation of a recipe or pose source');
+    // Every character is a palette key or a clear one ('.' or a space), checked here so the error names the fx source.
+    rows.forEach((row, j) => { for (const char of row) if (char !== '.' && char !== ' ' && !Object.hasOwn(palette, char)) fail(`fx.symbols.${name}[${j}]`, `unknown palette character ${JSON.stringify(char)}; the palette has ${Object.keys(palette).join(' ')}, and . or a space is clear`); });
   }
   if (!isObject(source.effects) || !Object.keys(source.effects).length || Object.keys(source.effects).length > LIMITS.effects) fail('fx.effects', `expected 1–${LIMITS.effects} named effects`);
-  const frames = [], animations = {}, metadata = { format: 'pixelforge-fx-metadata', version: 1, effects: {} }, seen = new Set();
-  // Shape painting shares one work budget across every effect and frame (shapes.js SHAPE_WORK).
-  const shapeWork = { spent: 0 };
+  // nextFrames: for each loop, the frame that follows its last, rendered only to review the seam.
+  // loopNotes: warnings found while reading, such as a stream spanning a loop whose head keys don't close.
+  const frames = [], nextFrames = [], loopNotes = [], animations = {}, metadata = { format: 'pixelforge-fx-metadata', version: 1, effects: {} }, seen = new Map();
+  // Shape painting, and measuring auras' distance fields, share one work budget across every effect and frame
+  // (shapes.js SHAPE_WORK).
+  // touching: the canvas sides each animation may draw on (its effect's edges, turned with a turned copy).
+  const shapeWork = { spent: 0 }, pointed = new Set(), touching = new Map();
   let totalFrames = 0;
-  for (const [name, effect] of Object.entries(source.effects)) {
-    const path = `fx.effects.${name}`;
-    identifier(name, path);
-    // Effect names become animation and frame names, which must be unique ignoring case for portable bundles.
-    if (seen.has(name.toLowerCase())) fail(path, 'effect names must be unique ignoring case; they name animations and frames');
-    seen.add(name.toLowerCase());
-    fields(effect, ['frames', 'duration', 'loop', 'seed', 'emitters', 'layers', 'looks', 'cleanup'], path);
-    const count = integer(effect.frames, `${path}.frames`, 1, 256), loop = effect.loop ?? false;
-    // The recipe's limits on frames, checked before anything is simulated or painted rather than after.
-    totalFrames += count;
-    if (totalFrames > 256) fail('fx.effects', `the effects make ${totalFrames} frames; a recipe holds at most 256`);
-    if (totalFrames * width * height > FRAME_AREA) fail('fx.effects', `the effects make ${totalFrames} frames of ${width}×${height}, more than the 4,194,304 pixels a recipe's frames share; use fewer frames or a smaller canvas`);
-    if (typeof loop !== 'boolean') fail(`${path}.loop`, 'expected a boolean');
-    const durations = Array.isArray(effect.duration)
-      ? (effect.duration.length === count ? effect.duration.map((d, i) => integer(d, `${path}.duration[${i}]`, 1, 60000)) : fail(`${path}.duration`, `expected one duration or ${count}`))
-      : isObject(effect.duration) ? curve(effect.duration, `${path}.duration`, count)
-        : Array(count).fill(integer(effect.duration ?? 100, `${path}.duration`, 1, 60000));
-    const seed = integer(effect.seed ?? 1, `${path}.seed`, 0, 2147483647), context = { frames: count, loop, seed, symbols, sequences, palette, width, height, path };
-    // Shape layers (rings, slashes, beams, bolts, glyphs, stars, bursts, auras, trails) draw between `behind` particles and
-    // the rest. A trail that follows a point of an animation takes that point's place in each frame as its points.
-    const shapes = readShapes(Array.isArray(effect.layers) ? { ...effect, layers: effect.layers.map((layer, i) => followed(layer, `${path}.layers[${i}]`, count)) } : effect, path, context);
-    context.looks = shapes ? shapes.looks.map(look => look.name) : [];
-    const list = effect.emitters ?? (shapes ? [] : undefined);
-    if (!Array.isArray(list) || (!list.length && (!shapes || effect.emitters !== undefined)) || list.length > LIMITS.emitters) fail(`${path}.emitters`, `expected 1–${LIMITS.emitters} emitters; leave emitters out for an effect of shape layers only`);
-    const emitters = [];
-    list.forEach((emitter, i) => emitters.push(readEmitter(emitter, `${path}.emitters[${i}]`, context, emitters)));
-    const run = emitters.length ? simulate({ frames: count, loop, seed, emitters }, context)
-      : { output: Array.from({ length: count }, () => []), behind: Array.from({ length: count }, () => []), blobs: Array.from({ length: count }, () => []), operations: 0, culled: 0, stats: [], cues: Array.from({ length: count }, () => ({})) };
-    if (shapes) for (const layer of shapes.layers) if (layer.cue && !Object.hasOwn(run.cues[layer.t0], layer.cue)) run.cues[layer.t0][layer.cue] = [Math.floor(layer.at[0] + 0.5), Math.floor(layer.at[1] + 0.5)];
-    const spawned = run.stats.reduce((sum, s) => sum + s.spawned, 0);
-    if (spawned > LIMITS.spawned) fail(`${path}.emitters`, `more than ${LIMITS.spawned} particles; lower burst, rate or frames`);
-    // Cues become named frame points, which atlases export for game code (a shake or a pause on the impact frame).
-    const cues = [];
-    const names = run.output.map((front, i) => {
-      const grid = shapes && renderShapes(shapes, i, width, height, run.blobs[i], shapeWork);
-      const ops = [...run.behind[i], ...(grid ? [{ op: 'grid', x: grid.x, y: grid.y, rows: grid.rows }] : []), ...front];
-      const points = Object.keys(run.cues[i]).length ? run.cues[i] : null;
-      if (points) for (const [cue, at] of Object.entries(points)) cues.push({ name: cue, frame: i, at });
-      frames.push({ name: `${name}-${i}`, duration: durations[i], ...(points && { points }), ...(ops.length && { ops }) });
-      return `${name}-${i}`;
-    });
-    animations[name] = { frames: names, ...(!loop && { loop: false }) };
-    metadata.effects[name] = { frames: count, loop, seed: effect.seed ?? 1, operations: run.operations, culled: run.culled, emitters: run.stats, ...(shapes?.layers.length ? { layers: shapes.layers.map(l => ({ kind: l.kind, look: l.look, frames: [l.t0, l.t1] })) } : {}), ...(cues.length && { cues }) };
+  // A broken layer or emitter is noted and the rest of the source is still read, so one reply names every one (up to
+  // ten), as for recipes. An effect with a noted error is not simulated; anything else still stops at once.
+  const noted = [];
+  const note = (error, inside) => {
+    if (!(error instanceof PixelError) || error.errors || !inside(error.path)) throw error;
+    noted.push(error);
+    if (noted.length === 10) throw joinErrors(noted, true);
+  };
+  try {
+  effects: for (const [base, effect] of Object.entries(source.effects)) {
+    const path = `fx.effects.${base}`;
+    identifier(base, path);
+    fields(effect, ['frames', 'duration', 'loop', 'seed', 'emitters', 'layers', 'looks', 'cleanup', 'turn', 'light', 'edges'], path);
+    // light: true writes the light track into the frames as a point named light, which scene lights can follow.
+    const lightPoint = flag(effect.light, `${path}.light`), edges = readEdges(effect.edges, `${path}.edges`);
+    for (const { name, view } of turnsOf(effect, base, path, width, height)) {
+    if (lightPoint) pointed.add(name);
+      // Effect names become animation and frame names, which must be unique ignoring case for portable bundles.
+      // seen maps each name taken to the effect whose back or front part it is, or to null.
+      if (seen.has(name.toLowerCase())) fail(path, seen.get(name.toLowerCase()) ? `${seen.get(name.toLowerCase())} draws something behind a character, so it also makes the animation ${name}; rename one of the two effects` : `effect names must be unique ignoring case; they name animations and frames${name === base ? '' : ` (${name} is a turned copy of ${base})`}`);
+      seen.set(name.toLowerCase(), null);
+      touching.set(name, turnedEdges(edges, view));
+      const count = integer(effect.frames, `${path}.frames`, 1, 256), loop = effect.loop ?? false;
+      // The recipe's limits on frames, checked before anything is simulated or painted rather than after.
+      const budget = added => {
+        totalFrames += added;
+        if (totalFrames > 256) fail('fx.effects', `the effects make ${totalFrames} frames; a recipe holds at most 256`);
+        if (totalFrames * width * height > FRAME_AREA) fail('fx.effects', `the effects make ${totalFrames} frames of ${width}×${height}, more than the 4,194,304 pixels a recipe's frames share; use fewer frames or a smaller canvas`);
+      };
+      budget(count);
+      if (typeof loop !== 'boolean') fail(`${path}.loop`, 'expected a boolean');
+      const durations = Array.isArray(effect.duration)
+        ? (effect.duration.length === count ? effect.duration.map((d, i) => integer(d, `${path}.duration[${i}]`, 1, 60000)) : fail(`${path}.duration`, `expected one duration or ${count}`))
+        : isObject(effect.duration) ? curve(effect.duration, `${path}.duration`, count)
+          : Array(count).fill(integer(effect.duration ?? 100, `${path}.duration`, 1, 60000));
+      const seed = integer(effect.seed ?? 1, `${path}.seed`, 0, 2147483647), context = { frames: count, loop, seed, symbols, sequences, palette, width, height, path, view, spun, work: shapeWork };
+      // Shape layers (rings, slashes, beams, bolts, glyphs, stars, bursts, auras, trails) draw between `behind` particles and
+      // the rest. A trail that follows a point of an animation takes that point's place in each frame as its points.
+      const before = noted.length;
+      let shapes = null;
+      try { shapes = readShapes(Array.isArray(effect.layers) ? { ...effect, layers: effect.layers.map((layer, i) => turnLayer(followed(layer, `${path}.layers[${i}]`, count), view)) } : effect, path, context); }
+      catch (error) { note(error, at => at.startsWith(`${path}.`) && !at.startsWith(`${path}.emitters`)); }
+      // Layers that failed to read leave the looks unknown (null), and an effect with layers needs no emitters.
+      const layered = Boolean(shapes) || noted.length > before;
+      context.looks = shapes ? shapes.looks.map(look => look.name) : noted.length > before ? null : [];
+      // Once per effect, not per turned copy: what a layer spanning the loop reads at the end of each frame must close.
+      if (shapes && name === turnsOf(effect, base, path, width, height)[0].name) shapes.layers.forEach((layer, i) => {
+        if (!layer.seams?.length) return;
+        const keys = layer.seams.filter(key => key !== 'reveal');
+        loopNotes.push(`${path}.layers[${i}]: this ${layer.kind} spans the loop, so ${[...(keys.length ? [`its ${keys.join(' and ')} keys must end where they start`] : []), ...(layer.seams.includes('reveal') ? ['a reveal draws it on again every cycle (leave reveal out)'] : [])].join(', and ')}; otherwise the loop jumps`);
+      });
+      const list = effect.emitters ?? (layered ? [] : undefined);
+      try { if (!Array.isArray(list) || (!list.length && (!layered || effect.emitters !== undefined)) || list.length > LIMITS.emitters) fail(`${path}.emitters`, `expected 1–${LIMITS.emitters} emitters; leave emitters out for an effect of shape layers only`); }
+      catch (error) { note(error, at => at === `${path}.emitters`); continue effects; }
+      const emitters = [];
+      list.forEach((emitter, i) => {
+        const at = `${path}.emitters[${i}]`;
+        try { emitters.push(readEmitter(emitter, at, context, emitters)); }
+        catch (error) {
+          note(error, where => where === at || where.startsWith(`${at}.`) || where.startsWith(`${at}[`));
+          // A stand-in keeps the failed emitter's name, so its children are read without a false "no parent" error.
+          emitters.push({ name: isObject(emitter) && typeof emitter.name === 'string' ? emitter.name : undefined });
+        }
+      });
+      if (noted.length > before) continue effects;
+      // An emitter spanning a loop goes round its keys every cycle, so a path, sweep, throttle, keyed rate or ring grow
+      // must end where it starts; otherwise new particles jump at the loop point. Once per effect, not per turned copy.
+      if (loop && name === turnsOf(effect, base, path, width, height)[0].name) emitters.forEach((e, i) => {
+        if (e.parent !== null || e.start !== 0 || e.end !== count) return;
+        const source = list[i], same = (a, b) => JSON.stringify(a) === JSON.stringify(b), open = [];
+        if (Array.isArray(source.path) && !same(source.path[0], source.path.at(-1))) open.push('path');
+        for (const key of ['sweep', 'throttle', 'rate']) if (Array.isArray(source[key]) && source[key][0] !== source[key].at(-1)) open.push(key);
+        if (Array.isArray(source.ring?.grow) && source.ring.grow[0] !== source.ring.grow.at(-1)) open.push('ring grow');
+        if (open.length) loopNotes.push(`${path}.emitters[${i}]: this emitter spans the loop, so its ${open.join(' and ')} must end where ${open.length === 1 ? 'it starts' : 'they start'}; otherwise its new particles jump at the loop point`);
+      });
+      // An effect with anything behind a character (or a stand-in between) also compiles <name>-back and <name>-front:
+      // what a game draws under its character and over it. The whole effect draws the back, the stand-in, then the front.
+      const split = emitters.some(e => e.depth !== null && e.depth !== 'front') || (shapes?.layers.some(l => l.depth !== 'front') ?? false);
+      const parts = split ? { back: `${name}-back`, front: `${name}-front` } : null;
+      if (parts) {
+        for (const part of Object.values(parts)) {
+          if (seen.has(part.toLowerCase())) fail(path, `${name} draws something behind a character, so it also makes the animation ${part}; another effect has that name, so rename one`);
+          seen.set(part.toLowerCase(), name);
+        }
+        budget(count * 2);
+      }
+      const empty = () => Array.from({ length: count }, () => []);
+      const run = emitters.length ? simulate({ frames: count, loop, seed, emitters, view }, context)
+        : { output: empty(), behind: empty(), back: { output: empty(), behind: empty() }, between: empty(), blobs: empty(), operations: 0, culled: 0, stats: [], cues: Array.from({ length: count }, () => ({})),
+          next: loop ? { output: [], behind: [], back: { output: [], behind: [] }, between: [], blobs: [] } : null };
+      if (shapes) for (const layer of shapes.layers) if (layer.cue && !Object.hasOwn(run.cues[layer.t0], layer.cue)) run.cues[layer.t0][layer.cue] = [Math.floor(layer.at[0] + 0.5), Math.floor(layer.at[1] + 0.5)];
+      const spawned = run.stats.reduce((sum, s) => sum + s.spawned, 0);
+      if (spawned > LIMITS.spawned) fail(`${path}.emitters`, `more than ${LIMITS.spawned} particles; lower burst, rate or frames`);
+      // Cues become named frame points, which atlases export for game code (a shake or a pause on the impact frame).
+      const cues = [], partFrames = { back: [], front: [] };
+      const gridOp = grid => (grid ? [{ op: 'grid', x: grid.x, y: grid.y, rows: grid.rows }] : []);
+      // Frame i's operations from what the particles drew in it (drawn: output, behind, back, between, blobs), split into
+      // the sides behind and in front of a character when the effect has parts. Frame `count` of a loop is the one after
+      // its last, which shapes draw through `wrap`.
+      // Frames are drawn in order with one memory, so the looks' bands hold from frame to frame (shapes.js holdBands).
+      const memory = shapes?.looks.some(look => look.margins) ? holdBands() : null;
+      const opsAt = (i, drawn, work) => {
+        const wrap = i === count ? count : 0;
+        const grid = shapes && renderShapes(shapes, i, width, height, drawn.blobs, work, false, split, wrap, memory);
+        // Looks with front: true draw a second grid over the particles.
+        const over = shapes?.looks.some(look => look.front) ? renderShapes(shapes, i, width, height, drawn.blobs, work, true, split, wrap, memory) : null;
+        if (!parts) return { ops: [...drawn.behind, ...gridOp(grid), ...drawn.output, ...gridOp(over)] };
+        // Each side keeps the usual order (behind particles, shapes, particles, front looks), and the back side goes first.
+        const back = [...drawn.back.behind, ...gridOp(grid?.parts.back), ...drawn.back.output, ...gridOp(over?.parts.back)];
+        const front = [...drawn.behind, ...gridOp(grid?.parts.front), ...drawn.output, ...gridOp(over?.parts.front)];
+        return { ops: [...back, ...drawn.between, ...front], back, front };
+      };
+      const drawnAt = i => ({ output: run.output[i], behind: run.behind[i], back: { output: run.back.output[i], behind: run.back.behind[i] }, between: run.between[i], blobs: run.blobs[i] });
+      // A loop's bands go into its first frame holding what its last frame leaves them: the cycle is read once to settle
+      // that, then drawn. The reading has a budget of its own as large, so a loop that draws within the budget compiles
+      // whether or not its looks hold (charged to the drawing's, a held loop had half the room).
+      if (memory && loop) {
+        const reads = shapes.looks.map(() => []), traced = { spent: 0 };
+        memory.trace = (look, codes) => reads[look].push(codes);
+        for (let i = 0; i < count; i++) opsAt(i, drawnAt(i), traced);
+        settleHolds(memory, reads, width * height);
+      }
+      const names = run.output.map((output, i) => {
+        const points = Object.keys(run.cues[i]).length ? run.cues[i] : null;
+        if (points) for (const [cue, at] of Object.entries(points)) cues.push({ name: cue, frame: i, at });
+        const { ops, back, front } = opsAt(i, drawnAt(i), shapeWork);
+        if (parts) for (const [side, sideOps] of [['back', back], ['front', front]]) partFrames[side].push({ name: `${parts[side]}-${i}`, duration: durations[i], ...(points && { points }), ...(sideOps.length && { ops: sideOps }) });
+        frames.push({ name: `${name}-${i}`, duration: durations[i], ...(points && { points }), ...(ops.length && { ops }) });
+        return `${name}-${i}`;
+      });
+      // The frame after a loop's last, for the seam review; it takes its own painting budget and joins no animation.
+      if (loop) nextFrames.push({ name: `${name}-next`, duration: 100, ...((ops => ops.length && { ops })(opsAt(count, run.next, { spent: 0 }).ops)) });
+      animations[name] = { frames: names, ...(!loop && { loop: false }) };
+      metadata.effects[name] = { frames: count, loop, seed: effect.seed ?? 1, ...(view !== undefined && name !== base && { turn: { of: base, angle: view?.turn ?? 0, mirror: view?.mirror ?? false } }), ...(parts && { parts }), operations: run.operations, culled: run.culled, emitters: run.stats, ...(shapes?.layers.length ? { layers: shapes.layers.map(l => ({ kind: l.kind, look: l.look, frames: [l.t0, l.t1] })) } : {}), ...(cues.length && { cues }) };
+      if (parts) for (const side of ['back', 'front']) {
+        frames.push(...partFrames[side]);
+        animations[parts[side]] = { frames: partFrames[side].map(frame => frame.name), ...(!loop && { loop: false }) };
+        metadata.effects[parts[side]] = { frames: count, loop, seed: effect.seed ?? 1, part: { of: name, side } };
+      }
+    }
   }
+  } catch (error) { throw noted.length && error instanceof PixelError && !error.errors ? joinErrors([...noted, error]) : error; }
+  if (noted.length) throw joinErrors(noted);
   if (frames.length > 256) fail('fx.effects', `the effects make ${frames.length} frames; a recipe holds at most 256`);
+  for (const { name, rows } of spun.values()) symbols[name] = rows;
   const recipe = { version: 1, name: source.name, width, height, palette, ...(Object.keys(symbols).length && { symbols }), ...(source.anchor !== undefined && { anchor: source.anchor }), frames, animations, ...(source.sheet !== undefined && { sheet: source.sheet }) };
-  renderProject(recipe);
-  return JSON.parse(JSON.stringify({ recipe, metadata }));
+  // A light track for game code: in each frame, where the effect's bright pixels are (weighted by brightness), how much
+  // light they make (glow, in full-white pixels) and their mean colour, or null where nothing bright is drawn.
+  const lightOf = data => {
+    let sum = 0, sx = 0, sy = 0, r = 0, g = 0, bl = 0;
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+      const alpha = data[i + 3] / 255, lum = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255;
+      if (!alpha || lum < 0.5) continue;
+      const w = lum * alpha;
+      sum += w; sx += (p % width) * w; sy += Math.floor(p / width) * w; r += data[i] * w; g += data[i + 1] * w; bl += data[i + 2] * w;
+    }
+    if (!sum) return null;
+    const hex = v => Math.round(v / sum).toString(16).padStart(2, '0');
+    return { at: [Math.round(sx / sum), Math.round(sy / sum)], glow: Math.round(sum * 100) / 100, color: `#${hex(r)}${hex(g)}${hex(bl)}` };
+  };
+  // A review of what each animation delivers: a loop's seam (the pixels that change from its last frame to its first)
+  // against its largest ordinary step, warned about when the loop jumps; a one-shot's residue, the pixels its last
+  // frame still draws (0 when it ends empty).
+  const project = renderProject(recipe), at = new Map(recipe.frames.map((frame, i) => [frame.name, project.frames[i].data])), warnings = [...loopNotes];
+  // The frame each loop should go on to after its last, drawn with the same palette and symbols.
+  if (nextFrames.length) {
+    const probe = renderProject({ ...recipe, frames: nextFrames, animations: { next: { frames: nextFrames.map(frame => frame.name) } } });
+    nextFrames.forEach((frame, i) => at.set(frame.name, probe.frames[i].data));
+  }
+  const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) n++; return n; };
+  // The pixels a frame draws on each side's outermost row or column.
+  const onEdges = data => {
+    const drawn = (x, y) => data[(y * width + x) * 4 + 3] !== 0, count = { left: 0, right: 0, top: 0, bottom: 0 };
+    for (let x = 0; x < width; x++) { if (drawn(x, 0)) count.top++; if (drawn(x, height - 1)) count.bottom++; }
+    for (let y = 0; y < height; y++) { if (drawn(0, y)) count.left++; if (drawn(width - 1, y)) count.right++; }
+    return count;
+  };
+  const frameOf = new Map(recipe.frames.map(frame => [frame.name, frame]));
+  for (const [name, animation] of Object.entries(animations)) {
+    const data = animation.frames.map(frame => at.get(frame)), effect = metadata.effects[name], of = effect.turn?.of ?? name;
+    const residue = () => { let n = 0; const last = data[data.length - 1]; for (let i = 3; i < last.length; i += 4) if (last[i]) n++; return n; };
+    const steps = () => data.slice(1).map((frame, k) => differ(data[k], frame));
+    // A part (what goes behind a character, or in front) is reviewed with its whole effect; it gets its own residue or seam.
+    if (effect.part) {
+      if (animation.loop === false) effect.residue = residue();
+      else { const all = steps(); effect.seam = { pixels: data.length > 1 ? differ(data[data.length - 1], data[0]) : 0, largestStep: all.length ? Math.max(...all) : 0 }; }
+      continue;
+    }
+    effect.light = data.map(lightOf);
+    // Frames are named per animation, so each frame takes its own light; a cue of the same name keeps its place. The
+    // parts' frames take the whole effect's light, so game code drawing them finds it too.
+    if (pointed.has(name)) animation.frames.forEach((frameName, k) => {
+      if (!effect.light[k]) return;
+      for (const target of [frameName, ...(effect.parts ? [`${effect.parts.back}-${k}`, `${effect.parts.front}-${k}`] : [])]) {
+        const frame = frameOf.get(target);
+        if (!frame.points?.light) frame.points = { ...frame.points, light: effect.light[k].at };
+      }
+    });
+    // What reaches a canvas edge is cut off there, unless the effect is meant to touch that side (its edges).
+    const edges = {};
+    data.forEach((frame, k) => {
+      const count = onEdges(frame);
+      for (const side of EDGE_SIDES) if (count[side]) { const e = (edges[side] ??= { pixels: 0, frames: [k, k] }); e.pixels = Math.max(e.pixels, count[side]); e.frames[1] = k; }
+    });
+    if (Object.keys(edges).length) effect.edges = edges;
+    const cut = EDGE_SIDES.filter(side => edges[side] && !touching.get(name).includes(side));
+    if (cut.length) {
+      const where = cut.map(side => `${side}: up to ${edges[side].pixels} pixel${edges[side].pixels === 1 ? '' : 's'} a frame, ${edges[side].frames[0] === edges[side].frames[1] ? `frame ${edges[side].frames[0]}` : `frames ${edges[side].frames[0]}–${edges[side].frames[1]}`}`).join('; ');
+      warnings.push(`fx.effects.${of}: ${name} draws on the canvas's ${cut.length === 1 ? `${cut[0]} edge` : `${cut.slice(0, -1).join(', ')} and ${cut.at(-1)} edges`} (${where}), so whatever reaches past it is cut off: keep it further inside or grow the canvas, or, if the effect is meant to touch that side (a bolt from the sky, a figure standing on the bottom row), list it in edges`);
+    }
+    if (animation.loop === false) { effect.residue = residue(); continue; }
+    // A seamless loop's first frame is exactly the frame that follows its last: jump counts the pixels where they differ.
+    // How much the last frame changes into the first (pixels) against the largest ordinary step is shown too, but a
+    // seamless loop can have its largest change there by chance, so only a jump is warned about.
+    const all = steps(), seam = data.length > 1 ? differ(data[data.length - 1], data[0]) : 0, largest = all.length ? Math.max(...all) : 0, jump = differ(at.get(`${name}-next`), data[0]);
+    effect.seam = { pixels: seam, largestStep: largest, jump };
+    if (jump) warnings.push(`fx.effects.${of}: ${name} jumps at its loop point: its first frame differs in ${jump} pixel${jump === 1 ? '' : 's'} from the frame that should follow its last, so end keys where they start, spin and sway by whole turns, close paths, and give flicker an even frame count`);
+  }
+  return JSON.parse(JSON.stringify({ recipe, metadata, ...(warnings.length && { warnings }) }));
+}
+
+// The canvas sides an effect is meant to touch: each once.
+function readEdges(value, path) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 4 || value.some(side => !EDGE_SIDES.includes(side)) || new Set(value).size !== value.length) fail(path, 'expected the canvas sides the effect is meant to touch, each once: left, right, top or bottom (top for a bolt from the sky, bottom for a figure standing on the bottom row)');
+  return value;
+}
+// The sides a turned copy may touch: each listed side turned with the copy, and both sides of a corner it turns toward.
+function turnedEdges(sides, view) {
+  if (!view || !sides.length) return sides;
+  return EDGE_SIDES.filter(side => sides.some(listed => { const apart = (((view.dir(SIDE_ANGLE[listed]) - SIDE_ANGLE[side]) % 360) + 360) % 360; return apart <= 45 || apart >= 315; }));
 }

@@ -1,6 +1,6 @@
 // Motion templates lower to editable poses. Kept separate from rasterization and file I/O.
 import { PixelError } from './core.js';
-import { sinDeg, cosDeg } from './craft.js';
+import { sinDeg, cosDeg, rasterizeMass } from './craft.js';
 
 const fail = (path, message) => { throw new PixelError(path, message); };
 const id = (value, path) => { if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of at most 64 characters'); return value; };
@@ -82,17 +82,17 @@ export function expandMotions(input, compileRest, probeJoints) {
     if (!existing && rest.markers?.some(m => m.name === marker)) fail(`poses.rig.legs[${i}]`, `marker ${marker} is already used for another point`);
     return { last: last.name, point, marker, x: restData.parts[last.name].points[point][0] };
   });
-  const generated = [], animations = { ...(source.animations ?? {}) }, motionInfo = {};
+  const generated = [], animations = { ...(source.animations ?? {}) }, motionInfo = {}, groundedPoses = new Map();
   for (const [name, motion] of Object.entries(source.motions)) {
     const path = `poses.motions.${name}`; id(name, path);
     const template = motion?.template;
     if (!MOTION_TEMPLATES.includes(template)) fail(`${path}.template`, `expected ${MOTION_TEMPLATES.join(', ')}`);
-    const fields = { walk: ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'], run: ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'], idle: ['breath'], jump: ['crouch', 'stretch', 'apex'], attack: ['arm', 'windup', 'strike', 'hold'], hurt: ['recoil', 'squash'] };
+    const fields = { walk: ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'], run: ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'], idle: ['breath', 'squash'], jump: ['crouch', 'stretch', 'apex'], attack: ['arm', 'windup', 'strike', 'hold'], hurt: ['recoil', 'squash'] };
     object(motion, ['template', 'frames', 'duration', ...fields[template]], path);
     const p = (key, fallback, lo, hi, integer = false) => number(motion[key], fallback, lo, hi, `${path}.${key}`, integer);
     const duration = p('duration', template === 'idle' ? 200 : 80, 1, 60000, true);
     const locomotion = template === 'walk' || template === 'run';
-    const fixed = { jump: 7, attack: 4, hurt: 2 }, count = p('frames', fixed[template] ?? (template === 'idle' ? 4 : template === 'walk' ? 8 : 10), template === 'idle' ? 2 : fixed[template] ?? (template === 'walk' ? 4 : 6), fixed[template] ?? (template === 'idle' ? 4 : 64), true);
+    const fixed = { jump: 7, attack: 4, hurt: 2 }, count = p('frames', fixed[template] ?? (template === 'idle' ? 4 : template === 'walk' ? 8 : 10), template === 'idle' ? 2 : fixed[template] ?? (template === 'walk' ? 4 : 6), fixed[template] ?? (template === 'idle' ? 16 : 64), true);
     if (locomotion && count % 2) fail(`${path}.frames`, 'walk and run need an even frame count');
     if (locomotion && legs.length < 2) fail('poses.rig.legs', 'walk and run need at least two leg chains');
     const speed = locomotion ? p('speed', template === 'walk' ? 24 : 48, -1024, 1024) : 0;
@@ -101,6 +101,15 @@ export function expandMotions(input, compileRest, probeJoints) {
     if (motion.swapDepth !== undefined && typeof motion.swapDepth !== 'boolean') fail(`${path}.swapDepth`, 'expected a boolean');
     const swapDepth = motion.swapDepth === true;
     const breath = template === 'idle' ? p('breath', .05, 0, .5) : 0;
+    // A grounded squash: the body stretches, then squashes, while its lowest drawn pixel stays on rig.ground. Below
+    // 0.05 it would round to no change, since mass squash moves in 0.05 steps. Breath squashes about the body's
+    // centre and a planted leg holds the body up, so neither can be combined with it.
+    const grounded = template === 'idle' && motion.squash !== undefined, squashBy = grounded ? p('squash', 0, .05, .5) : 0;
+    if (grounded && motion.breath !== undefined) fail(`${path}.squash`, 'choose breath or squash, not both: breath squashes the body about its centre, squash keeps its base on rig.ground');
+    if (grounded && legs.length) fail(`${path}.squash`, 'squash sits the body on rig.ground, but this rig stands on its legs; use breath');
+    // The head bob and tail sway move their instance after grounding, so the body can't also play either role.
+    if (grounded && rig.head === rig.body) fail('poses.rig.head', `the grounded idle "${name}" keeps the body on rig.ground, so the body can't also be the head, whose bob would lift it; name another instance or leave head out`);
+    if (grounded) (rig.tail ?? []).forEach((tail, i) => { if (tail === rig.body) fail(`poses.rig.tail[${i}]`, `the grounded idle "${name}" keeps the body on rig.ground, so the body can't also be part of the tail, whose sway would turn it off the ground`); });
     const crouch = template === 'jump' ? p('crouch', .8, .5, 1) : 1, stretch = template === 'jump' ? p('stretch', 1.15, 1, 2) : 1, apex = template === 'jump' ? p('apex', 4, 1, 32, true) : 0;
     const arm = template === 'attack' ? p('arm', 0, 0, (rig.arms?.length ?? 0) - 1, true) : 0;
     const windup = template === 'attack' ? p('windup', -130, -360, 360, true) : 0, strike = template === 'attack' ? p('strike', 50, -360, 360, true) : 0;
@@ -111,14 +120,17 @@ export function expandMotions(input, compileRest, probeJoints) {
     const stance = locomotion ? Math.max(1, Math.min(template === 'walk' ? Math.ceil(count * .625) : Math.max(2, Math.floor(count / 3)), Math.floor(stride / Math.max(.000001, Math.abs(speed) * duration / 1000)) + 1)) : 0;
     const downIndex = Math.max(1, Math.floor(half / 4));
     const phaseKeys = [...new Set([0, downIndex, Math.floor(half / 2), ...(template === 'run' && half >= 5 ? [Math.floor(half * .75)] : []), half - 1])].sort((a, b) => a - b);
-    const keyIndices = locomotion ? [...phaseKeys, ...phaseKeys.map(i => i + half)] : Array.from({ length: count }, (_, i) => i);
+    // Past four idle frames the rest are in-betweens: the key poses are the quarter phases (rest, full stretch or
+    // inhale, rest, full squash or exhale), which the motion review's pose spread compares.
+    const keyIndices = locomotion ? [...phaseKeys, ...phaseKeys.map(i => i + half)] : template === 'idle' && count > 4 ? [...new Set([0, 1, 2, 3].map(q => Math.round(q * count / 4)))] : Array.from({ length: count }, (_, i) => i);
     const labels = new Map();
     if (locomotion) for (const offset of [0, half]) {
       const suffix = offset ? 'b' : 'a', keys = keyIndices.filter(i => i >= offset && i < offset + half);
       const words = keys.length === 2 ? ['contact', template === 'run' ? 'flight' : 'up'] : keys.length === 3 ? ['contact', 'down', template === 'run' ? 'flight' : 'passing'] : keys.length === 5 ? ['contact', 'down', 'passing', 'up', 'flight'] : ['contact', 'down', 'passing', template === 'run' ? 'flight' : 'up'];
       keys.forEach((index, i) => labels.set(index, `${words[i]}-${suffix}`));
     }
-    const fixedLabels = { idle: count === 2 ? ['inhale', 'exhale'] : count === 3 ? ['rest', 'inhale', 'exhale'] : ['rest', 'inhale', 'settle', 'exhale'],
+    // Past four frames there are more phases than breathing words, so idle poses are numbered from 0.
+    const fixedLabels = { idle: count === 2 ? ['inhale', 'exhale'] : count === 3 ? ['rest', 'inhale', 'exhale'] : count === 4 ? ['rest', 'inhale', 'settle', 'exhale'] : Array.from({ length: count }, (_, i) => `${i}`),
       jump: ['crouch', 'take-off', 'rise', 'apex', 'fall', 'land', 'recover'], attack: ['anticipation', 'strike', 'follow-through', 'recover'], hurt: ['recoil', 'recover'] };
     const names = [];
     for (let i = 0; i < count; i++) {
@@ -129,12 +141,20 @@ export function expandMotions(input, compileRest, probeJoints) {
       const setAngle = (part, value) => { delete part.rotate; delete part.reach; delete part.bend; part.angle = ((Math.round(value) + 180) % 360 + 360) % 360 - 180; };
       let dy = 0, bodySquash = 1;
       if (locomotion) { dy = Math.round(bob * cosDeg(angle * 2)); bodySquash = template === 'run' ? (i % half === downIndex ? .9 : i % half === half - 1 ? 1.05 : 1) : 1; setAngle(torso, restAngle(rig.body) + lean); }
-      if (template === 'idle') bodySquash = 1 + breath * sinDeg(angle);
+      if (template === 'idle') bodySquash = 1 + (grounded ? squashBy : breath) * sinDeg(angle);
       if (template === 'jump') { dy = [2, 0, -apex, -apex * 2, -apex, 2, 0][i]; bodySquash = [crouch, stretch, 1.05, 1, 1, crouch, 1][i]; }
       // Follow-through carries the swing well past the strike and settles the body, so it reads as its own key pose.
       if (template === 'attack') { setAngle(parts.get(rig.arms[arm][0]), [windup, strike, strike + 45, restAngle(rig.arms[arm][0])][i]); bodySquash = [.9, 1.05, .95, 1][i]; setAngle(torso, restAngle(rig.body) + [-8, 8, 14, 0][i]); }
       if (template === 'hurt') { setAngle(torso, restAngle(rig.body) + (i ? 0 : recoil)); bodySquash = i ? 1 : hurtSquash; }
       pose.origin[1] += dy; torso.squash = squash((body.squash ?? 1) * bodySquash);
+      if (grounded) {
+        // Move the body (and what hangs from it) so its lowest drawn pixel, outline included, sits on rig.ground. The
+        // drawing is the compiler's own: the same raster options shapeOf uses, at the rounded squash. The origin stays,
+        // so every frame keeps one anchor on the ground.
+        const shape = source.parts[body.part].mass, raster = rasterizeMass(shape, { angle: ((restData.parts[rig.body].rotate ?? 0) % 360 + 360) % 360, flipX: torso.flipX === true, squash: torso.squash, light: source.light ?? 225, ramp: source.ramps[shape.ramp] });
+        torso.at = [...(torso.at ?? [0, 0])];
+        torso.at[1] += rig.ground - (pose.origin[1] + torso.at[1] + raster.rows.findLastIndex(row => /[^.]/.test(row)) - raster.pivot[1]);
+      }
       if (rig.head && template === 'idle') { const head = parts.get(rig.head); head.at = [...(head.at ?? [0, 0])]; head.at[1] -= Math.round(sinDeg(angle)); }
       for (const [j, tail] of (rig.tail ?? []).entries()) setAngle(parts.get(tail), restAngle(tail) + 10 * sinDeg(angle - j * 25));
       if (locomotion) for (const [j, chain] of (rig.arms ?? []).entries()) setAngle(parts.get(chain[0]), restAngle(chain[0]) + 35 * sinDeg(angle + j % 2 * 180));
@@ -177,6 +197,7 @@ export function expandMotions(input, compileRest, probeJoints) {
         }
       }
       generated.push(pose); names.push(pose.name);
+      if (grounded) groundedPoses.set(pose.name, name);
     }
     // A bob or lean must never lift a hip beyond its leg: a planted foot that misses its target floats and slides.
     // Find how far each pose must sink (at most four pixels, while that reduces its planted feet's miss) and lower
@@ -216,8 +237,25 @@ export function expandMotions(input, compileRest, probeJoints) {
   }
   const authored = new Map();
   for (const pose of source.poses) { if (authored.has(pose.name)) fail('poses.poses', `duplicate authored pose ${pose.name}`); authored.set(pose.name, pose); }
-  const generatedNames = new Set(generated.map(p => p.name));
+  const generatedNames = new Set(generated.map(p => p.name)), inputIndex = new Map(source.poses.map((pose, i) => [pose.name, i]));
   source.poses = [...source.poses.filter(p => !generatedNames.has(p.name)), ...generated.map(p => authored.get(p.name) ?? p)];
+  // An authored pose standing in for a pose of a grounded idle is the author's own, so it is never moved: it must
+  // already stand on rig.ground. Its body is measured as the compiler draws it (the pose may turn, flip, squash or
+  // attach the body, or mirror or tween other poses, so compile the poses rather than redraw one mass). A pose that
+  // fails to compile here is left to the full compile, which reports it at its written path.
+  const standIns = [...groundedPoses.keys()].filter(pose => authored.has(pose));
+  if (standIns.length) {
+    let drawn = null;
+    try { drawn = compileRest({ ...checkSource, poses: source.poses, animations: { check: { frames: standIns, loop: false } } }); }
+    catch (error) { if (!(error instanceof PixelError)) throw error; }
+    for (const pose of drawn ? standIns : []) {
+      const placed = drawn.metadata.poses[pose].parts[rig.body], rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
+      const lowest = placed ? placed.topLeft[1] + rows.findLastIndex(row => /[^. ]/.test(row)) : null, at = `poses.poses[${inputIndex.get(pose)}]`;
+      const about = `"${pose}" stands in for a pose of the grounded idle "${groundedPoses.get(pose)}", so`;
+      if (lowest === null) fail(at, `${about} it needs the body instance "${rig.body}" standing on rig.ground (row ${rig.ground})`);
+      if (lowest !== rig.ground) fail(at, `${about} its body must stand on rig.ground (row ${rig.ground}); its lowest pixel is on row ${lowest}`);
+    }
+  }
   source.animations = animations; source.motionInfo = motionInfo; delete source.motions;
   if (source.poses.length > 256) fail('poses.motions', 'expanded source exceeds 256 poses');
   return source;

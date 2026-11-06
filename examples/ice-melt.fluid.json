@@ -1,0 +1,79 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "ice-melt",
+  "width": 48,
+  "height": 40,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "I": "#6f9fcf",
+    "i": "#b9e2f5",
+    "W": "#f6fdff",
+    "s": "#a9b3c6",
+    "S": "#e3e9f2",
+    "k": "#1e1b24",
+    "g": "#45404f",
+    "G": "#6a6477",
+    "r": "#b8322f",
+    "o": "#f0772b"
+  },
+  "symbols": {
+    "griddle": [
+      "G................................G",
+      "g................................g",
+      "g................................g",
+      "rorrorrorrorrorrorrorrorrorrorrorr"
+    ],
+    "hob": [
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "gggggggggggggggggggggggggggggggggggggggggggggggg",
+      "gggggggggggggggggggggggggggggggggggggggggggggggg",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ]
+  },
+  "effects": {
+    "ice-melt": {
+      "kind": "liquid",
+      "frames": 72,
+      "duration": 70,
+      "seed": 2,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "flip": 0.6,
+      "drag": 0.04,
+      "tension": 1.5,
+      "heat": { "air": 0.04, "conduct": 0.15, "contact": 0.15, "latent": 0.6, "vaporize": 2, "evaporation": 0.06 },
+      "vapour": {
+        "expansion": 10,
+        "buoyancy": 0.4,
+        "weight": -0.25,
+        "vorticity": 0.35,
+        "cooling": 0.05,
+        "dissipation": 0.08,
+        "look": [
+          { "field": "density", "colors": ["s"], "thresholds": [0.35], "dither": 0.5 },
+          { "field": "density", "colors": ["S"], "thresholds": [0.8], "dither": 0.4 }
+        ]
+      },
+      "ice": {
+        "look": [
+          { "field": "density", "colors": ["i"], "thresholds": [0.5], "dither": 0 },
+          { "field": "shadow", "colors": ["I"], "thresholds": [0.5], "dither": 0 },
+          { "field": "light", "colors": ["W"], "thresholds": [0.5], "dither": 0 }
+        ]
+      },
+      "obstacles": [{ "symbol": "griddle", "x": 7, "y": 31, "temperature": 1 }, { "symbol": "hob", "x": 0, "y": 35 }],
+      "fill": [{ "x": 19, "y": 24, "w": 10, "h": 10, "frozen": true, "temperature": -0.7 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 4, 9], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

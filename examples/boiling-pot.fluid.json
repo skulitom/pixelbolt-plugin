@@ -1,0 +1,121 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "boiling-pot",
+  "width": 40,
+  "height": 48,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "s": "#a9b3c6",
+    "S": "#e3e9f2",
+    "k": "#1e1b24",
+    "P": "#7d8796",
+    "g": "#45404f",
+    "G": "#6a6477",
+    "L": "#a7b4c6",
+    "l": "#d6e0ec",
+    "r": "#b8322f",
+    "o": "#f0772b"
+  },
+  "symbols": {
+    "pot": [
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk",
+      "kP..........................Pk"
+    ],
+    "base": ["PPPPPPPPPPPPPPPPPPPPPPPPPP"],
+    "lid": [
+      "..............kkkk..............",
+      "LLLLLLLLLLLLLkkkkkkLLLLLLLLLLLLL",
+      "llllllllllllllllllllllllllllllll"
+    ],
+    "stove": [
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "gggggggggggggggggggggggggggggggggggggggg",
+      "gggggggggggggggggggggggggggggggggggggggg",
+      "gggggggggggggggggggggggggggggggggggggggg"
+    ],
+    "flame": [
+      "rr..rr..rr..rr..rr..rr..rr",
+      "r..rr..rr..rr..rr..rr..rr.",
+      "..oo..oo..oo..oo..oo..oo.."
+    ]
+  },
+  "effects": {
+    "boiling-pot": {
+      "kind": "liquid",
+      "frames": 48,
+      "duration": 70,
+      "loop": true,
+      "warmup": 3,
+      "seed": 5,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "flip": 0.6,
+      "drag": 0.04,
+      "tension": 1.5,
+      "heat": {
+        "air": 0.03,
+        "conduct": 0.1,
+        "contact": 0.06,
+        "latent": 0.5,
+        "vaporize": 3,
+        "dew": 0.35,
+        "condense": 0.5
+      },
+      "vapour": {
+        "expansion": 5,
+        "buoyancy": 0.6,
+        "vorticity": 0.3,
+        "cooling": 0.03,
+        "look": [
+          { "field": "density", "colors": ["s"], "thresholds": [0.3], "dither": 0.5 },
+          { "field": "density", "colors": ["S"], "thresholds": [0.8], "dither": 0.4 }
+        ],
+        "bubbles": { "colors": ["c"], "rise": 0.8, "wobble": 0.4, "lift": 0.3 }
+      },
+      "obstacles": [
+        { "symbol": "pot", "x": 5, "y": 13, "temperature": 0.1 },
+        { "symbol": "base", "x": 7, "y": 40, "temperature": 1.5 },
+        { "symbol": "lid", "x": 4, "y": 10, "temperature": -0.35 },
+        { "symbol": "stove", "x": 0, "y": 44 },
+        { "symbol": "flame", "x": 7, "y": 41, "solid": false }
+      ],
+      "fill": [{ "x": 7, "y": 30, "w": 26, "h": 10, "temperature": 0.4 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 4, 8], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

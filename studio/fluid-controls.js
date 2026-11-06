@@ -10,7 +10,20 @@ export const FLUID_PRESETS = [
   { file: 'honey', title: 'Honey', note: 'Viscous liquid · loop' }, { file: 'slime', title: 'Slime', note: 'Yield-stress liquid · one-shot' },
   { file: 'roof-snow', title: 'Snow off a roof', note: 'Smooth obstacle · one-shot' }, { file: 'dam-break', title: 'Dam break', note: 'Moving obstacle · one-shot' },
   { file: 'dust-wave', title: 'Dust wave', note: 'Carried gas · one-shot' }, { file: 'slime-burst', title: 'Bursting slime', note: 'Burst fill · one-shot' },
-  { file: 'honey-drop', title: 'Honey let-go', note: 'Keyed liquid · one-shot' }
+  { file: 'honey-drop', title: 'Honey let-go', note: 'Keyed liquid · one-shot' }, { file: 'aquarium', title: 'Aquarium bubbles', note: 'Bubbles · loop' },
+  { file: 'honey-dipper', title: 'Honey dipper', note: 'Sticky moving obstacle · one-shot' },
+  { file: 'glug', title: 'Glugging bottle', note: 'Air pockets · one-shot' },
+  { file: 'jacobs-ladder', title: "Jacob's ladder", note: 'Electric arc · loop' }, { file: 'lightning', title: 'Lightning', note: 'Electric gas · one-shot' },
+  { file: 'tesla-coil', title: 'Tesla coil', note: 'Electric gas · loop' }, { file: 'plasma-globe', title: 'Plasma globe', note: 'Electric gas · loop' },
+  { file: 'ice-melt', title: 'Ice cube melting', note: 'Heat · one-shot' }, { file: 'pond-freeze', title: 'Pond freezing', note: 'Heat · one-shot' },
+  { file: 'boiling-pot', title: 'Boiling pot', note: 'Heat, vapour · loop' }, { file: 'frost-window', title: 'Frosted window', note: 'Frost · one-shot' },
+  { file: 'dry-ice', title: 'Dry-ice fog', note: 'Sublimation · one-shot' },
+  { file: 'lightning-pond', title: 'Lightning into a pond', note: 'Arcs into water · one-shot' },
+  { file: 'hourglass', title: 'Hourglass', note: 'Sand · one-shot' }, { file: 'sand-gate', title: 'Sand gate', note: 'Sand, moving obstacle · one-shot' },
+  { file: 'sand-plough', title: 'Sand plough', note: 'Sand, moving obstacle · one-shot' },
+  { file: 'crate-splash', title: 'Crate splash', note: 'Bodies in water · one-shot' }, { file: 'sand-slide', title: 'Sand slide', note: 'A body on sliding sand · one-shot' },
+  { file: 'water-wheel', title: 'Water wheel', note: 'A turning paddle stirs a pool · loop' }, { file: 'hot-stone', title: 'Hot stone', note: 'A hot body boils water · heat' },
+  { file: 'plank-tip', title: 'Plank tip', note: 'Sand weighs a plank down · one-shot' }
 ];
 // Each slider sets one setting of the preset's effect; Strength scales every emitter's rate or burst. A slider's range
 // and step must hold every preset's value exactly: a range input clamps to its range and snaps to its step.
@@ -29,10 +42,17 @@ export const FLUID_SLIDERS = {
     { key: 'viscosity', label: 'Thickness (viscosity)', min: 0, max: 64, step: 0.5, initial: e => e.viscosity ?? 0 },
     // 16 is the compiler's own limit for yield, and the slime preset uses all of it.
     { key: 'yield', label: 'Firmness (yield)', min: 0, max: 16, step: 0.1, initial: e => e.yield ?? 0 },
+    { key: 'drag', label: 'Resistance (drag)', min: 0, max: 0.3, step: 0.005, initial: e => e.drag ?? 0 }],
+  // Grains (granular): friction instead of thickness and firmness. Repose and damp live in the effect's granular block;
+  // their ranges are the compiler's own (repose 5–45 degrees, cohesion 0–8).
+  grains: [strength,
+    { key: 'gravity', label: 'Gravity', min: 0, max: 0.6, step: 0.01, initial: e => (e.gravity ?? [0, 0.3])[1] },
+    { key: 'repose', label: 'Steepest slope (repose, degrees)', min: 5, max: 45, step: 1, initial: e => e.granular.repose ?? 33 },
+    { key: 'cohesion', label: 'Damp (cohesion)', min: 0, max: 8, step: 0.1, initial: e => e.granular.cohesion ?? 0 },
     { key: 'drag', label: 'Resistance (drag)', min: 0, max: 0.3, step: 0.005, initial: e => e.drag ?? 0 }]
 };
 export const fluidEffect = source => Object.values(source.effects)[0];
-export const fluidSliders = source => FLUID_SLIDERS[fluidEffect(source).kind === 'liquid' ? 'liquid' : 'gas'];
+export const fluidSliders = source => { const effect = fluidEffect(source); return FLUID_SLIDERS[effect.kind !== 'liquid' ? 'gas' : effect.granular ? 'grains' : 'liquid']; };
 const round = value => Math.round(value * 1000) / 1000;
 // The value a range input holds after being set to `value`: clamped to the range and snapped to the nearest step from
 // the minimum (the larger one on a tie), as browsers do, without binary rounding noise.
@@ -50,6 +70,7 @@ export function editedSource(original, values, seed) {
     if (slider.key === 'strength') {
       for (const emitter of effect.emitters) for (const field of ['rate', 'burst']) if (emitter[field] !== undefined) emitter[field] = round(Math.min(64, Math.max(0.01, emitter[field] * value)));
     } else if (slider.key === 'gravity') effect.gravity = [(before.gravity ?? [0, 0.3])[0], value];
+    else if (slider.key === 'repose' || slider.key === 'cohesion') effect.granular = { ...effect.granular, [slider.key]: value };
     else effect[slider.key] = value;
   }
   if (seed !== (before.seed ?? 1)) effect.seed = seed;

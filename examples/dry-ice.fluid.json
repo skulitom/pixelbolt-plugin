@@ -1,0 +1,91 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "dry-ice",
+  "width": 56,
+  "height": 40,
+  "palette": {
+    "I": "#6f9fcf",
+    "i": "#b9e2f5",
+    "W": "#f6fdff",
+    "T": "#a8794e",
+    "t": "#6e4a2e",
+    "f": "#8f9bb3",
+    "F": "#c8d1e2",
+    "V": "#eef2fa",
+    "k": "#2b2735"
+  },
+  "symbols": {
+    "table": [
+      "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+      "tttttttttttttttttttttttttttttttttttt",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt..",
+      "..tt............................tt.."
+    ],
+    "floor": [
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ]
+  },
+  "effects": {
+    "dry-ice": {
+      "kind": "liquid",
+      "frames": 64,
+      "duration": 70,
+      "seed": 3,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "heat": {
+        "freeze": -1,
+        "boil": -0.5,
+        "air": 0.15,
+        "conduct": 0.1,
+        "contact": 0.1,
+        "latent": 0.15,
+        "vaporize": 0.45,
+        "sublimate": true
+      },
+      "vapour": {
+        "expansion": 16,
+        "buoyancy": 0.6,
+        "weight": 1.2,
+        "vorticity": 0.45,
+        "cooling": 0.01,
+        "dissipation": 0.008,
+        "spread": 0.03,
+        "look": [
+          { "field": "density", "colors": ["f"], "thresholds": [0.15], "dither": 0.6 },
+          { "field": "density", "colors": ["F", "V"], "thresholds": [0.55, 1.1], "dither": 0.5 }
+        ]
+      },
+      "ice": {
+        "look": [
+          { "field": "density", "colors": ["i"], "thresholds": [0.5], "dither": 0 },
+          { "field": "shadow", "colors": ["I"], "thresholds": [0.5], "dither": 0 },
+          { "field": "light", "colors": ["W"], "thresholds": [0.5], "dither": 0 }
+        ]
+      },
+      "obstacles": [{ "symbol": "table", "x": 4, "y": 19 }, { "symbol": "floor", "x": 0, "y": 38 }],
+      "fill": [{ "x": 12, "y": 13, "w": 12, "h": 6, "frozen": true, "temperature": -1 }],
+      "emitters": [],
+      "look": [{ "field": "density", "colors": ["i"], "thresholds": [0.5], "dither": 0 }]
+    }
+  }
+}

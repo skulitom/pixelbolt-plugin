@@ -1,0 +1,88 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "lightning",
+  "width": 64,
+  "height": 96,
+  "palette": {
+    "v": "#3b2a8c",
+    "b": "#4f7cff",
+    "c": "#8fe9ff",
+    "W": "#ffffff",
+    "k": "#1d2030",
+    "g": "#2c3044",
+    "s": "#3a3550",
+    "S": "#28233a"
+  },
+  "symbols": {
+    "cloud": [
+      "...gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...ggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggg..",
+      "...gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg..",
+      "....gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg...",
+      ".....gggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggg....",
+      "......ggggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkgggggggg.....",
+      "........gggggggggkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkggggggggg.......",
+      "..........gggggggggggkkkkkkkkkkkkkkkkkkkkkkkggggggggggg.........",
+      ".............gggggggggggggggkkkkkkkkkggggggggggggggg............",
+      ".................ggggggggggggggggggggggggggggggg................",
+      ".......................ggggggggggggggggggg......................",
+      "................................................................"
+    ],
+    "charge": [
+      "...kkk...",
+      "..kkkkk..",
+      ".kkkkkkk.",
+      "..kkkkk..",
+      "...kkk..."
+    ],
+    "ground": [
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+      "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS",
+      "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS"
+    ]
+  },
+  "effects": {
+    "lightning": {
+      "frames": 32,
+      "duration": 60,
+      "seed": 2,
+      "buoyancy": 0.1,
+      "vorticity": 0.1,
+      "cooling": 0.15,
+      "obstacles": [
+        { "symbol": "cloud", "x": 0, "y": 0, "solid": false, "draw": "under" },
+        {
+          "symbol": "charge",
+          "x": 26,
+          "y": 8,
+          "solid": false,
+          "draw": "none",
+          "voltage": [
+            { "frame": 0, "voltage": -240 },
+            { "frame": 8, "voltage": 0 },
+            { "frame": 16, "voltage": -240 },
+            { "frame": 21, "voltage": 0 }
+          ],
+          "resistance": 20
+        },
+        { "symbol": "ground", "x": 0, "y": 92, "voltage": 0 }
+      ],
+      "emitters": [],
+      "electric": { "breakdown": 2.5, "focus": 2, "growth": 40, "recombine": 0.5, "memory": 12, "heating": 0.01 },
+      "look": [
+        { "field": "ionization", "colors": ["v", "b"], "thresholds": [0.06, 0.35], "dither": 0.4 },
+        {
+          "field": "current",
+          "colors": ["c", "W"],
+          "thresholds": [0.25, 0.8],
+          "dither": 0,
+          "halo": { "color": "v", "width": 1 }
+        }
+      ]
+    }
+  }
+}

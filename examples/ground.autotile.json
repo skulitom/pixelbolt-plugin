@@ -1,0 +1,69 @@
+{
+  "format": "pixelforge-autotile",
+  "version": 1,
+  "name": "ground",
+  "tile": 16,
+  "palette": {
+    "k": "#1a1418",
+    "G": "#9bdc5e",
+    "g": "#5ea842",
+    "d": "#3b7a36",
+    "b": "#a0704a",
+    "u": "#7c5136",
+    "U": "#5b3a29",
+    "p": "#8a8078",
+    "P": "#5f5852",
+    "R": "#4a2f22",
+    "S": "#9ccfe6"
+  },
+  "symbols": {
+    "stone": [
+      ".pp.",
+      "pppP",
+      "PPPP"
+    ],
+    "pebble": ["pP"]
+  },
+  "terrain": {
+    "seed": 2,
+    "fill": {
+      "color": "u",
+      "speckle": [
+        { "color": "U", "amount": 0.16, "size": 4 },
+        { "color": "b", "amount": 0.1, "size": 3 },
+        { "color": "P", "amount": 0.03, "size": 2 }
+      ]
+    },
+    "edges": {
+      "all": { "depth": 1, "bands": ["k", "U"] },
+      "n": {
+        "depth": 3,
+        "jitter": 0,
+        "bands": ["k", "G", "g", "d"],
+        "tufts": { "colors": ["g", "G", "G"], "amount": 0.55 }
+      },
+      "w": { "bands": ["k", "b"] },
+      "s": { "depth": 2, "bands": ["k", "U"], "tufts": { "colors": ["R", "R", "R"], "amount": 0.3 } }
+    },
+    "round": 1,
+    "inner": 1
+  },
+  "collision": true,
+  "frame": "ground-{mask}-{variant}",
+  "slopes": { "frame": "ground-{slope}" },
+  "variants": [
+    { "name": "a", "weight": 3 },
+    { "name": "b", "weight": 3, "terrain": { "fill": { "seed": 9 } } },
+    {
+      "name": "stones",
+      "weight": 1,
+      "terrain": { "fill": { "seed": 17 } },
+      "ops": [
+        { "op": "stamp", "symbol": "stone", "x": 10, "y": 26 },
+        { "op": "stamp", "symbol": "pebble", "x": 19, "y": 36 }
+      ]
+    }
+  ],
+  "preview": { "background": "S" },
+  "sheet": { "columns": 16 }
+}

@@ -5,6 +5,7 @@
 import { PixelError, renderProject, readRows, parseColor } from './core.js';
 import { fields } from './authoring.js';
 import { sinDeg, cosDeg } from './craft.js';
+import { HOLD } from './shapes.js';
 
 export const WAVE_KINDS = ['radial', 'directional'];
 const fail = (path, message) => { throw new PixelError(path, message); };
@@ -47,7 +48,7 @@ function readEffect(effect, path, source) {
       radius: pair(effect.mask.radius, `${path}.mask.radius`, 0.5, 256),
       feather: num(effect.mask.feather ?? 0.2, `${path}.mask.feather`, 0, 1) };
   }
-  fields(effect.look, ['colors', 'thresholds', 'negative'], `${path}.look`);
+  fields(effect.look, ['colors', 'thresholds', 'negative', 'hold'], `${path}.look`);
   const look = effect.look;
   if (!Array.isArray(look.colors) || !look.colors.length || look.colors.length > 8) fail(`${path}.look.colors`, 'expected 1–8 palette keys');
   const colors = (keys, p) => {
@@ -71,7 +72,11 @@ function readEffect(effect, path, source) {
     if (rows.length !== source.height || rows[0].length !== source.width) fail(`${path}.${key}`, 'expected a full-canvas grid');
     return rows;
   };
-  return { frames, duration, sources, mask, positive, negative, thresholds, underlay: decoration('underlay'), overlay: decoration('overlay') };
+  // hold: as a pixel-art look's, a share of the gap between thresholds that a value must pass a threshold by before a
+  // pixel changes band (each margin takes the smaller gap beside its threshold, so margins never overlap).
+  const hold = num(look.hold ?? HOLD, `${path}.look.hold`, 0, 0.45), gaps = thresholds.map((t, i) => t - (i ? thresholds[i - 1] : 0));
+  const margins = hold ? gaps.map((gap, i) => hold * Math.min(gap, i + 1 < gaps.length ? gaps[i + 1] : gap)) : null;
+  return { frames, duration, sources, mask, positive, negative, thresholds, margins, underlay: decoration('underlay'), overlay: decoration('overlay') };
 }
 
 /** A version-1 pixelforge-wave source → { recipe, metadata, warnings }. Loops only. */
@@ -112,20 +117,61 @@ export function compileWaves(source) {
     if (e.sources.some(s => s.wavelength * Math.min(...s.stretch) < 6)) warnings.push(`wave.effects.${name}: narrow waves may shimmer at this pixel size; increase wavelength or stretch.`);
     if (e.sources.some(s => Math.abs(s.cycles) * 8 > e.frames)) warnings.push(`wave.effects.${name}: fast waves may strobe; lower cycles or add frames.`);
     const names = [], visiblePixels = [];
+    // Each frame's band per pixel, signed (negative values take the negative colours), and the pair of neighbouring bands
+    // whose threshold the value is within the hold margin of (the lower of the two; NONE outside every margin), read before
+    // any is drawn so the bands can hold round the loop.
+    const n = e.thresholds.length, NONE = -128, levels = [], zones = [];
+    for (let f = 0; f < e.frames; f++) {
+      const level = new Int8Array(area), zone = new Int8Array(area).fill(NONE);
+      for (let at = 0; at < area; at++) {
+        let value = 0;
+        for (let i = 0; i < e.sources.length; i++) {
+          const s = e.sources[i];
+          value += s.amplitude * cosDeg(360 * (phases[i][at] - s.cycles * f / e.frames) + s.phase);
+        }
+        value *= envelope[at];
+        const sign = value < 0 ? -1 : 1, magnitude = Math.abs(value);
+        if (sign < 0 && !e.negative) continue;
+        let k = 0;
+        while (k < n && magnitude >= e.thresholds[k]) k++;
+        level[at] = sign * k;
+        if (!e.margins) continue;
+        const near = k && magnitude - e.thresholds[k - 1] < e.margins[k - 1] ? k - 1 : k < n && e.thresholds[k] - magnitude <= e.margins[k] ? k : -1;
+        if (near >= 0) zone[at] = sign > 0 ? near : -near - 1;
+      }
+      levels.push(level); zones.push(zone);
+    }
+    // As a look's bands hold (shapes.js holdBand): a pixel moves to a new band as soon as its value crosses into it, but
+    // doesn't go back to the band it just left while the value stays within the margin of the threshold between them, so
+    // a value wavering at a threshold doesn't flip it every frame. A state is the band and the way it last changed. Each
+    // pixel goes into frame 0 in the state the last frame leaves it, found by going round the loop until it settles (one
+    // that doesn't settle is drawn without a hold, which loops by itself).
+    if (e.margins) {
+      const UP = 1, DOWN = 2, state = (level, way) => level * 4 + way;
+      const keep = (before, f, at) => {
+        const shown = Math.floor(before / 4), way = before - shown * 4, level = levels[f][at], pair = zones[f][at];
+        if (level === shown) return before;
+        if ((way === DOWN && level === shown + 1 && pair === shown) || (way === UP && level === shown - 1 && pair === level)) return before;
+        return state(level, level > shown ? UP : DOWN);
+      };
+      for (let at = 0; at < area; at++) {
+        let start = state(levels[e.frames - 1][at], 0), settled = false;
+        for (let turn = 0; turn < 12 && !settled; turn++) {
+          let s = start;
+          for (let f = 0; f < e.frames; f++) s = keep(s, f, at);
+          if (s === start) settled = true; else start = s;
+        }
+        if (!settled) continue;
+        let s = start;
+        for (let f = 0; f < e.frames; f++) { s = keep(s, f, at); levels[f][at] = Math.floor(s / 4); }
+      }
+    }
     for (let f = 0; f < e.frames; f++) {
       const rows = []; let visible = 0;
       for (let y = 0, at = 0; y < height; y++) {
         let row = '';
         for (let x = 0; x < width; x++, at++) {
-          let value = 0;
-          for (let i = 0; i < e.sources.length; i++) {
-            const s = e.sources[i];
-            value += s.amplitude * cosDeg(360 * (phases[i][at] - s.cycles * f / e.frames) + s.phase);
-          }
-          value *= envelope[at];
-          const colors = value < 0 ? e.negative : e.positive, magnitude = Math.abs(value);
-          let key = '.';
-          if (colors) for (let i = 0; i < colors.length; i++) if (magnitude >= e.thresholds[i]) key = colors[i];
+          const level = levels[f][at], key = level > 0 ? e.positive[level - 1] : level < 0 ? e.negative[-level - 1] : '.';
           row += key; if (visibleKeys.has(key)) visible++;
         }
         rows.push(row);

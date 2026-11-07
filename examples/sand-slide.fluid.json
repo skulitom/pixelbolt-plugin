@@ -1,0 +1,106 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "sand-slide",
+  "width": 72,
+  "height": 44,
+  "subpixels": 3,
+  "palette": {
+    "a": "#f6dc9c",
+    "b": "#ddb46a",
+    "c": "#b8864a",
+    "d": "#8a5f34",
+    "o": "#5a3c22",
+    "p": "#8a5a36",
+    "P": "#5a3825",
+    "G": "#4d4038",
+    "K": "#3a302a",
+    "h": "#c98c4f",
+    "O": "#3b2414",
+    "r": "#e0475a",
+    "k": "#14141c"
+  },
+  "symbols": {
+    "ground": [
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"
+    ],
+    "board": [
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP",
+      "pP"
+    ]
+  },
+  "effects": {
+    "sand-slide": {
+      "kind": "liquid",
+      "frames": 110,
+      "duration": 50,
+      "seed": 5,
+      "walls": ["left", "right", "bottom"],
+      "granular": { "repose": 30 },
+      "obstacles": [
+        { "symbol": "ground", "x": 0, "y": 41 },
+        { "symbol": "board", "x": 22, "y": 13, "keys": [{ "frame": 10, "y": -24, "over": 8 }] }
+      ],
+      "fill": [{ "x": 0, "y": 17, "w": 22, "h": 24 }, { "x": 24, "y": 36, "w": 48, "h": 5 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.35], "dither": 0 },
+        { "field": "depth", "colors": ["c", "d"], "thresholds": [5, 11], "dither": 0.9, "pattern": "noise" },
+        { "field": "shadow", "colors": ["c"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["a"], "thresholds": [0.6], "dither": 0 }
+      ],
+      "outline": "o",
+      "cleanup": { "strays": true },
+      "bodies": [
+        {
+          "name": "crate",
+          "shape": "box",
+          "size": [8, 8],
+          "at": [17, 13],
+          "density": 0.8,
+          "friction": 1.2,
+          "fill": "h",
+          "outline": "O"
+        },
+        {
+          "name": "ball",
+          "shape": "circle",
+          "radius": 2.5,
+          "at": [58.5, 4.5],
+          "velocity": [-0.3, 0],
+          "density": 1.5,
+          "fill": "r",
+          "outline": "k"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "bouncing-pixel",
+  "width": 48,
+  "height": 32,
+  "palette": { "s": "#4a5068", "f": "#6f7896", "w": "#fff6d6", "y": "#f2c94c" },
+  "symbols": {
+    "floor": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffff",
+      "ssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssss"
+    ],
+    "stairs": [
+      "........ffffffff",
+      "........ssssssss",
+      "........ssssssss",
+      "....ffffssssssss",
+      "....ssssssssssss",
+      "....ssssssssssss",
+      "ffffssssssssssss",
+      "ssssssssssssssss",
+      "ssssssssssssssss"
+    ],
+    "ledge": [
+      "ffffffffffff",
+      "ssssssssssss"
+    ]
+  },
+  "effects": {
+    "bouncing-pixel": {
+      "frames": 220,
+      "duration": 40,
+      "gravity": [0, 0.1],
+      "walls": ["left", "right", "top"],
+      "obstacles": [
+        { "symbol": "floor", "x": 0, "y": 29 },
+        { "symbol": "stairs", "x": 32, "y": 20 },
+        { "symbol": "ledge", "x": 6, "y": 15 }
+      ],
+      "bodies": [
+        {
+          "name": "pixel",
+          "shape": "circle",
+          "radius": 0.5,
+          "at": [3.5, 6.5],
+          "velocity": [2.4, -1.4],
+          "bounce": 0.85,
+          "friction": 0.3,
+          "drag": 0.012,
+          "fill": "w",
+          "trail": { "color": "y", "length": 2 }
+        }
+      ]
+    }
+  }
+}

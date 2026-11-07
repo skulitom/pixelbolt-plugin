@@ -297,6 +297,12 @@
                 "maxItems": 8,
                 "minItems": 1,
                 "description": "Optional colours for negative amplitudes at the same absolute thresholds; otherwise negative amplitudes are transparent."
+              },
+              "hold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.45,
+                "description": "Keeps bands from flickering where the wave wavers at a threshold: a pixel enters a new band at once, but goes back to the band it just left only once the value has passed the threshold by this share of the gap between thresholds. The loop still closes exactly. Default 0.3; 0 colours each frame from its own values alone."
               }
             },
             "required": [

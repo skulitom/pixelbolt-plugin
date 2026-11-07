@@ -53,6 +53,17 @@
   color:var(--muted);
   line-height:1.6
 }
+.fx-warnings{
+  margin-top:10px;
+  font-size:11px;
+  line-height:1.5;
+  padding:9px;
+  background:#3a3424;
+  color:#f2d79a;
+  border-radius:5px;
+  white-space:pre-line;
+  overflow-wrap:anywhere
+}
 .fluid-sliders{
   display:grid;
   gap:16px;

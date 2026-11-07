@@ -1,0 +1,493 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "shadow-spells",
+  "width": 64,
+  "height": 64,
+  "palette": { "W": "#f0d8ff", "p": "#c08cff", "v": "#7a3fd6", "V": "#4a1f8f", "k": "#24123d", "K": "#120a1f" },
+  "symbols": {
+    "mote-p": ["p"],
+    "mote-v": ["v"],
+    "void-mote": [
+      ".p.",
+      "pKp",
+      ".p."
+    ]
+  },
+  "anchor": [32, 40],
+  "effects": {
+    "projectile": {
+      "frames": 8,
+      "duration": 60,
+      "loop": true,
+      "seed": 5,
+      "turn": { "angles": [0, 45, 90, 135, 180, 225, 270, 315], "about": [32, 40] },
+      "looks": {
+        "smoke": {
+          "colors": ["V", "k"],
+          "thresholds": [0.15, 0.45],
+          "lit": { "colors": ["v"], "thresholds": [0.45] },
+          "shade": { "colors": ["K"], "thresholds": [0.7] },
+          "outline": "K"
+        },
+        "trail": { "colors": ["v", "V", "k"], "thresholds": [0.1, 0.22, 0.45], "outline": "K" },
+        "rim": { "colors": ["p", "W"], "thresholds": [0.12, 0.45] },
+        "void": { "colors": ["p", "V", "k", "K"], "thresholds": [0.1, 0.22, 0.45, 0.75], "outline": "K" }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "stream",
+          "look": "trail",
+          "at": [30, 40],
+          "through": [[24, 40], [18, 40], [13, 40]],
+          "width": 10,
+          "taper": [1, 0.55, 0.25, 0],
+          "sway": 2,
+          "wavelength": 16,
+          "waves": 1,
+          "noise": 0.45,
+          "scale": 3,
+          "power": 1.3
+        },
+        { "kind": "burst", "look": "rim", "at": [35.7, 40], "radius": 7, "noise": 0.15, "boil": 3, "power": 1.3 },
+        { "kind": "burst", "look": "void", "at": [33, 40], "radius": 7, "noise": 0.2, "boil": 4, "power": 1.3 }
+      ],
+      "emitters": [
+        {
+          "name": "wisps",
+          "at": [21, 40],
+          "area": [4, 6],
+          "rate": 0.8,
+          "angle": [160, 200],
+          "speed": [1.1, 1.6],
+          "gravity": [0, 0.06],
+          "drag": 0.1,
+          "life": [7, 9],
+          "sway": { "amplitude": [1, 1.2], "period": 8 },
+          "blob": { "look": "smoke", "radius": [2.6, 3.4, 2.6, 1.2] }
+        }
+      ]
+    },
+    "impact": {
+      "frames": 12,
+      "duration": { "from": 40, "to": 95, "ease": "in" },
+      "seed": 3,
+      "looks": {
+        "smoke": {
+          "colors": ["V", "k"],
+          "thresholds": [0.15, 0.42],
+          "lit": { "colors": ["v"], "thresholds": [0.4] },
+          "shade": { "colors": ["K"], "thresholds": [0.65] },
+          "outline": "K"
+        },
+        "void": {
+          "colors": ["V", "k", "K"],
+          "thresholds": [0.12, 0.3, 0.6],
+          "lit": { "colors": ["v", "p"], "thresholds": [0.35, 0.7] },
+          "outline": "K"
+        },
+        "glow": { "colors": ["V", "v", "p", "W"], "thresholds": [0.15, 0.35, 0.6, 0.88] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "frames": [0, 2],
+          "radius": [15, 5],
+          "width": [3.5, 3.5],
+          "noise": 0.3,
+          "power": [1.2, 1.4],
+          "ease": "linear"
+        },
+        {
+          "kind": "burst",
+          "look": "void",
+          "at": [32, 40],
+          "frames": [1, 2],
+          "radius": 5,
+          "noise": 0.2,
+          "boil": 0,
+          "power": 1.5
+        },
+        {
+          "kind": "burst",
+          "look": "void",
+          "at": [32, 40],
+          "frames": [2, 10],
+          "radius": [11, 14, 15],
+          "hole": [0, 0.45, 0.85],
+          "noise": 0.6,
+          "scale": 4,
+          "power": [1.7, 1.3, 0.7, 0.25],
+          "cue": "hit"
+        },
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "frames": [2, 3],
+          "radius": 10,
+          "width": 3,
+          "noise": 0.3,
+          "scale": 4,
+          "power": 1.2
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [36.9, 40.9],
+          "through": [[41.1, 44.2], [42.3, 50.3], [38, 56.5], [29.3, 59.2]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 20
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [33.9, 44.6],
+          "through": [[33, 48.4], [29.1, 52.4], [22.1, 52.7], [14.9, 47.6]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 21
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [28.7, 43.7],
+          "through": [[24, 45.2], [18.1, 43.2], [14.3, 36.2], [16, 26.6]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 22
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [27, 39.3],
+          "through": [[24.6, 36.9], [23.2, 31.8], [26.3, 25.9], [33.8, 22.5]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 23
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [30.1, 35.4],
+          "through": [[30.8, 30.1], [35.4, 25.4], [43.7, 25], [52.1, 31.1]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 24
+        },
+        {
+          "kind": "stream",
+          "look": "void",
+          "at": [35.5, 36.4],
+          "through": [[39.7, 35.4], [45.3, 37.4], [48.6, 44.1], [46.7, 53.2]],
+          "frames": [2, 9],
+          "width": [6, 6, 5, 4],
+          "taper": [0.5, 1, 0],
+          "head": [0.3, 0.85, 1, 1],
+          "tail": [0, 0.15, 0.6, 1],
+          "noise": 0.7,
+          "scale": 4,
+          "power": [1.5, 1.4, 1.1, 0.4],
+          "ease": "out",
+          "seed": 25
+        },
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "frames": [3, 7],
+          "radius": [13, 22],
+          "width": [5, 4],
+          "noise": 1,
+          "scale": 5,
+          "power": [1.4, 0.17]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "mist",
+          "at": [32, 40],
+          "area": [22, 16],
+          "burst": 16,
+          "start": 3,
+          "angle": [0, 360],
+          "speed": [0.3, 0.8],
+          "gravity": [0, 0.02],
+          "drag": 0.12,
+          "life": [6, 8],
+          "sway": { "amplitude": [1, 1], "period": 8 },
+          "blob": { "look": "smoke", "radius": [3, 5.2, 4.2, 1.2] }
+        }
+      ]
+    },
+    "area": {
+      "frames": 19,
+      "duration": { "from": 50, "to": 100, "ease": "in" },
+      "seed": 8,
+      "looks": {
+        "smoke": {
+          "colors": ["V", "k"],
+          "thresholds": [0.15, 0.42],
+          "lit": { "colors": ["v"], "thresholds": [0.4] },
+          "shade": { "colors": ["K"], "thresholds": [0.65] },
+          "outline": "K"
+        },
+        "pool": { "colors": ["p", "V", "k", "K"], "thresholds": [0.1, 0.3, 0.6, 0.85], "outline": "K" },
+        "glow": { "colors": ["V", "v", "p", "W"], "thresholds": [0.15, 0.35, 0.6, 0.88] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "burst",
+          "look": "pool",
+          "at": [32, 40],
+          "frames": [0, 18],
+          "radius": [6, 18, 20, 20, 19, 10, 0],
+          "squash": [1, 0.34],
+          "noise": 0.2,
+          "scale": 5,
+          "boil": 3,
+          "power": 1.4,
+          "ease": "linear",
+          "cue": "hit"
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [27, 40],
+          "through": [[23, 31], [28, 21], [25, 12], [29, 5]],
+          "frames": [2, 16],
+          "width": 10,
+          "taper": [1, 0.6, 0.25],
+          "head": [0, 1, 1, 0],
+          "sway": 2.5,
+          "wavelength": 16,
+          "waves": 1,
+          "power": 1.3,
+          "ease": "linear",
+          "seed": 1
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [38, 41],
+          "through": [[42, 33], [38, 24], [42, 15]],
+          "frames": [4, 17],
+          "width": 9,
+          "taper": [1, 0.6, 0.25],
+          "head": [0, 1, 1, 0],
+          "sway": 2.5,
+          "wavelength": 16,
+          "waves": 1,
+          "power": 1.3,
+          "ease": "linear",
+          "seed": 2
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [20, 39],
+          "through": [[15, 34], [17, 27], [14, 23]],
+          "frames": [6, 15],
+          "width": 6,
+          "taper": [1, 0.6, 0.25],
+          "head": [0, 1, 1, 0],
+          "sway": 2,
+          "wavelength": 16,
+          "waves": 1,
+          "power": 1.3,
+          "ease": "linear",
+          "seed": 3
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [45, 39],
+          "through": [[50, 35], [48, 29], [51, 25]],
+          "frames": [5, 14],
+          "width": 6,
+          "taper": [1, 0.6, 0.25],
+          "head": [0, 1, 1, 0],
+          "sway": 2,
+          "wavelength": 16,
+          "waves": 1,
+          "power": 1.3,
+          "ease": "linear",
+          "seed": 4
+        },
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "frames": [0, 5],
+          "radius": [8, 24],
+          "width": [3, 3],
+          "squash": [1, 0.34],
+          "noise": 0.9,
+          "scale": 5,
+          "power": [1.4, 0.2]
+        },
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "frames": [2, 16],
+          "radius": [17, 21, 21, 19, 11],
+          "width": 3,
+          "squash": [1, 0.34],
+          "noise": 0.8,
+          "scale": 4,
+          "power": [0.9, 1.1, 1, 0.7, 0.18],
+          "ease": "linear"
+        }
+      ]
+    },
+    "buff": {
+      "frames": 10,
+      "duration": 80,
+      "loop": true,
+      "seed": 6,
+      "looks": {
+        "smoke": {
+          "colors": ["V", "k"],
+          "thresholds": [0.15, 0.42],
+          "lit": { "colors": ["v", "p"], "thresholds": [0.4, 0.85] },
+          "shade": { "colors": ["K"], "thresholds": [0.65] },
+          "outline": "K"
+        },
+        "pool": { "colors": ["p", "V", "k", "K"], "thresholds": [0.1, 0.3, 0.6, 0.85], "outline": "K" },
+        "glow": { "colors": ["V", "v", "p", "W"], "thresholds": [0.15, 0.35, 0.6, 0.88] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "burst",
+          "look": "pool",
+          "at": [32, 40],
+          "radius": 10,
+          "squash": [1, 0.34],
+          "noise": 0.25,
+          "scale": 5,
+          "boil": 3,
+          "power": 1.4
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [23, 39],
+          "through": [[20, 31], [21, 22], [24, 15], [27, 13]],
+          "width": [8, 9.5, 8],
+          "taper": [1, 0.75, 0.45, 0.25],
+          "sway": 2.2,
+          "wavelength": 14,
+          "waves": 1,
+          "power": 1.3,
+          "seed": 1
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [41, 39],
+          "through": [[44, 31], [43, 22], [40, 15], [37, 13]],
+          "width": [9.5, 8, 9.5],
+          "taper": [1, 0.75, 0.45, 0.25],
+          "sway": 2.2,
+          "wavelength": 16,
+          "waves": 1,
+          "power": 1.3,
+          "seed": 2
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [19, 38],
+          "through": [[15, 33], [16, 27]],
+          "width": 5,
+          "taper": [1, 0.75, 0.45, 0.25],
+          "sway": 1.5,
+          "wavelength": 10,
+          "waves": 1,
+          "power": 1.3,
+          "seed": 3
+        },
+        {
+          "kind": "stream",
+          "look": "pool",
+          "at": [45, 38],
+          "through": [[49, 33], [48, 27]],
+          "width": 5,
+          "taper": [1, 0.75, 0.45, 0.25],
+          "sway": 1.5,
+          "wavelength": 11,
+          "waves": 1,
+          "power": 1.3,
+          "seed": 4
+        },
+        {
+          "kind": "ring",
+          "look": "glow",
+          "at": [32, 40],
+          "radius": 12.5,
+          "width": 3,
+          "squash": [1, 0.34],
+          "noise": 0.5,
+          "scale": 4,
+          "power": [1.25, 0.75, 1.25]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "motes",
+          "at": [32, 18],
+          "area": [2, 12],
+          "rate": 0.4,
+          "angle": [88, 92],
+          "speed": [1, 1.3],
+          "life": [10, 10],
+          "sway": { "amplitude": [12, 3], "period": 10 },
+          "shapes": ["void-mote", "void-mote", "mote-p", "mote-v"]
+        }
+      ]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt fluid effects",
-  "description": "A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
+  "description": "Start fire, smoke, explosions and splashes from a preset (pixel_help topic presets, then pixel_compile with preset); for fewer frames keep N evenly spaced frames with one pixel_patch call (the quick start shows it), never by lowering frames in the source, which stops the simulation early. A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
   "type": "object",
   "properties": {
     "format": {
@@ -25,6 +25,12 @@
       "type": "integer",
       "minimum": 4,
       "maximum": 128
+    },
+    "subpixels": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "description": "Draw the bodies this many times finer than the world's pixels: each pixel of a body's picture turns as a square and the body sits where it is to a fraction of a pixel, so it turns and moves smoothly without changing shape; the liquid and its obstacles are drawn in blocks this size. The recipe's canvas is width and height times this, at most 256 a side and 4,194,304 pixels over its frames. Default 1, bodies at whole pixels."
     },
     "palette": {
       "type": "object",
@@ -131,14 +137,14 @@
           "substeps": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 4,
-            "description": "Simulation steps per frame; default 2. Raise for fast liquids."
+            "maximum": 16,
+            "description": "Simulation steps per frame; default 2. Raise for fast liquids; time grows with it (8 takes about twice as long as 4)."
           },
           "iterations": {
             "type": "integer",
             "minimum": 1,
             "maximum": 200,
-            "description": "Pressure solve sweeps per step, and with viscosity or yield as many steps of the viscosity solve; default 30 (gas) or 40 (liquid)."
+            "description": "Pressure solve work per step, and with viscosity or yield as many steps of the viscosity solve; default 30 (gas) or 40 (liquid). A gas takes this many sweeps; a liquid a third as many conjugate-gradient steps, which settle long columns and channels."
           },
           "buoyancy": {
             "type": "number",
@@ -219,7 +225,7 @@
             },
             "maxItems": 2,
             "minItems": 2,
-            "description": "Liquid: acceleration [x, y]; default [0, 0.3]."
+            "description": "Liquid: acceleration [x, y]; default [0, 0.3]. Gas: only with bodies, the pull on them (the gas itself rises by buoyancy); default [0, 0.3]."
           },
           "flip": {
             "type": "number",
@@ -241,7 +247,7 @@
             "type": "number",
             "minimum": 0,
             "maximum": 4,
-            "description": "Liquid: how strongly it holds on to walls and obstacles. Liquid touching a solid stays on it unless pulled away faster than about adhesion ÷ 2 pixels per frame, so a film clings under a ledge, to a spoon or down a jar's side. Default 0."
+            "description": "Liquid: how strongly it holds on to walls and obstacles. Liquid touching a solid stays on it unless pulled away faster than about adhesion ÷ 2 pixels per frame, so a film clings under a ledge, to a spoon or down a jar's side, and moves with an obstacle that moves. An obstacle's own adhesion replaces it there. Default 0."
           },
           "keys": {
             "type": "array",
@@ -284,6 +290,11 @@
                   },
                   "maxItems": 2,
                   "minItems": 2
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
                 }
               },
               "required": [
@@ -293,7 +304,7 @@
             },
             "maxItems": 16,
             "minItems": 1,
-            "description": "Liquid: change yield, viscosity, adhesion or gravity at a chosen frame, so the decisive moment lands where you want it: a heap held up by its yield gives way when a key drops it, a blob held under a ledge by adhesion drops when a key sets adhesion to 0. Each setting starts from the effect's own value and follows the keys that name it, in frame order; a loop repeats them every cycle."
+            "description": "Liquid: change yield, viscosity, adhesion, gravity or drag at a chosen frame, so the decisive moment lands where you want it: a heap held up by its yield gives way when a key drops it, a blob held under a ledge by adhesion drops when a key sets adhesion to 0, and drag (not viscosity, which freezes a slosh tilted) calms a one-shot so it ends at rest. Each setting starts from the effect's own value and follows the keys that name it, in frame order; a loop repeats them every cycle."
           },
           "fill": {
             "type": "array",
@@ -331,9 +342,24 @@
                   "minItems": 2
                 },
                 "radius": {
-                  "type": "number",
-                  "minimum": 0.5,
-                  "maximum": 128
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 128
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 128
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ],
+                  "description": "Pixels from at, or [x, y] for an ellipse."
                 },
                 "velocity": {
                   "type": "array",
@@ -380,14 +406,30 @@
                     "speed"
                   ],
                   "additionalProperties": false,
-                  "description": "Break the fill into seeded pieces with a one-pixel gap between them, each flying straight out at its own speed (plus velocity): a liquid burst in mid-air. Outward velocity on one connected blob is cancelled by the pressure solve; separate pieces keep it. The water of the gaps goes to their pieces, so the volume is kept."
+                  "description": "Break the fill into seeded pieces with a one-pixel gap between them and rounded corners, each flying straight out at its own speed (plus velocity): a liquid burst in mid-air. Outward velocity on one connected blob is cancelled by the pressure solve; separate pieces keep it. The water of the gaps and corners goes to their pieces, so the volume is kept."
+                },
+                "temperature": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "With heat: the fill's temperature; default the air's (heat.ambient)."
+                },
+                "frozen": {
+                  "type": "boolean",
+                  "description": "With heat: the fill starts as ice (an ice cube, a frozen pond); give it a temperature at or below heat.freeze."
+                },
+                "vapour": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 4,
+                  "description": "With vapour: the fill holds still vapour of this density (1 a full cell of steam) instead of water: humid air for dew or frost."
                 }
               },
               "required": [],
               "additionalProperties": false
             },
-            "maxItems": 16,
-            "description": "Liquid: water at frame 0 in discs (at, radius), boxes (x, y, w, h) or their overlap (both)."
+            "maxItems": 64,
+            "description": "Liquid: water at frame 0 in discs or ellipses (at, radius), boxes (x, y, w, h) or their overlap (both): a disc cut by a box is a dome."
           },
           "walls": {
             "type": "array",
@@ -415,13 +457,15 @@
                 },
                 "x": {
                   "type": "integer",
-                  "minimum": 0,
-                  "maximum": 127
+                  "minimum": -256,
+                  "maximum": 128,
+                  "description": "Left edge; it may hang off the canvas by up to the symbol's width, and what hangs off is clipped."
                 },
                 "y": {
                   "type": "integer",
-                  "minimum": 0,
-                  "maximum": 127
+                  "minimum": -128,
+                  "maximum": 128,
+                  "description": "Top edge; it may hang off the canvas by up to the symbol's height, and what hangs off is clipped."
                 },
                 "draw": {
                   "enum": [
@@ -440,7 +484,76 @@
                 },
                 "solid": {
                   "type": "boolean",
-                  "description": "false: a decoration, drawn over or under the fluid as draw says but never met by it (a net, a candle flame, a label, a background). Default true."
+                  "description": "false: a decoration, drawn over or under the fluid as draw says but never met by it (a net, a candle flame, a label, a background); with a voltage, an electrode the gas flows through (a cloud's charge, unseen with draw none). Default true."
+                },
+                "voltage": {
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "minimum": -1000,
+                      "maximum": 1000
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "frame": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          },
+                          "voltage": {
+                            "type": "number",
+                            "minimum": -1000,
+                            "maximum": 1000
+                          },
+                          "over": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 256,
+                            "description": "Frames to move to it in a straight line; default 0, at once."
+                          }
+                        },
+                        "required": [
+                          "frame",
+                          "voltage"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "An electrode at this many volts, or keys that change it on cue (strikes, pulses); a loop repeats them. Arcs run between electrodes at different voltages, through a gas or the air over a liquid with heat and vapour."
+                },
+                "resistance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000,
+                  "description": "The electrode supply's own resistance, so its voltage sags as current flows: a long arc starves, a shorter path takes over, and one strike stops the others. Default 0, an ideal supply."
+                },
+                "charge": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 10000,
+                  "description": "Charge the electrode stores (current × frames per volt), refilled through its resistance: strikes drain it and come in bursts. Default 0."
+                },
+                "conductor": {
+                  "type": "boolean",
+                  "description": "Metal at no set voltage, which arcs jump to and through (a gas, or a liquid with heat and vapour)."
+                },
+                "adhesion": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4,
+                  "description": "Liquid: this obstacle's own adhesion, in place of the effect's, for liquid touching it: a sticky spoon (4) beside a non-stick pan (0)."
+                },
+                "temperature": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "A hot plate or a cold window: the obstacle keeps this temperature and warms or chills what touches it, a gas's air, or a liquid's water and ice and the air over them (the liquid needs heat). Obstacles without one take no part in the heat's flow."
                 },
                 "keys": {
                   "type": "array",
@@ -461,13 +574,13 @@
                       },
                       "x": {
                         "type": "integer",
-                        "minimum": 0,
-                        "maximum": 127
+                        "minimum": -256,
+                        "maximum": 128
                       },
                       "y": {
                         "type": "integer",
-                        "minimum": 0,
-                        "maximum": 127
+                        "minimum": -128,
+                        "maximum": 128
                       },
                       "show": {
                         "type": "boolean",
@@ -481,7 +594,7 @@
                   },
                   "maxItems": 16,
                   "minItems": 1,
-                  "description": "Move the obstacle or take it away on cue: a dam that vanishes, a gate that lifts, a plunger, a paddle. Each key starts from where the obstacle is on its frame; the symbol must stay inside the canvas on every frame it shows. While a key's over runs, the obstacle pushes the fluid ahead of it (its faces carry its speed) and shoves fluid in cells it now covers to the first open cell, never through another solid. A key with no over is a cut: the obstacle is simply elsewhere, pushes nothing, and fluid where it lands (or where an obstacle appears) is taken away. A loop repeats the keys every cycle."
+                  "description": "Move the obstacle or take it away on cue: a dam that vanishes, a gate that lifts, a plunger, a paddle. Each key starts from where the obstacle is on its frame, and may take it partly or wholly off the canvas (up to its own size past an edge), where it is clipped: a rod reaching in, a load leaving. While a key's over runs, the obstacle pushes the fluid ahead of it (its faces carry its speed) and shoves fluid in cells it now covers to the first open cell, never through another solid; liquid flows in behind it, a viscous liquid is dragged along its sides, and with adhesion liquid touching it moves with it. A key with no over is a cut: the obstacle is simply elsewhere, pushes nothing, and fluid where it lands (or where an obstacle appears) is taken away. A loop repeats the keys every cycle."
                 }
               },
               "required": [
@@ -490,7 +603,7 @@
               "additionalProperties": false
             },
             "maxItems": 32,
-            "description": "Solid shapes from symbols: their visible pixels block the flow (decorations with solid: false only draw). They must fit the canvas."
+            "description": "Solid shapes from symbols: their visible pixels block the flow (decorations with solid: false only draw). One may hang off the canvas by up to its own size; what hangs off is clipped, as the edge clips the fluid."
           },
           "emitters": {
             "type": "array",
@@ -564,7 +677,7 @@
                   "type": "number",
                   "minimum": -16,
                   "maximum": 16,
-                  "description": "Gas only: heat added or held; heat rises by buoyancy and maps to fire ramps. Default 0."
+                  "description": "Gas: heat added or held; heat rises by buoyancy and maps to fire ramps. Default 0. Liquid with heat: the temperature of the water it adds (default the air's, heat.ambient)."
                 },
                 "falloff": {
                   "type": "number",
@@ -733,7 +846,7 @@
                           "minItems": 2
                         }
                       ],
-                      "description": "Frames each spark lives; [min, max] picks per spark. Default [8, 16]."
+                      "description": "Frames each spark lives; [min, max] picks per spark. Default [8, 16]. In a liquid, spray (follow 0) still in the air then flies on, for up to as long again, until it falls back in."
                     },
                     "colors": {
                       "type": "array",
@@ -818,11 +931,29 @@
                       "type": "number",
                       "minimum": 0,
                       "maximum": 2,
-                      "description": "How much the flow carries the spark: 1 (default) moves with the fluid, 0 ignores it (thrown debris). In a liquid, a spark with follow 0 that leaves the water ends where it falls back in (spray)."
+                      "description": "How much the flow carries the spark: 1 (default) moves with the fluid, 0 ignores it (thrown debris). In a liquid, a spark with follow 0 that leaves the water ends where it falls back in (spray); one riding the flow out of the water flies on as a droplet, falling with the liquid's gravity unless it has its own, and ends the same way."
                     },
                     "pop": {
                       "type": "boolean",
                       "description": "Liquid only: the spark pops where it leaves the liquid, drawn as a ring around it for one frame and two droplets the next (bubbles bursting at the surface)."
+                    },
+                    "rise": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4,
+                      "description": "Liquid: makes the spark a bubble that behaves like air. It rises this many pixels per frame through still water, against the liquid's gravity, on top of the flow that carries it (follow); it slides along any obstacle or closed edge it meets instead of ending there, up a sloping ceiling and out from under a ledge within 5 pixels, or waits under it, where waiting bubbles that touch merge into larger ones (up to 3 pixels across); it ends where it reaches the air, bursting there with pop. About 0.3–0.8."
+                    },
+                    "wobble": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2,
+                      "description": "With rise: pixels the bubble sways from side to side as it rises, once every eight frames from a seeded start. Default 0."
+                    },
+                    "lift": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "With rise: share of its buoyancy the bubble hands to the water around it, as if that much of the water weighed nothing. A column of bubbles then drives an upwelling: 1 with about a bubble a frame raises a dome on the surface over it, 0.3 a slight bump. Default 0."
                     }
                   },
                   "required": [
@@ -839,7 +970,83 @@
               "additionalProperties": false
             },
             "maxItems": 16,
-            "description": "1–16 sources; a liquid with a fill may have none."
+            "description": "1–16 sources; a liquid with a fill, or a gas with electrodes, may have none (an empty list)."
+          },
+          "electric": {
+            "type": "object",
+            "properties": {
+              "breakdown": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 1000,
+                "description": "Field, in volts per pixel, at which neutral gas breaks down; lower in hot gas. Default 3."
+              },
+              "focus": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 8,
+                "description": "How strongly growth favours the strongest field: about 1 forks freely like lightning, 3–4 runs on one path like an arc between close plates. Default 2."
+              },
+              "growth": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "description": "Cells of new plasma a frame, drawn one at a time where the field most exceeds breakdown (a leader's speed). Default 8."
+              },
+              "recombine": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of ionization lost a frame where no current holds it (slower in hot gas): the afterglow. Default 0.3."
+              },
+              "sustain": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 1000,
+                "description": "Current that keeps a channel fully ionized; below half of it a channel goes out. Default 0.5."
+              },
+              "memory": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 256,
+                "description": "Frames a spent channel keeps guiding new strikes, which run down it at once (a restrike on the same channel). 0: none. Default 8."
+              },
+              "heating": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 16,
+                "description": "Temperature added a frame per unit of current squared (Joule heating), so buoyancy lifts an arc. Default 0.2."
+              },
+              "ionize": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 64,
+                "description": "Gas hotter than this is plasma too, fully at half as hot again: an arc's hot air, a fireball's core. Default 2, above every flame on the shared heat scale; 0 turns it off."
+              },
+              "ground": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "left",
+                    "right",
+                    "top",
+                    "bottom"
+                  ]
+                },
+                "maxItems": 4,
+                "uniqueItems": true,
+                "description": "Canvas edges held at 0 V, the world beyond: arcs that reach them strike them."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "description": "Conjugate-gradient steps of the field solve each step; default 24."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Electricity and plasma. Obstacles with a voltage are electrodes; the field between them breaks the gas down into branching channels that conduct, glow, heat the gas and recombine. Defaults apply when only an obstacle has a voltage. A liquid with heat and vapour carries it too: arcs burn in the air over it (drawn by the vapour's look), land on the water, which conducts, and their current heats the water where they land, so it boils; ice hardly conducts."
           },
           "look": {
             "type": "array",
@@ -853,9 +1060,12 @@
                     "speed",
                     "depth",
                     "light",
-                    "shadow"
+                    "shadow",
+                    "strand",
+                    "ionization",
+                    "current"
                   ],
-                  "description": "density (smoke or water; water is 1 inside), temperature (gas heat), speed (pixels per frame; foam, fast flow; a liquid has speed where there is water, a gas wherever its air moves, smoke or not), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew)."
+                  "description": "density (smoke or water; water is 1 inside), temperature (gas heat; a liquid's water, ice or vapour with heat), speed (pixels per frame; foam, fast flow; a liquid has speed where there is water, a gas wherever its air moves, smoke or not), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew), strand (liquids: 1 along a one-pixel path through liquid stretched thinner than the density can draw, a string joining two pieces or hanging at least 3 pixels off one, such as honey pulled up after a spoon), ionization (electric gases, and over a liquid in the vapour look: plasma, 0–1, 1 in a live channel, fading as it recombines) or current (electric gases and vapours: the current through each pixel; peak.current in the metadata gives the brightest)."
                 },
                 "colors": {
                   "type": "array",
@@ -914,6 +1124,28 @@
                     }
                   ],
                   "description": "Dither pattern, as for the dither operation: bayer4 (default), bayer2, bayer8, noise or value (seeded by the effect) or a matrix of ranks. Anchored to the canvas, so it never crawls."
+                },
+                "halo": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key (grid rows name colours by character)."
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4,
+                      "description": "Pixels of glow; default 1 (the four neighbours)."
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A glow of one colour on the empty pixels within width of what this layer drew: an arc's glow, a rim round a flame."
                 }
               },
               "required": [
@@ -980,7 +1212,7 @@
                       "minItems": 2
                     }
                   ],
-                  "description": "Frames each droplet lives; [min, max] picks per droplet. Default [6, 12]."
+                  "description": "Frames each droplet lives; [min, max] picks per droplet. Default [6, 12]. Spray still in the air then flies on, for up to as long again, until it falls back in."
                 },
                 "colors": {
                   "type": "array",
@@ -1025,7 +1257,29 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 2,
-                  "description": "How much the flow carries the droplet: 0 (default) is spray, drawn once it has left the water and ending where it falls back in; above 0 is foam carried on the flow, ending once it is carried under."
+                  "description": "How much the flow carries the droplet: 0 (default) is spray, drawn once it has left the water and ending where it falls back in; above 0 is foam carried on the flow, ending once it is carried under. Bubbles default to 1."
+                },
+                "rise": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4,
+                  "description": "Makes the layer bubbles instead of spray: air a plunging stream (speed) or a landing drop (impact) drives into a pool. They start under the surface, where water lies two pixels deep on every side, at rest in the water; they rise this many pixels per frame against the liquid's gravity, ride the flow, slide under obstacles and end at the surface, as sparks with rise do. throw, spread and gravity shape spray only."
+                },
+                "wobble": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "Bubbles: pixels each sways from side to side as it rises, once every eight frames. Default 0."
+                },
+                "lift": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Bubbles: share of each one's buoyancy handed to the water around it (see the sparks' lift). Default 0."
+                },
+                "pop": {
+                  "type": "boolean",
+                  "description": "Bubbles: burst where they reach the surface, a ring for one frame and two droplets the next. Default false: they vanish there."
                 }
               },
               "required": [
@@ -1044,10 +1298,876 @@
                   ]
                 }
               ],
-              "description": "Spray and foam thrown off the liquid by its own motion, from particles at the surface, tipped away from the water."
+              "description": "Spray and foam thrown off the liquid by its own motion, from particles at the surface, tipped away from the water; or, with rise, bubbles driven under it."
             },
             "maxItems": 4,
             "description": "Liquid: up to four layers of spray or foam thrown off the water where it lands or runs fast, drawn over it like sparks."
+          },
+          "air": {
+            "type": "object",
+            "properties": {
+              "stiffness": {
+                "type": "number",
+                "minimum": 2,
+                "maximum": 1000,
+                "description": "Pixels of liquid head that squeeze a pocket to half its size: under h pixels of liquid a pocket keeps stiffness / (stiffness + h) of its size, and a pocket the liquid pulls on stretches the same way. Default 40; 1000 barely gives. Stable at any setting."
+              },
+              "bubbles": {
+                "type": "object",
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key (grid rows name colours by character)."
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "description": "Palette keys spread over each bubble's life."
+                  },
+                  "life": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        "maxItems": 2,
+                        "minItems": 2
+                      }
+                    ],
+                    "description": "Frames each bubble lives; [min, max] picks per bubble. Default [30, 60]."
+                  },
+                  "rise": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "description": "Pixels per frame each rises through still water; default 0.5."
+                  },
+                  "wobble": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2,
+                    "description": "Pixels each sways from side to side; default 0."
+                  },
+                  "lift": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Share of each one's buoyancy handed to the water; default 0."
+                  },
+                  "pop": {
+                    "type": "boolean",
+                    "description": "Burst where they reach the surface; default false."
+                  }
+                },
+                "required": [
+                  "colors"
+                ],
+                "additionalProperties": false,
+                "description": "How the air of a pocket squeezed too small to show (under three cells) rises as bubbles, as large as the air it held, as sparks with rise do. Without it that air leaves unseen."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Liquid: air pockets that keep their air. Off by default, so sealed air collapses as the liquid fills it. With air, a region of air sealed off from the open canvas edges keeps its amount of air and pushes back by the gas law, so an upturned cup keeps most of its air, air stays under a shelf, a sealed bottle glugs as it pours and a big bubble rises. Bubbles gathering under a ceiling, two that touch with eight square pixels of air or more between them, become a pocket there, and a pocket that reaches open air vents. Every sealed space counts: a mould filling from above traps air in its tips, and a closed tank's air pushes on its water."
+          },
+          "bodies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Names the body in the metadata (its path, frame by frame, and when it leaves the canvas). Copies are numbered name-0, name-1, …",
+                  "maxLength": 60
+                },
+                "shape": {
+                  "enum": [
+                    "circle",
+                    "box",
+                    "polygon",
+                    "hoop"
+                  ],
+                  "description": "circle (radius; 0.5 is one pixel), box (size), polygon (convex points) or hoop (a ring of thin walls with an optional gap, for a fixed container)."
+                },
+                "radius": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 128,
+                  "description": "circle: 0.5–32 pixels, drawn as an ellipse of diameter round(2 × radius). hoop: 2–128."
+                },
+                "size": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 64
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "box: [width, height] in pixels."
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number",
+                      "minimum": -64,
+                      "maximum": 64
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  },
+                  "maxItems": 8,
+                  "minItems": 3,
+                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid."
+                },
+                "sides": {
+                  "type": "integer",
+                  "minimum": 3,
+                  "maximum": 96,
+                  "description": "hoop: straight walls around it. Default: its radius, from 8 to 64."
+                },
+                "gap": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 330,
+                  "description": "hoop: degrees left open, centred on the hoop's angle (0 points right, 90 down). Default 0, closed."
+                },
+                "thickness": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 8,
+                  "description": "hoop: wall thickness in pixels. Default 1."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid."
+                },
+                "angle": {
+                  "type": "number",
+                  "minimum": -3600,
+                  "maximum": 3600,
+                  "description": "Degrees clockwise. Default 0. Drawn to the whole degree with straight, even sides (under 6 pixels across, always square); collisions use the exact angle."
+                },
+                "velocity": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -8,
+                    "maximum": 8
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Starting velocity [x, y] in pixels a frame; for a fixed body, how it moves for ever. Speeds stop at 8."
+                },
+                "spin": {
+                  "type": "number",
+                  "minimum": -45,
+                  "maximum": 45,
+                  "description": "Starting spin in degrees a frame, clockwise; for a fixed body, how it turns for ever."
+                },
+                "fixed": {
+                  "type": "boolean",
+                  "description": "Never pushed: a wall, peg or container. With velocity or spin it moves exactly so, pushing what it meets."
+                },
+                "weightless": {
+                  "type": "boolean",
+                  "description": "Gravity doesn't pull it: it floats where it is put, drifting only when hit."
+                },
+                "asleep": {
+                  "type": "boolean",
+                  "description": "Starts asleep: holds exactly still, even in the air, until something moves into it."
+                },
+                "tireless": {
+                  "type": "boolean",
+                  "description": "Every hit gives back the energy (speed plus height against gravity) the hit cost, so a ball keeps bouncing at full height among loose blocks. An open cheat; off by default."
+                },
+                "speed": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 8,
+                  "description": "Held speed, pixels a frame: set back to it along its heading after every step, so a ball crossing a board never tires. An open cheat, like tireless."
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 100,
+                  "description": "Mass per square pixel. Default 1. A heavier body pushes lighter ones about and keeps its own speed."
+                },
+                "bounce": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How much of its approach speed a body keeps in a bounce: 0 lands dead, 1 bounces back as fast. A pair bounces with the larger. Default 0.3."
+                },
+                "friction": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "Sliding friction; a pair uses the square root of the product. Default 0.4."
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "About the share of its speed lost each frame. Default 0."
+                },
+                "spinDrag": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "About the share of its spin lost each frame. Default 0.02."
+                },
+                "fill": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key; dot and space are reserved."
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "Palette key, or a list the body steps through at each hit."
+                },
+                "outline": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Key for the pixels on the shape's edge."
+                },
+                "symbol": {
+                  "type": "string",
+                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns)."
+                },
+                "trail": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 16,
+                      "description": "Frames of trail. Default 2."
+                    }
+                  },
+                  "required": [
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                "ring": {
+                  "type": "object",
+                  "properties": {
+                    "radius": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 256
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 256
+                    },
+                    "from": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees of the first copy. Default 0."
+                    },
+                    "to": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600,
+                      "description": "Degrees of the last; default a full turn, spaced evenly."
+                    }
+                  },
+                  "required": [
+                    "radius",
+                    "count"
+                  ],
+                  "additionalProperties": false
+                },
+                "grid": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[columns, rows]."
+                    },
+                    "step": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -256,
+                        "maximum": 256
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[x, y] between copies."
+                    },
+                    "stagger": {
+                      "type": "number",
+                      "minimum": -256,
+                      "maximum": 256,
+                      "description": "Shifts odd rows across. Default 0."
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "step"
+                  ],
+                  "additionalProperties": false
+                },
+                "temperature": {
+                  "type": "number",
+                  "minimum": -16,
+                  "maximum": 16,
+                  "description": "With heat (a gas, or a liquid with heat): the temperature the body keeps, warming or chilling what it touches as a hot obstacle does, so a red-hot stone boils the water it lands in. Default none."
+                }
+              },
+              "required": [
+                "shape",
+                "at"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "description": "Rigid bodies in the fluid, the entries a pixelforge-bodies effect takes (pixel_help topic bodies), with the fluid's gravity, walls and obstacles. Each is a moving solid that shoves the fluid aside, a turning one stirring it; water floats it by its density (1 is water's: 0.5 floats half out) and drags it, what rests on it weighs on it, resting sand holds it up as ground, and a gas pushes and drags it. In a loop the closing frames bring them back to where the cycle starts; with heat a body keeps its temperature. They are drawn over the fluid, and the metadata gives their paths."
+          },
+          "granular": {
+            "type": "object",
+            "properties": {
+              "repose": {
+                "type": "number",
+                "minimum": 5,
+                "maximum": 45,
+                "description": "The steepest slope, in degrees, the grains hold, at any height: a heap stands at it, a steeper face avalanches down to it. Dry sand 30-35, fine dust 20-25, gravel 40-45; default 33."
+              },
+              "cohesion": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "Damp grains: they hold as dry ones do that many pixels down, so they stand steeper than their repose and keep small overhangs. Default 0 (dry)."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Liquid: grains, such as sand, salt, sugar, gravel or dry snow, in place of a liquid. Friction that grows with pressure holds a slope up to repose at any height; grains land dead instead of splashing, slide down a steeper face as an avalanche and come to rest exactly. Not with yield, heat or air. Cohesion (tension) defaults to 0."
+          },
+          "heat": {
+            "type": "object",
+            "properties": {
+              "ambient": {
+                "type": "number",
+                "minimum": -16,
+                "maximum": 16,
+                "description": "The room's air temperature, which air drifts back to; default 0. The scale is the gas one: water freezes at -0.5 and boils at 0.5, flames run about 0.3 to 1."
+              },
+              "air": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.2,
+                "description": "How fast the water's surface trades heat with the air, per frame; default 0.04."
+              },
+              "conduct": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.2,
+                "description": "How fast heat spreads through the water and ice, per frame; default 0.12."
+              },
+              "contact": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.2,
+                "description": "How fast a hot or cold obstacle (its temperature) warms or chills what touches it, per frame; default 0.15."
+              },
+              "freeze": {
+                "type": "number",
+                "minimum": -8,
+                "maximum": 8,
+                "description": "Freezing point; default -0.5."
+              },
+              "boil": {
+                "type": "number",
+                "minimum": -8,
+                "maximum": 16,
+                "description": "Boiling point, above freeze; default 0.5."
+              },
+              "latent": {
+                "type": "number",
+                "minimum": 0.02,
+                "maximum": 8,
+                "description": "Heat to melt or freeze, in degrees of the scale: the temperature holds at freeze while it is taken up or given off, so melting takes visible time and ice never flickers. Default 0.5."
+              },
+              "vaporize": {
+                "type": "number",
+                "minimum": 0.02,
+                "maximum": 16,
+                "description": "Heat to boil away, in degrees; each particle needs its own seeded half to one and a half of it, so a pot bubbles steadily. Default 1."
+              },
+              "evaporation": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "With vapour: the chance each frame that a surface particle near the boil steams off (it falls off with the square of the temperature toward freeze): a warm puddle steams. Default 0."
+              },
+              "dew": {
+                "type": "number",
+                "minimum": -16,
+                "maximum": 16,
+                "description": "With vapour: vapour touching anything colder than this condenses, on a solid as dew (drawn as water) that drips off as a drop. Default boil - 0.1; at most boil."
+              },
+              "condense": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of such vapour that condenses each frame; default 0.2."
+              },
+              "frost": {
+                "type": "number",
+                "minimum": -16,
+                "maximum": 16,
+                "description": "With vapour: vapour touching ice or an obstacle colder than this grows straight into ice (frost) as fern-like fingers, only from cold surfaces (corners first) and frost already there, and only into air below freeze. Off unless set; at most freeze."
+              },
+              "deposit": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of such vapour that turns to frost each frame, at a finger's tip; default 0.1."
+              },
+              "branch": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "With vapour: how often a frost finger forks at 45 degrees into a shorter branch, at every other cell along it; 0 grows straight fingers. Default 0.5."
+              },
+              "sublimate": {
+                "type": "boolean",
+                "description": "With vapour: ice turns straight into vapour at its surface instead of melting (dry ice). Default false."
+              },
+              "grain": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Seeded unevenness in where water freezes and frost grows, so fronts are ragged. Default 0."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Liquid: phase changes. Each particle carries heat; water below freeze turns to ice where it touches ice or a cold solid (or 0.5 below freeze anywhere), ice holds still or settles as a piece and floats, and a cell of ice is solid to the flow, to bubbles and to air pockets. With vapour, water boils into steam, and steam condenses or frosts back. Water, ice and vapour are counted every frame in the figures (water, ice, vapour, added, taken). Obstacles may move on keys or be smooth: a hot spoon, a heated piston or a smooth hot plate work as a still one does."
+          },
+          "vapour": {
+            "type": "object",
+            "properties": {
+              "expansion": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 64,
+                "description": "Cells a cell's worth of water fills as vapour: how much room steam takes on screen and how hard boiling pushes the air. Default 8."
+              },
+              "buoyancy": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 2,
+                "description": "Lift per degree above the air's temperature, against gravity; default 0.2."
+              },
+              "weight": {
+                "type": "number",
+                "minimum": -2,
+                "maximum": 2,
+                "description": "Sinking per unit of vapour density (negative lifts it: steam is light, dry-ice fog heavy); default 0."
+              },
+              "vorticity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "Default 0.2."
+              },
+              "dissipation": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of vapour that fades each frame (it leaves the figures as taken); default 0."
+              },
+              "cooling": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Share of the air's difference from heat.ambient lost each frame; default 0.05."
+              },
+              "drag": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Default 0.02."
+              },
+              "spread": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 0.25,
+                "description": "Diffusion between neighbouring cells per step, which keeps matter; for still humid air that feeds frost. Default 0."
+              },
+              "iterations": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 200,
+                "description": "Pressure sweeps per step; default 20."
+              },
+              "bubbles": {
+                "type": "object",
+                "properties": {
+                  "colors": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key (grid rows name colours by character)."
+                    },
+                    "maxItems": 16,
+                    "minItems": 1,
+                    "description": "Palette keys spread over each bubble's life."
+                  },
+                  "size": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3
+                  },
+                  "life": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 256
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        "maxItems": 2,
+                        "minItems": 2
+                      }
+                    ]
+                  },
+                  "rise": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 4,
+                    "description": "Default 0.8."
+                  },
+                  "wobble": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "lift": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Share of its buoyancy handed to the water, so a boil churns the pot."
+                  },
+                  "pop": {
+                    "type": "boolean"
+                  },
+                  "follow": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "drag": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  }
+                },
+                "required": [
+                  "colors"
+                ],
+                "additionalProperties": false,
+                "description": "Bubbles a boil makes inside the water, as sparks with rise: they carry their vapour up and let it out at the surface (into an air pocket, they add to its air). Without them water boils only at its surface."
+              },
+              "look": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "enum": [
+                        "density",
+                        "temperature",
+                        "speed",
+                        "depth",
+                        "light",
+                        "shadow",
+                        "strand",
+                        "ionization",
+                        "current"
+                      ],
+                      "description": "density (smoke or water; water is 1 inside), temperature (gas heat; a liquid's water, ice or vapour with heat), speed (pixels per frame; foam, fast flow; a liquid has speed where there is water, a gas wherever its air moves, smoke or not), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew), strand (liquids: 1 along a one-pixel path through liquid stretched thinner than the density can draw, a string joining two pieces or hanging at least 3 pixels off one, such as honey pulled up after a spoon), ionization (electric gases, and over a liquid in the vapour look: plasma, 0–1, 1 in a live channel, fading as it recombines) or current (electric gases and vapours: the current through each pixel; peak.current in the metadata gives the brightest)."
+                    },
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (grid rows name colours by character)."
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "description": "Palette keys from the lowest level to the highest."
+                    },
+                    "thresholds": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0.001,
+                        "maximum": 256
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "description": "One rising value per colour: each colour is fully on from its threshold up."
+                    },
+                    "dither": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Feather each colour in below its threshold through the pattern, over this share of the gap to the previous threshold (to 0 for the first). 0 draws hard bands; default 0.5."
+                    },
+                    "pattern": {
+                      "oneOf": [
+                        {
+                          "enum": [
+                            "bayer2",
+                            "bayer4",
+                            "bayer8",
+                            "noise",
+                            "value"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 255
+                            },
+                            "maxItems": 16,
+                            "minItems": 1
+                          },
+                          "maxItems": 16,
+                          "minItems": 1
+                        }
+                      ],
+                      "description": "Dither pattern, as for the dither operation: bayer4 (default), bayer2, bayer8, noise or value (seeded by the effect) or a matrix of ranks. Anchored to the canvas, so it never crawls."
+                    },
+                    "halo": {
+                      "type": "object",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1,
+                          "description": "A one-character palette key (grid rows name colours by character)."
+                        },
+                        "width": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4,
+                          "description": "Pixels of glow; default 1 (the four neighbours)."
+                        }
+                      },
+                      "required": [
+                        "color"
+                      ],
+                      "additionalProperties": false,
+                      "description": "A glow of one colour on the empty pixels within width of what this layer drew: an arc's glow, a rim round a flame."
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "colors",
+                    "thresholds"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 8,
+                "description": "Gas-style layers for the vapour (density 1 is a cell full of steam, temperature, speed, light, shadow), drawn under the water. Without them vapour is invisible."
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "description": "Liquid with heat: steam and fog, moved by the gas solver through the cells holding neither water nor ice; the water and ice are walls moving with it."
+          },
+          "ice": {
+            "type": "object",
+            "properties": {
+              "look": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "field": {
+                      "enum": [
+                        "density",
+                        "temperature",
+                        "speed",
+                        "depth",
+                        "light",
+                        "shadow",
+                        "strand",
+                        "ionization",
+                        "current"
+                      ],
+                      "description": "density (smoke or water; water is 1 inside), temperature (gas heat; a liquid's water, ice or vapour with heat), speed (pixels per frame; foam, fast flow; a liquid has speed where there is water, a gas wherever its air moves, smoke or not), depth (pixels down from the liquid surface, 1 on the top row; from the third row down it follows the shallowest surface within three pixels along the row), light or shadow (0–1: how sharply density falls toward or away from the light; these only recolour pixels earlier layers drew), strand (liquids: 1 along a one-pixel path through liquid stretched thinner than the density can draw, a string joining two pieces or hanging at least 3 pixels off one, such as honey pulled up after a spoon), ionization (electric gases, and over a liquid in the vapour look: plasma, 0–1, 1 in a live channel, fading as it recombines) or current (electric gases and vapours: the current through each pixel; peak.current in the metadata gives the brightest)."
+                    },
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (grid rows name colours by character)."
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "description": "Palette keys from the lowest level to the highest."
+                    },
+                    "thresholds": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0.001,
+                        "maximum": 256
+                      },
+                      "maxItems": 16,
+                      "minItems": 1,
+                      "description": "One rising value per colour: each colour is fully on from its threshold up."
+                    },
+                    "dither": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Feather each colour in below its threshold through the pattern, over this share of the gap to the previous threshold (to 0 for the first). 0 draws hard bands; default 0.5."
+                    },
+                    "pattern": {
+                      "oneOf": [
+                        {
+                          "enum": [
+                            "bayer2",
+                            "bayer4",
+                            "bayer8",
+                            "noise",
+                            "value"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 255
+                            },
+                            "maxItems": 16,
+                            "minItems": 1
+                          },
+                          "maxItems": 16,
+                          "minItems": 1
+                        }
+                      ],
+                      "description": "Dither pattern, as for the dither operation: bayer4 (default), bayer2, bayer8, noise or value (seeded by the effect) or a matrix of ranks. Anchored to the canvas, so it never crawls."
+                    },
+                    "halo": {
+                      "type": "object",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1,
+                          "description": "A one-character palette key (grid rows name colours by character)."
+                        },
+                        "width": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 4,
+                          "description": "Pixels of glow; default 1 (the four neighbours)."
+                        }
+                      },
+                      "required": [
+                        "color"
+                      ],
+                      "additionalProperties": false,
+                      "description": "A glow of one colour on the empty pixels within width of what this layer drew: an arc's glow, a rim round a flame."
+                    }
+                  },
+                  "required": [
+                    "field",
+                    "colors",
+                    "thresholds"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Gas-style layers for the ice, drawn cell by cell over the water (density 0.5 is a cell of ice)."
+              }
+            },
+            "required": [
+              "look"
+            ],
+            "additionalProperties": false,
+            "description": "Liquid with heat: how ice is drawn; default the water's look."
           },
           "light": {
             "type": "array",
@@ -1078,7 +2198,7 @@
             },
             "required": [],
             "additionalProperties": false,
-            "description": "De-Stray (specks and pinholes take their surroundings' colour) and De-Corner cleanup of the fluid before outline and sparks."
+            "description": "De-Stray (specks and pinholes take their surroundings' colour; a liquid's lone pixel is a drop, and stays) and De-Corner cleanup of the fluid before outline and sparks."
           }
         },
         "required": [

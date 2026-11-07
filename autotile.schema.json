@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt autotile template",
-  "description": "A template two tiles wide and three tall: row 0 holds an unused preview tile and an inner-corner tile; rows 1–2 hold a 2×2-tile island whose quadrants give outer corners, edges and fill. Compiles to a recipe whose frames copy four quarters each.",
+  "description": "A template two tiles wide and three tall: row 0 holds an unused preview tile and an inner-corner tile; rows 1–2 hold a 2×2-tile island whose quadrants give outer corners, edges and fill. Give it as rows, or describe a terrain and let the compiler draw it; ops draw over either. Compiles to a recipe whose frames each draw one tile, with seam warnings and a test map of every tile.",
   "type": "object",
   "properties": {
     "format": {
@@ -18,14 +18,16 @@
     "tile": {
       "type": "integer",
       "minimum": 2,
-      "maximum": 128,
-      "description": "Even tile size in pixels."
+      "maximum": 84,
+      "description": "Even tile size in pixels; the template is three tiles tall, at most 256 rows."
     },
     "mode": {
       "enum": [
         "blob",
-        "cardinal"
-      ]
+        "cardinal",
+        "corner"
+      ],
+      "description": "blob (default; corner with layers): 47 tiles; cardinal: 16 without inner corners; corner: 16 tiles that sit where four cells meet (a dual grid), drawing what blob does."
     },
     "palette": {
       "type": "object",
@@ -41,14 +43,754 @@
         "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
       }
     },
+    "ramps": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "maxItems": 32,
+        "minItems": 2
+      },
+      "maxItems": 64,
+      "description": "Palette keys from dark to light, one list per material. shade and scene ramp lighting move a colour along its ramp instead of inventing one. A key belongs to one ramp. A shared palette file ({\"palette\": {...}, \"ramps\": [...]}) can supply them."
+    },
+    "symbols": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/rows"
+      },
+      "description": "Symbols the ops may stamp; not copied into the compiled recipe."
+    },
     "template": {
       "$ref": "#/$defs/rows",
-      "description": "tile × 3 rows of tile × 2 characters."
+      "description": "tile × 3 rows of tile × 2 characters. Tiles are stitched from its quarters, so it has to repeat every tile."
+    },
+    "terrain": {
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647,
+          "description": "Seeds the edges, and the fill unless it has a seed of its own. Default 0."
+        },
+        "fill": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A one-character palette key (template rows hold one character per pixel)."
+            },
+            {
+              "type": "object",
+              "properties": {
+                "color": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "A one-character palette key (template rows hold one character per pixel)."
+                },
+                "speckle": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "color": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "amount": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Exact share of the tile in this colour."
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 128,
+                        "description": "Clump size in pixels; default 4, or the tile size on a 2-pixel tile."
+                      },
+                      "seed": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      }
+                    },
+                    "required": [
+                      "color",
+                      "amount"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 8,
+                  "description": "Seeded clumps of other colours over the fill colour, in order; each covers exactly its amount of the tile."
+                },
+                "pattern": {
+                  "$ref": "#/$defs/rows",
+                  "description": "tile × tile rows repeated across the terrain instead of a colour."
+                },
+                "seed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Seeds the speckle; default the terrain's seed. Give a variant another to vary the fill and keep the edges."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The inside of the terrain, repeated every tile so it never seams: a palette key, { color, speckle } or { pattern }."
+        },
+        "edges": {
+          "type": "object",
+          "properties": {
+            "all": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "Pixels between the tile border and the terrain on this side; the margin holds outside colours and tufts. Default 0."
+                },
+                "jitter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "The edge wanders up to this many pixels further in, seeded and repeating every tile. Default 0."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "description": "Pixels between the jitter's turns; default 4, or the tile size on a 2-pixel tile."
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the terrain from this edge inward: an outline, then a rim light or a shade."
+                },
+                "outside": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the margin from this edge outward, such as a cast shadow (a key with alpha)."
+                },
+                "tufts": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "maxItems": 64,
+                      "description": "Blade colours from the edge outward; each blade is 1 to this many pixels long.",
+                      "minItems": 1
+                    },
+                    "amount": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the columns with a blade; default 0.5."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Seeded blades growing out of this edge into its margin: grass on a top edge, roots or drips under a bottom one."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "n": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "Pixels between the tile border and the terrain on this side; the margin holds outside colours and tufts. Default 0."
+                },
+                "jitter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "The edge wanders up to this many pixels further in, seeded and repeating every tile. Default 0."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "description": "Pixels between the jitter's turns; default 4, or the tile size on a 2-pixel tile."
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the terrain from this edge inward: an outline, then a rim light or a shade."
+                },
+                "outside": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the margin from this edge outward, such as a cast shadow (a key with alpha)."
+                },
+                "tufts": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "maxItems": 64,
+                      "description": "Blade colours from the edge outward; each blade is 1 to this many pixels long.",
+                      "minItems": 1
+                    },
+                    "amount": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the columns with a blade; default 0.5."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Seeded blades growing out of this edge into its margin: grass on a top edge, roots or drips under a bottom one."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "e": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "Pixels between the tile border and the terrain on this side; the margin holds outside colours and tufts. Default 0."
+                },
+                "jitter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "The edge wanders up to this many pixels further in, seeded and repeating every tile. Default 0."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "description": "Pixels between the jitter's turns; default 4, or the tile size on a 2-pixel tile."
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the terrain from this edge inward: an outline, then a rim light or a shade."
+                },
+                "outside": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the margin from this edge outward, such as a cast shadow (a key with alpha)."
+                },
+                "tufts": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "maxItems": 64,
+                      "description": "Blade colours from the edge outward; each blade is 1 to this many pixels long.",
+                      "minItems": 1
+                    },
+                    "amount": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the columns with a blade; default 0.5."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Seeded blades growing out of this edge into its margin: grass on a top edge, roots or drips under a bottom one."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "s": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "Pixels between the tile border and the terrain on this side; the margin holds outside colours and tufts. Default 0."
+                },
+                "jitter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "The edge wanders up to this many pixels further in, seeded and repeating every tile. Default 0."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "description": "Pixels between the jitter's turns; default 4, or the tile size on a 2-pixel tile."
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the terrain from this edge inward: an outline, then a rim light or a shade."
+                },
+                "outside": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the margin from this edge outward, such as a cast shadow (a key with alpha)."
+                },
+                "tufts": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "maxItems": 64,
+                      "description": "Blade colours from the edge outward; each blade is 1 to this many pixels long.",
+                      "minItems": 1
+                    },
+                    "amount": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the columns with a blade; default 0.5."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Seeded blades growing out of this edge into its margin: grass on a top edge, roots or drips under a bottom one."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            "w": {
+              "type": "object",
+              "properties": {
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "Pixels between the tile border and the terrain on this side; the margin holds outside colours and tufts. Default 0."
+                },
+                "jitter": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 63,
+                  "description": "The edge wanders up to this many pixels further in, seeded and repeating every tile. Default 0."
+                },
+                "size": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 128,
+                  "description": "Pixels between the jitter's turns; default 4, or the tile size on a 2-pixel tile."
+                },
+                "bands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the terrain from this edge inward: an outline, then a rim light or a shade."
+                },
+                "outside": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1,
+                    "description": "A one-character palette key (template rows hold one character per pixel)."
+                  },
+                  "maxItems": 64,
+                  "description": "Colours of the margin from this edge outward, such as a cast shadow (a key with alpha)."
+                },
+                "tufts": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key (template rows hold one character per pixel)."
+                      },
+                      "maxItems": 64,
+                      "description": "Blade colours from the edge outward; each blade is 1 to this many pixels long.",
+                      "minItems": 1
+                    },
+                    "amount": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Share of the columns with a blade; default 0.5."
+                    },
+                    "seed": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 2147483647
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "Seeded blades growing out of this edge into its margin: grass on a top edge, roots or drips under a bottom one."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "description": "Each side's edge: n top, e right, s bottom, w left. all applies to every side and a side's own fields override it. depth + jitter + bands + round must fit in half a tile."
+        },
+        "round": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "description": "Round outer corners with this radius in pixels; default 0."
+        },
+        "inner": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64,
+          "description": "Round inner corners with this radius; default 0."
+        }
+      },
+      "required": [
+        "fill"
+      ],
+      "additionalProperties": false,
+      "description": "Draw the template from a description instead of rows: a fill that repeats every tile and an edge per side, which cannot seam. ops may draw over it."
+    },
+    "ops": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/op"
+      },
+      "maxItems": 2048,
+      "description": "Drawing operations over the template (rows or terrain) on a canvas two tiles wide and three tall: stamp a flower, a crack or a stone inside one quarter, or dither and shade. Every colour drawn needs a one-character palette key."
     },
     "frame": {
       "type": "string",
-      "pattern": "\\{mask\\}",
-      "description": "Frame name template; {mask} is the neighbour mask and {variant} the variant name."
+      "pattern": "\\{(?:mask|corners)\\}",
+      "description": "Frame name template; {mask} is the neighbour mask and {variant} the variant name. A layered set uses {corners}: the layers' keys at the tile's NW, NE, SW and SE corners."
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,31}$",
+            "description": "The terrain's name, in engines."
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9]$",
+            "description": "One letter or digit, unique among the layers ignoring letter case: the terrain's character in maps and tile names."
+          },
+          "terrain": {
+            "type": "object",
+            "description": "This layer's terrain, merged into the set's terrain (if any) field by field."
+          },
+          "template": {
+            "$ref": "#/$defs/rows",
+            "description": "This layer's template rows instead of a terrain."
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/op"
+            },
+            "maxItems": 2048,
+            "description": "Drawn over this layer's template."
+          },
+          "weight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "With variants: how often the plain tile (this terrain at all four corners) is picked against them; default 1."
+          },
+          "variants": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{1,16}$"
+                },
+                "weight": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000,
+                  "description": "Default 1."
+                },
+                "terrain": {
+                  "type": "object",
+                  "description": "Changes to this layer's terrain, merged into it: { \"fill\": { \"seed\": 2 } } is another fill."
+                },
+                "ops": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/op"
+                  },
+                  "maxItems": 2048,
+                  "description": "Drawn over the plain tile in tile pixels (a lily pad, a shell), a pixel inside its border."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "description": "Variants of the plain tile, named after it with -<name> and placed after the other tiles; transitions keep the layer's own fill. Each has a terrain or ops."
+          },
+          "collision": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "inset": {
+                    "oneOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 41
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "n": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 41
+                          },
+                          "e": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 41
+                          },
+                          "s": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 41
+                          },
+                          "w": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 41
+                          }
+                        },
+                        "required": [],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "Pixels kept from the sides this terrain shares with lower ones; default its edges' depth."
+                  },
+                  "oneWay": {
+                    "type": "boolean",
+                    "description": "The same for every solid layer."
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            ],
+            "description": "Solid where this terrain shows: its corners, from where its edges start, less those of the terrains over it, from where theirs start."
+          }
+        },
+        "required": [
+          "name",
+          "key"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4,
+      "minItems": 2,
+      "description": "A layered corner set of 2–4 terrains, bottom first (water, sand, grass): a tile for every mix of them at its four corners, n^4 in all, the lowest filling it and each higher one among them drawn over it. Variants and collision belong to the layers. Not with template, ops or animation."
+    },
+    "collision": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "inset": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 41
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "n": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 41
+                    },
+                    "e": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 41
+                    },
+                    "s": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 41
+                    },
+                    "w": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 41
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              ],
+              "description": "Pixels the collision box keeps from each open side of a tile, under half a tile; default each terrain edge's depth, or 0."
+            },
+            "oneWay": {
+              "type": "boolean",
+              "description": "One-way platforms: bodies pass up through and land on top."
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      ],
+      "description": "Give every tile a collision box (true, or { inset, oneWay }): the whole tile, kept inset from its open sides (a corner tile: its terrain quarters). Exported to the Godot TileSet."
     },
     "variants": {
       "type": "array",
@@ -71,9 +813,27 @@
               "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
             }
           },
+          "weight": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "description": "How often this variant is picked against the others for a cell, in the test map and Godot; default 1. Give common variants 10 and a rare one 1."
+          },
           "template": {
             "$ref": "#/$defs/rows",
             "description": "Redraw this variant from its own template of the same size (compiled as the symbol template-<name>): cracked or mossy stone with the base set's edges."
+          },
+          "terrain": {
+            "type": "object",
+            "description": "Changes to the set's terrain, merged into it field by field: { \"fill\": { \"seed\": 2 } } varies the fill and keeps the edges, so variants mix in a map."
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/op"
+            },
+            "maxItems": 2048,
+            "description": "Drawn over this variant's template after the set's ops."
           }
         },
         "required": [
@@ -88,6 +848,33 @@
       "type": "string",
       "pattern": "\\{mask\\}",
       "description": "Optional per-mask animation over the variants, in order."
+    },
+    "slopes": {
+      "type": "object",
+      "properties": {
+        "frame": {
+          "type": "string",
+          "pattern": "\\{slope\\}",
+          "description": "Frame name template; {slope} becomes up, down, gentle-up-low, gentle-up-high, gentle-down-high, gentle-down-low, and <slope>-foot for the tile under a slope's low end."
+        }
+      },
+      "required": [
+        "frame"
+      ],
+      "additionalProperties": false,
+      "description": "A side-view blob or cardinal set's slopes, 45° and gentle (a cell up over two), cut from its top edge and fill so they meet its flat ground; solid under their line with collision. metadata.slopes gives a scene legend for them."
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "background": {
+          "type": "string",
+          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "description": "The test map: background is drawn under it (the ground a transparent-edged set sits on)."
     },
     "sheet": {
       "type": "object",
@@ -121,10 +908,26 @@
     "version",
     "name",
     "tile",
-    "template",
     "frame"
   ],
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "template"
+      ]
+    },
+    {
+      "required": [
+        "terrain"
+      ]
+    },
+    {
+      "required": [
+        "ops"
+      ]
+    }
+  ],
   "$defs": {
     "rows": {
       "type": "array",
@@ -136,6 +939,1461 @@
       "maxItems": 256,
       "minItems": 1,
       "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+    },
+    "op": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "pixel"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "rect"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "ellipse"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "line"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "x2": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y2": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "x2",
+            "y2",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "clear"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "h"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "fill"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "replace"
+            },
+            "from": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "to": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            }
+          },
+          "required": [
+            "op",
+            "from",
+            "to"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "grid"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "rows": {
+              "$ref": "#/$defs/rows"
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "rows"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "stamp"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "symbol"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "text"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512,
+              "description": "Printable ASCII, western European accented letters and common symbols; \\n starts a new line (at most 64)."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "align": {
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ],
+              "description": "What x is: the left edge of the text (default), its centre or its right edge. Lines align the same way."
+            },
+            "spacing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 16,
+              "description": "Pixels between glyphs; default 1."
+            },
+            "lineHeight": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Pixels from the top of one line to the top of the next; default 10."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "text",
+            "color"
+          ],
+          "additionalProperties": false,
+          "description": "Draw text in the built-in pixel font. y is the top of the capitals; a line is 8 rows: capitals 7 tall, lowercase 5, descenders 1 below, and the accent of a capital reaches 2 rows above y. Glyphs are 1 to 5 pixels wide (© ® — Œ œ are 7), digits always 5, a space 3. One line of n average characters is about 6n pixels wide."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "copy"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "sx": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "sy": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 256
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            },
+            "flipX": {
+              "type": "boolean"
+            },
+            "flipY": {
+              "type": "boolean"
+            },
+            "rotate": {
+              "enum": [
+                0,
+                90,
+                180,
+                270
+              ]
+            },
+            "remap": {
+              "type": "object",
+              "maxProperties": 256,
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Symbol copies: recolor grid characters (one character each) → palette name or colour. Frame copies: swap exact colours, named by project palette key or hex (#RGB to #RRGGBBAA), for a palette name or colour."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "oneOf": [
+            {
+              "required": [
+                "from"
+              ]
+            },
+            {
+              "required": [
+                "symbol"
+              ]
+            }
+          ],
+          "description": "Copy a rectangle of a symbol (palette characters) or an earlier frame (exact RGBA)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "autotile"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "symbol": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "mask": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255,
+              "description": "Neighbour mask. Blob: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128, reduced so a diagonal counts only with both of its sides. Cardinal: N=1, E=2, S=4, W=8. Corner: the terrain cells among the four the tile sits between, NW=1, NE=2, SW=4, SE=8."
+            },
+            "mode": {
+              "enum": [
+                "blob",
+                "cardinal",
+                "corner"
+              ],
+              "description": "blob (default), cardinal or corner."
+            },
+            "remap": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+              },
+              "description": "Recolor grid characters for this operation only: character → palette name or colour."
+            }
+          },
+          "required": [
+            "op",
+            "symbol",
+            "mask"
+          ],
+          "additionalProperties": false,
+          "description": "Draw one autotile tile from a template symbol two tiles wide and three tall: the four quarters the mask selects (see the autotile template format). The autotile compiler emits one per frame, so editing the template redraws every tile."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "box"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's right edge runs across, in pixels (even); it runs half as far down."
+            },
+            "d": {
+              "type": "integer",
+              "minimum": 2,
+              "maximum": 512,
+              "multipleOf": 2,
+              "description": "How far the top face's left edge runs across, in pixels (even)."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 512,
+              "description": "Height of the side faces in pixels; default 0, a flat diamond."
+            },
+            "top": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "left": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "right": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "edge": {
+              "type": "string",
+              "description": "Marks the top face's front edges and the corner between the side faces."
+            }
+          },
+          "required": [
+            "op",
+            "w",
+            "d"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "top"
+              ]
+            },
+            {
+              "required": [
+                "left"
+              ]
+            },
+            {
+              "required": [
+                "right"
+              ]
+            }
+          ],
+          "description": "An isometric box from the top-left of its bounds (w + d wide, (w + d) / 2 + h tall): a 2:1 top face over a left and a right face. Each pixel belongs to the face its centre lies in, so edges step two pixels across per row and boxes on a 2:1 grid meet exactly. A face without a colour is left out."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "outline"
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "diagonal": {
+              "type": "boolean"
+            },
+            "position": {
+              "enum": [
+                "outside",
+                "inside",
+                "middle"
+              ],
+              "description": "outside (default) surrounds the visible pixels; inside recolors their edge pixels; middle splits the width, the odd pixel outside."
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8,
+              "description": "Rings of pixels; default 1."
+            },
+            "directions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[x.]{3}$"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "description": "3×3 grid centred on a visible pixel, with a dot in the centre: x marks the sides that get the line, e.g. [\"...\", \"...\", \"..x\"] for a drop shadow or [\".x.\", \"...\", \"...\"] for a top rim. Replaces diagonal."
+            }
+          },
+          "required": [
+            "op",
+            "color"
+          ],
+          "additionalProperties": false,
+          "description": "Outline every visible pixel in this buffer (frame or layer): outside rings, inside edge rings or both, in chosen directions."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "dither"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "erase": {
+              "type": "boolean",
+              "description": "Clear the pattern pixels instead of drawing a color."
+            },
+            "density": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              ],
+              "description": "Share of pixels changed, 0–1, or [from, to] ramping along direction."
+            },
+            "direction": {
+              "enum": [
+                "down",
+                "up",
+                "right",
+                "left",
+                "radial"
+              ],
+              "description": "Ramp direction for a [from, to] density; radial runs from the centre to the edge."
+            },
+            "pattern": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "bayer2",
+                    "bayer4",
+                    "bayer8",
+                    "noise",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Rows of ranks from 0 to cells − 1; low ranks turn on first, and a highest rank n gives n + 1 levels, so [[0, 1], [1, 0]] is a checkerboard at 0.5."
+                }
+              ],
+              "description": "bayer4 by default. noise is seeded white noise with no repeating grid; value is seeded smooth noise that forms clumps about scale pixels across. Patterns follow canvas coordinates, so neighbouring areas line up."
+            },
+            "offset": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Shift the pattern, for example to crawl it between frames."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Orders the noise or value pattern (default 0): the same seed keeps every pixel's threshold, so a rising density grows in a fixed order; another seed reshuffles it."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Clump size of the value pattern in pixels; default 4."
+            },
+            "over": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                  },
+                  "maxItems": 64,
+                  "minItems": 1
+                }
+              ],
+              "description": "Only change pixels whose exact current color is listed (transparent included)."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "color"
+              ]
+            },
+            {
+              "required": [
+                "erase"
+              ]
+            }
+          ],
+          "description": "Ordered dither between the current pixels and color: draws (or erases) where a canvas-anchored threshold pattern is below the density (default 0.5). x/y default to 0 and w/h reach the canvas edge."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "shade"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas width on a still wider than 256."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8192,
+              "description": "At most 512, or twice the canvas height on a still taller than 256."
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": -8,
+              "maximum": 8,
+              "description": "Steps along each colour's ramp: negative darkens (default -1), positive lightens. Clamped at the ramp's ends; not 0."
+            },
+            "shape": {
+              "enum": [
+                "rect",
+                "ellipse"
+              ],
+              "description": "rect (default) or the ellipse inside the region."
+            },
+            "density": {
+              "oneOf": [
+                {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "maxItems": 2,
+                  "minItems": 2
+                }
+              ],
+              "description": "Share of pixels changed, 0–1, or [from, to] ramping along direction."
+            },
+            "direction": {
+              "enum": [
+                "down",
+                "up",
+                "right",
+                "left",
+                "radial"
+              ],
+              "description": "Ramp direction for a [from, to] density; radial runs from the centre to the edge."
+            },
+            "pattern": {
+              "oneOf": [
+                {
+                  "enum": [
+                    "bayer2",
+                    "bayer4",
+                    "bayer8",
+                    "noise",
+                    "value"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 255
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  },
+                  "maxItems": 16,
+                  "minItems": 1,
+                  "description": "Rows of ranks from 0 to cells − 1; low ranks turn on first, and a highest rank n gives n + 1 levels, so [[0, 1], [1, 0]] is a checkerboard at 0.5."
+                }
+              ],
+              "description": "bayer4 by default. noise is seeded white noise with no repeating grid; value is seeded smooth noise that forms clumps about scale pixels across. Patterns follow canvas coordinates, so neighbouring areas line up."
+            },
+            "offset": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Shift the pattern, for example to crawl it between frames."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Orders the noise or value pattern (default 0): the same seed keeps every pixel's threshold, so a rising density grows in a fixed order; another seed reshuffles it."
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Clump size of the value pattern in pixels; default 4."
+            },
+            "over": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                  },
+                  "maxItems": 64,
+                  "minItems": 1
+                }
+              ],
+              "description": "Only change pixels whose exact current color is listed (transparent included)."
+            }
+          },
+          "required": [
+            "op"
+          ],
+          "additionalProperties": false,
+          "description": "Move every pixel of the region along its colour's ramp (see ramps), so shadows and light keep the palette on any surface. Colours on no ramp stay. density (default 1) and pattern give a dithered edge. x/y default to 0 and w/h reach the canvas edge."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "tilemap"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "tile": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "description": "Cell size [width, height] in pixels."
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "maxItems": 256,
+              "minItems": 1
+            },
+            "outside": {
+              "enum": [
+                "empty",
+                "match"
+              ],
+              "description": "Cells beyond the map: empty (default), or matching every mask and rule pattern."
+            },
+            "empty": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A character, not a legend key, that stands for empty cells in rule patterns."
+            },
+            "classes": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "description": "Characters that stand for several map characters in rule patterns, e.g. {\"#\": \"WV\"}; include the empty character to match empty cells too."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647,
+              "description": "Reshuffles variant picks and rule chances, which are seeded by cell position; default 0."
+            },
+            "layout": {
+              "enum": [
+                "square",
+                "iso"
+              ],
+              "description": "square (default): cells side by side, each drawing from its top-left. iso: a 2:1 diamond grid (even tile sizes such as [32, 16]), drawn back to front, cell [x, y] at [(x - y + rows - 1) * w/2, (x + y) * h/2]; each drawing stands on its diamond, bottoms aligned and centred across, so a block taller than the tile rises above its cell."
+            },
+            "legend": {
+              "type": "object",
+              "propertyNames": {
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "description": "Map characters to what they draw. Dot and space are empty cells.",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "symbol": {
+                        "type": "string",
+                        "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
+                      },
+                      "symbols": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "Variants of symbol, picked by cell position (seeded when the tilemap has a seed)."
+                      },
+                      "template": {
+                        "type": "string",
+                        "description": "An autotile template symbol (two tiles wide, three tall) drawn with the cell's neighbour mask; needs autotile."
+                      },
+                      "templates": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "Variants of template, picked by cell position (seeded when the tilemap has a seed)."
+                      },
+                      "weights": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "One whole-number weight per variant name; heavier names are picked more often."
+                      },
+                      "autotile": {
+                        "enum": [
+                          "blob",
+                          "cardinal",
+                          "corner"
+                        ],
+                        "description": "Pick by neighbour mask: 47-value blob, 16-value cardinal, or 16-value corner (a tile where four cells meet, half a cell up and left; {corners} in a name becomes those four cells' characters, for a layered set, and its variants with no tile there are left out)."
+                      },
+                      "match": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Characters counted as the same terrain for the mask; default: this character."
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "rules": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "symbol": {
+                              "type": "string",
+                              "description": "A symbol drawn at the cell's top-left (in an iso map, standing on its diamond); with autotile, {mask} in its name becomes the neighbour mask."
+                            },
+                            "symbols": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "Variants of symbol, picked by cell position (seeded when the tilemap has a seed)."
+                            },
+                            "template": {
+                              "type": "string",
+                              "description": "An autotile template symbol (two tiles wide, three tall) drawn with the cell's neighbour mask; needs autotile."
+                            },
+                            "templates": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "Variants of template, picked by cell position (seeded when the tilemap has a seed)."
+                            },
+                            "weights": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000
+                              },
+                              "maxItems": 64,
+                              "minItems": 1,
+                              "description": "One whole-number weight per variant name; heavier names are picked more often."
+                            },
+                            "autotile": {
+                              "enum": [
+                                "blob",
+                                "cardinal",
+                                "corner"
+                              ],
+                              "description": "Pick by neighbour mask: 47-value blob, 16-value cardinal, or 16-value corner (a tile where four cells meet, half a cell up and left; {corners} in a name becomes those four cells' characters, for a layered set, and its variants with no tile there are left out)."
+                            },
+                            "match": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Characters counted as the same terrain for the mask; default: this character."
+                            },
+                            "where": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 3,
+                                "maxLength": 3
+                              },
+                              "maxItems": 3,
+                              "minItems": 3,
+                              "description": "3×3 characters centred on the cell. A dot matches anything, the tilemap's empty character matches empty cells (and cells beyond the map), a class matches its members, any other character matches itself."
+                            },
+                            "chance": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1,
+                              "description": "Seeded probability that a matching rule draws."
+                            },
+                            "offset": {
+                              "type": "array",
+                              "items": {
+                                "type": "integer",
+                                "minimum": -8,
+                                "maximum": 8
+                              },
+                              "maxItems": 2,
+                              "minItems": 2,
+                              "description": "[columns, rows] to draw into another cell; it draws over that cell's own tiles."
+                            },
+                            "stop": {
+                              "type": "boolean",
+                              "description": "When this rule draws, skip the rest of the cell's rules."
+                            }
+                          },
+                          "required": [],
+                          "additionalProperties": false
+                        },
+                        "maxItems": 32,
+                        "minItems": 1,
+                        "description": "Every rule that matches draws, in order, until one with stop draws."
+                      }
+                    },
+                    "required": [
+                      "rules"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "null",
+                    "description": "Context cell: never drawn, but it counts for other entries' match and for rules."
+                  }
+                ]
+              }
+            }
+          },
+          "required": [
+            "op",
+            "tile",
+            "rows",
+            "legend"
+          ],
+          "additionalProperties": false,
+          "description": "Draw a character map from this recipe's symbols and autotile templates, with variants, weights and neighbour rules, so later operations see the composed result (dither over its floor, rewrite rules at its corners)."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
+              "const": "rewrite"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "w": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
+            },
+            "h": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4096,
+              "description": "Default: to the canvas edge. The region stays inside the canvas."
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "match": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "description": "Equal-width rows of palette keys; dot or space matches anything (match) or keeps the pixel (replace); the empty character stands for transparent."
+                  },
+                  "replace": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 8
+                    },
+                    "maxItems": 8,
+                    "minItems": 1,
+                    "description": "Equal-width rows of palette keys; dot or space matches anything (match) or keeps the pixel (replace); the empty character stands for transparent."
+                  }
+                },
+                "required": [
+                  "match",
+                  "replace"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 16,
+              "minItems": 1
+            },
+            "empty": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A non-palette character meaning a transparent pixel in match and erasure in replace."
+            },
+            "steps": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "description": "Passes over every rule; stops early when a pass changes nothing."
+            },
+            "chance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Seeded probability that each match is applied."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 65536,
+              "description": "Most replacements per rule per step."
+            },
+            "seed": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "rotate": {
+              "type": "boolean",
+              "description": "Also match the rules turned 90°, 180° and 270°."
+            },
+            "mirror": {
+              "type": "boolean",
+              "description": "Also match the rules mirrored horizontally."
+            }
+          },
+          "required": [
+            "op",
+            "rules"
+          ],
+          "additionalProperties": false,
+          "description": "Markov-style rewrite rules on this buffer: each small match grid found on exact colors is replaced, in a seeded order, without overlapping rewrites. The region defaults to the whole canvas."
+        }
+      ]
     }
   }
 }

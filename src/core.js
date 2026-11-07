@@ -1,6 +1,6 @@
 // Browser-compatible, deterministic rasterizer. No I/O and no dependencies.
 import { patternProblem, ditherThreshold, traceLine, pixelId, colorOf, idsOf, cleanupIds, ruleVariants, rewriteIds } from './craft.js';
-import { reduceBlobMask, quadrantPieces, templatePiece, expandTilemap, isoLayout } from './autotile.js';
+import { AUTOTILE_MODES, tilePieces, templatePiece, expandTilemap, isoLayout } from './autotile.js';
 import { layoutText } from './font.js';
 export class PixelError extends Error {
   constructor(path, message) { super(`${path}: ${message}`); this.name = 'PixelError'; this.path = path; }
@@ -9,15 +9,47 @@ export class PixelError extends Error {
 // frame the format allows (a 256x256 frame of explicit pixel corrections serializes to about 2.5 MB).
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const fail = (path, message) => { throw new PixelError(path, message); };
+// Several errors as one: the first, naming the others in its message and listing every one in `errors`. `stopped`
+// says checking stopped at the cap of ten. Recipes and compiled sources report broken parts this way.
+export function joinErrors(all, stopped = false) {
+  if (all.length === 1) return all[0];
+  const [first, ...rest] = all;
+  const combined = new PixelError(first.path, `${first.message.slice(first.path.length + 2)}; ${rest.length} more error${rest.length === 1 ? '' : 's'}${stopped ? ' (checking stopped at 10)' : ''}: ${rest.map(error => error.message).join('; ')}`);
+  combined.errors = all.map(error => ({ path: error.path, error: error.message }));
+  return combined;
+}
+
 const own = (obj, key) => Object.hasOwn(obj, key);
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+// Names agents often write for a field or operation the format names differently, offered as "did you mean".
+const FIELD_ALIASES = { width: 'w', height: 'h', x1: 'x', y1: 'y', x0: 'x', y0: 'y', colour: 'color', fill: 'filled', frame: 'from', name: 'symbol' };
+const OP_ALIASES = { circle: 'ellipse', oval: 'ellipse', rectangle: 'rect', square: 'rect', point: 'pixel', dot: 'pixel', flood: 'fill', floodfill: 'fill', erase: 'clear', label: 'text', print: 'text', sprite: 'stamp', image: 'grid', recolor: 'replace', recolour: 'replace', border: 'outline' };
+// One letter changed, added or removed: a typo of the other name.
+const oneEdit = (a, b) => {
+  if (Math.abs(a.length - b.length) > 1 || a === b) return false;
+  let i = 0;
+  while (i < a.length && a[i] === b[i]) i++;
+  return a.slice(i + (a.length >= b.length ? 1 : 0)) === b.slice(i + (b.length >= a.length ? 1 : 0));
+};
+// The name in `names` that `key` most likely meant: a known alias, the same name in other case, or a one-letter typo.
+function meant(key, names, aliases) {
+  if (own(aliases, key) && names.includes(aliases[key])) return aliases[key];
+  const lower = key.toLowerCase();
+  return names.find(n => n.toLowerCase() === lower) ?? (key.length > 3 ? names.find(n => n.length > 3 && oneEdit(lower, n.toLowerCase())) : undefined);
+}
+function unknownName(kind, key, names, aliases = FIELD_ALIASES) {
+  const guess = meant(key, names, aliases);
+  const listed = kind === 'operation' ? 'operations' : 'fields here';
+  return `unknown ${kind}${kind === 'operation' ? ` ${JSON.stringify(key)}` : ''}${guess ? `; did you mean "${guess}"?` : ''}${names.length <= 24 ? (guess ? ` ${listed[0].toUpperCase()}${listed.slice(1)}` : `; ${listed}`) + `: ${names.join(', ')}` : ''}`;
+}
 function object(value, path, keys) {
   if (!isObject(value)) fail(path, 'expected an object');
   for (const key of Object.keys(value)) if (value[key] === null) fail(`${path}.${key}`, 'null is not supported; omit optional fields to use defaults');
-  if (keys) for (const key of Object.keys(value)) if (!keys.includes(key)) fail(`${path}.${key}`, 'unknown field');
+  if (keys) for (const key of Object.keys(value)) if (!keys.includes(key)) fail(`${path}.${key}`, unknownName('field', key, keys));
   return value;
 }
 function integer(value, path, min = -4096, max = 4096) {
+  if (value === undefined) fail(path, `missing; expected an integer from ${min} to ${max}`);
   if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
   return value;
 }
@@ -38,6 +70,53 @@ function name(value, path) {
 function point(value, path) {
   if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
   return [integer(value[0], `${path}[0]`), integer(value[1], `${path}[1]`)];
+}
+// A frame's facts as a tile, for engine tile sets: the terrain an autotile frame belongs to (frames of one set share
+// it), its weight against the other frames that could fill the same cell, and collision polygons around its solid
+// parts in canvas pixels (pixel corners, from 0 to the width and height), one-way when oneWay: bodies pass up through
+// them and land on top. Exports turn the polygons into the engine's own; the renderer draws nothing from them. One
+// polygon, or a list of up to 8 for a tile with separate solid parts, is kept as a list.
+function tileFacts(value, path, width, height) {
+  object(value, path, ['terrain', 'corners', 'weight', 'collision', 'oneWay']);
+  const tile = {};
+  if (value.terrain !== undefined) tile.terrain = name(value.terrain, `${path}.terrain`);
+  // A tile of a layered set names the terrains at its four corners (NW, NE, SW, SE) instead of one terrain.
+  if (value.corners !== undefined) {
+    if (!Array.isArray(value.corners) || value.corners.length !== 4) fail(`${path}.corners`, 'expected the terrains at the tile\'s four corners, [NW, NE, SW, SE], each a terrain name');
+    if (value.terrain !== undefined) fail(`${path}.terrain`, 'a tile with corners belongs to the terrains they name; leave terrain out');
+    tile.corners = value.corners.map((corner, i) => name(corner, `${path}.corners[${i}]`));
+  }
+  if (value.weight !== undefined) tile.weight = integer(value.weight, `${path}.weight`, 1, 1000);
+  if (value.collision !== undefined) {
+    const where = `${path}.collision`, several = Array.isArray(value.collision) && Array.isArray(value.collision[0]?.[0]);
+    if (several && value.collision.length > 8) fail(where, 'expected up to 8 polygons');
+    tile.collision = several ? value.collision.map((polygon, k) => collisionPolygon(polygon, `${where}[${k}]`, width, height)) : [collisionPolygon(value.collision, where, width, height)];
+  }
+  if (value.oneWay !== undefined) {
+    boolean(value.oneWay, `${path}.oneWay`);
+    if (tile.collision === undefined) fail(`${path}.oneWay`, 'oneWay makes the collision polygon one-way; give the tile a collision polygon');
+    tile.oneWay = value.oneWay;
+  }
+  return tile;
+}
+function collisionPolygon(polygon, where, width, height) {
+  if (!Array.isArray(polygon) || polygon.length < 3 || polygon.length > 32) fail(where, 'expected 3–32 points [x, y] around the solid part of the tile, in canvas pixels: [[0, 0], [16, 0], [16, 16], [0, 16]] is a whole 16-pixel tile; a tile with separate solid parts takes a list of polygons');
+  const points = polygon.map((at, i) => {
+    const [x, y] = point(at, `${where}[${i}]`);
+    if (x < 0 || y < 0 || x > width || y > height) fail(`${where}[${i}]`, `[${x}, ${y}] is outside the ${width}×${height} canvas; points are pixel corners from [0, 0] to [${width}, ${height}]`);
+    return [x, y];
+  });
+  const n = points.length, side = (a, b, c) => Math.sign((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+  // Collinear c on segment ab.
+  const on = (a, b, c) => Math.min(a[0], b[0]) <= c[0] && c[0] <= Math.max(a[0], b[0]) && Math.min(a[1], b[1]) <= c[1] && c[1] <= Math.max(a[1], b[1]);
+  const meet = (a, b, c, d) => { const s1 = side(a, b, c), s2 = side(a, b, d), s3 = side(c, d, a), s4 = side(c, d, b); return (s1 !== s2 && s3 !== s4 && s1 * s2 <= 0 && s3 * s4 <= 0) || (!s1 && on(a, b, c)) || (!s2 && on(a, b, d)) || (!s3 && on(c, d, a)) || (!s4 && on(c, d, b)); };
+  for (let i = 0; i < n; i++) if (points[i][0] === points[(i + 1) % n][0] && points[i][1] === points[(i + 1) % n][1]) fail(`${where}[${(i + 1) % n}]`, 'repeats the point before it; list each corner once');
+  for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+    if (i === 0 && j === n - 1) continue;
+    if (meet(points[i], points[(i + 1) % n], points[j], points[(j + 1) % n])) fail(where, `the edge from point ${i} to ${(i + 1) % n} crosses or touches the edge from point ${j} to ${(j + 1) % n}; list the corners in order around the shape`);
+  }
+  if (!points.reduce((sum, [x, y], i) => sum + x * points[(i + 1) % n][1] - points[(i + 1) % n][0] * y, 0)) fail(where, 'the points enclose no area');
+  return points;
 }
 export function parseColor(value, palette = {}, path = 'color') {
   if (typeof value !== 'string') fail(path, 'expected a palette name or hex color');
@@ -150,8 +229,9 @@ function readProject(spec, { stills = true } = {}) {
   if (width * height * spec.frames.length > 4194304) fail('project.frames', 'total frame area exceeds 4,194,304 pixels');
   object(spec.animations ?? {}, 'project.animations');
   const animationCount = spec.animations === undefined ? 1 : Object.keys(spec.animations).length;
-  // Support files: sheet, atlas, SpriteFrames, recipe, CSS, player, preview and README, and a TileSet for an autotile set.
-  if (9 + spec.frames.length + animationCount > 65535) fail('project.animations', `bundle exceeds the ZIP32 limit of 65,535 files; at most ${65535 - 9 - spec.frames.length} animations fit alongside these frames and 9 support files`);
+  // Support files: sheet, atlas, SpriteFrames, recipe, CSS, player, preview and README, and a Godot TileSet and a Tiled
+  // tileset for a tile set.
+  if (10 + spec.frames.length + animationCount > 65535) fail('project.animations', `bundle exceeds the ZIP32 limit of 65,535 files; at most ${65535 - 10 - spec.frames.length} animations fit alongside these frames and 10 support files`);
   return { projectName, width, height, palette, ramps, background, projectAnchor, symbols };
 }
 
@@ -201,14 +281,7 @@ export function renderProject(spec, options = {}) {
     if (noted.length === 10) throw together();
   };
   // The first error, naming the others in its message and listing every one in `errors`.
-  const together = (last = null) => {
-    const all = last && !last.errors && !noted.includes(last) ? [...noted, last] : noted;
-    if (all.length === 1) return all[0];
-    const [first, ...rest] = all;
-    const combined = new PixelError(first.path, `${first.message.slice(first.path.length + 2)}; ${rest.length} more error${rest.length === 1 ? '' : 's'}${noted.length === 10 ? ' (checking stopped at 10)' : ''}: ${rest.map(error => error.message).join('; ')}`);
-    combined.errors = all.map(error => ({ path: error.path, error: error.message }));
-    return combined;
-  };
+  const together = (last = null) => joinErrors(last && !last.errors && !noted.includes(last) ? [...noted, last] : noted, noted.length === 10);
   const checked = run => { try { return run(); } catch (error) { throw noted.length && !error.errors ? together(error) : error; } };
   // Clipping is counted per source location so an agent can find the operation that overhangs.
   const clipped = new Map();
@@ -282,7 +355,7 @@ export function renderProject(spec, options = {}) {
         shade: ['x', 'y', 'w', 'h', 'steps', 'shape', 'density', 'direction', 'pattern', 'offset', 'seed', 'scale', 'over'],
         rewrite: ['x', 'y', 'w', 'h', 'rules', 'empty', 'steps', 'chance', 'limit', 'seed', 'rotate', 'mirror']
       };
-      if (typeof op.op !== 'string' || !own(fields, op.op)) fail(`${p}.op`, `unknown operation ${JSON.stringify(op.op)}`);
+      if (typeof op.op !== 'string' || !own(fields, op.op)) fail(`${p}.op`, typeof op.op === 'string' ? unknownName('operation', op.op, Object.keys(fields), OP_ALIASES) : `unknown operation ${JSON.stringify(op.op)}; operations: ${Object.keys(fields).join(', ')}`);
       object(op, p, ['op', ...fields[op.op]]);
       if (op.ground !== undefined && !sorted) fail(`${p}.ground`, 'ground orders a layer with sort "ground"; set sort on this layer, or remove ground');
       const x = integer(op.x ?? 0, `${p}.x`), y = integer(op.y ?? 0, `${p}.y`);
@@ -363,14 +436,16 @@ export function renderProject(spec, options = {}) {
       // `over`: only pixels whose exact current colour is listed.
       const overSet = () => op.over === undefined ? null : new Set((typeof op.over === 'string' ? [op.over] : list(op.over, `${p}.over`, 64)).map((value, i) => pixelId(color(value, typeof op.over === 'string' ? `${p}.over` : `${p}.over[${i}]`), 0)));
       // One autotile tile at left/top: the four quarters that a neighbour mask selects from a template symbol two tiles
-      // wide and three tall (see autotile.js). Blob masks are reduced (a diagonal counts only with both of its sides).
+      // wide and three tall (see autotile.js). Blob masks are reduced (a diagonal counts only with both of its sides); a
+      // corner tile's quarters are the inner quarters of the four cells it sits between.
       const drawTemplate = (grid, mask, mode, left, top, sample, where) => {
         const tile = grid.width / 2;
         if (!Number.isInteger(tile) || tile % 2 || grid.height !== tile * 3) fail(where, 'an autotile template is two tiles wide and three tall, with an even tile size');
-        const pieces = quadrantPieces(mode, mode === 'cardinal' ? mask : reduceBlobMask(mask)), q = tile / 2;
+        const pieces = tilePieces(mode, mask), q = tile / 2;
         spend(tile * tile);
         for (const [position, [ox, oy]] of [['tl', [0, 0]], ['tr', [q, 0]], ['bl', [0, q]], ['br', [q, q]]]) {
-          const [sx, sy] = templatePiece(tile, position, pieces[position]);
+          if (!pieces[position]) continue;
+          const [sx, sy] = templatePiece(tile, pieces[position].from, pieces[position].piece);
           for (let gy = 0; gy < q; gy++) for (let gx = 0; gx < q; gx++) { const c = sample(grid.rows[sy + gy][sx + gx]); if (c) put(left + ox + gx, top + oy + gy, c); }
         }
       };
@@ -451,8 +526,8 @@ export function renderProject(spec, options = {}) {
         const grid = symbols[op.symbol];
         if (!grid) fail(`${p}.symbol`, `unknown symbol ${JSON.stringify(op.symbol)}`);
         const mode = op.mode ?? 'blob';
-        if (!['blob', 'cardinal'].includes(mode)) fail(`${p}.mode`, 'expected blob or cardinal');
-        drawTemplate(grid, integer(op.mask, `${p}.mask`, 0, mode === 'cardinal' ? 15 : 255), mode, x, y, paletteSampler(), `${p}.symbol`);
+        if (!AUTOTILE_MODES.includes(mode)) fail(`${p}.mode`, 'expected blob, cardinal or corner');
+        drawTemplate(grid, integer(op.mask, `${p}.mask`, 0, mode === 'blob' ? 255 : 15), mode, x, y, paletteSampler(), `${p}.symbol`);
       } else if (op.op === 'box') {
         // An isometric box from the top-left of its bounds: a 2:1 top face whose right edge runs `w` pixels across and
         // left edge `d`, over a left and a right face `h` pixels tall. Each pixel belongs to the face its centre lies in
@@ -492,6 +567,12 @@ export function renderProject(spec, options = {}) {
         const iso = op.layout === 'iso';
         if (iso && tile.some(n => n % 2)) fail(`${p}.tile`, 'an iso tile has an even width and height');
         const expanded = expandTilemap(op, { path: p, fail, kinds: ['symbol', 'template'], text: 'symbol', masked: kind => kind !== 'template', exists: (kind, key) => own(symbols, key) });
+        // Corner tiles sit half a cell up and left of the cell they were found from: a template's cells say so with
+        // mode, a symbol's with corner.
+        if (expanded.cells.some(cell => cell.mode === 'corner' || cell.corner)) {
+          if (iso) fail(`${p}.legend`, 'corner tiles sit where four square cells meet; an iso map takes symbols without autotile corner');
+          if (tile.some(n => n % 2)) fail(`${p}.tile`, 'corner tiles sit where four cells meet, half a cell up and left of one; use an even cell width and height');
+        }
         const sample = paletteSampler();
         const cells = iso ? isoLayout(expanded.cells, expanded.rows, tile) : expanded.cells.map(cell => ({ ...cell, left: cell.x * tile[0], top: cell.y * tile[1] }));
         for (const cell of cells) {
@@ -632,7 +713,7 @@ export function renderProject(spec, options = {}) {
   }
   const frames = checked(() => spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
-    object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'ops', 'layers', 'pixels']);
+    object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'tile', 'ops', 'layers', 'pixels']);
     const frameName = name(frame.name, `${p}.name`);
     if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
     frameNames.add(frameName.toLowerCase());
@@ -654,6 +735,7 @@ export function renderProject(spec, options = {}) {
       if (Object.keys(frame.points).length > 64) fail(`${p}.points`, 'at most 64 named points per frame');
       points = Object.fromEntries(Object.entries(frame.points).map(([key, value]) => [name(key, `${p}.points.${key}`), point(value, `${p}.points.${key}`)]));
     }
+    const tile = frame.tile === undefined ? null : tileFacts(frame.tile, `${p}.tile`, width, height);
     let data = new Uint8ClampedArray(width * height * 4);
     if (frame.from !== undefined) {
       if (typeof frame.from !== 'string' || !rendered.has(frame.from)) fail(`${p}.from`, 'must name an earlier frame');
@@ -730,7 +812,7 @@ export function renderProject(spec, options = {}) {
       data.set(color(pixel.color, `${pp}.color`), (y * width + x) * 4);
     }
     activePalette = palette;
-    const result = { name: frameName, duration, data, ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
+    const result = { name: frameName, duration, data, ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
     rendered.set(frameName, result);
     return result;
   }));
@@ -980,7 +1062,8 @@ export function buildAtlas(project, { trim } = {}) {
   const entries = Object.create(null);
   const extras = frame => ({
     ...(frame.anchor && { pivot: { x: round6(frame.anchor[0] / width), y: round6(frame.anchor[1] / height) }, anchor: { x: frame.anchor[0] * s, y: frame.anchor[1] * s } }),
-    ...(frame.points && { points: Object.fromEntries(Object.entries(frame.points).map(([key, [x, y]]) => [key, { x: x * s, y: y * s }])) })
+    ...(frame.points && { points: Object.fromEntries(Object.entries(frame.points).map(([key, [x, y]]) => [key, { x: x * s, y: y * s }])) }),
+    ...(frame.tile && { tile: { ...frame.tile, ...(frame.tile.collision && { collision: frame.tile.collision.map(polygon => polygon.map(([x, y]) => ({ x: x * s, y: y * s }))) }) } })
   });
   frames.forEach((frame, i) => {
     const pixels = scalePixels(frame.data, width, height, s), rowBytes = width * s * 4;
@@ -1242,8 +1325,8 @@ export function inspectProject(project, options = {}) {
   if (total !== cells.length) view.sampling = { total, shown: cells.length, omitted: total - cells.length, positions, ...((step > 1 || offset > 0) && { step, offset }), method: `${methods.join(', then ')}; durations are original, not playback timing` };
   if (diagnostics) view.diagnostics = analyzeProject(project);
   if (options.animation !== undefined && (diagnostics || mode === 'onion')) {
-    const a = project.animations[options.animation]; let start = 0;
-    view.timing = { animation: options.animation, duration: a.duration, loop: a.loop, entries: a.frames.map((index, position) => {
+    const a = project.animations[options.animation], fps = animationFps(project, options.animation); let start = 0;
+    view.timing = { animation: options.animation, duration: a.duration, loop: a.loop, ...(fps !== undefined && { fps }), entries: a.frames.map((index, position) => {
       const entry = { position, frame: frames[index].name, start, duration: frames[index].duration, ...animationNeighbors(a, position) };
       start += entry.duration; return entry;
     }) };
@@ -1264,6 +1347,15 @@ export function animationPosition(project, animation, time) {
     cursor -= duration;
   }
   return animation.frames.length - 1;
+}
+// Frames per second of an animation of two or more frames that all last the same, for engines and editors that ask
+// for a rate: to two decimals (70 ms a frame is 14.29), or three significant figures under 1 (60 s a frame is 0.0167);
+// undefined when the durations differ or there is one frame.
+export function animationFps(project, key) {
+  const durations = project.animations[key].frames.map(i => project.frames[i].duration);
+  if (durations.length < 2 || durations.some(ms => ms !== durations[0])) return undefined;
+  const fps = 1000 / durations[0];
+  return fps >= 1 ? Math.round(fps * 100) / 100 : Number(fps.toPrecision(3));
 }
 export function animationNeighbors(animation, position) {
   integer(position, 'animation.position', 0, animation.frames.length - 1);

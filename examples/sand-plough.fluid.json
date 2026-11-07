@@ -1,0 +1,68 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "sand-plough",
+  "width": 72,
+  "height": 40,
+  "palette": {
+    "a": "#f6dc9c",
+    "b": "#ddb46a",
+    "c": "#b8864a",
+    "d": "#8a5f34",
+    "o": "#5a3c22",
+    "p": "#9a9fa8",
+    "P": "#5d626b",
+    "h": "#3a3f47",
+    "G": "#4d4038",
+    "K": "#3a302a"
+  },
+  "symbols": {
+    "ground": [
+      "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK",
+      "KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK"
+    ],
+    "blade": [
+      "hhhP",
+      "hhhP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP",
+      "pppP"
+    ]
+  },
+  "effects": {
+    "sand-plough": {
+      "kind": "liquid",
+      "frames": 80,
+      "duration": 60,
+      "seed": 7,
+      "walls": ["left", "right", "bottom"],
+      "granular": { "repose": 33 },
+      "obstacles": [
+        { "symbol": "ground", "x": 0, "y": 37 },
+        { "symbol": "blade", "x": 2, "y": 21, "keys": [{ "frame": 4, "x": 44, "over": 52 }] }
+      ],
+      "fill": [{ "x": 8, "y": 32, "w": 64, "h": 5 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.35], "dither": 0 },
+        { "field": "depth", "colors": ["c", "d"], "thresholds": [5, 11], "dither": 0.9, "pattern": "noise" },
+        { "field": "shadow", "colors": ["c"], "thresholds": [0.5], "dither": 0 },
+        { "field": "light", "colors": ["a"], "thresholds": [0.6], "dither": 0 }
+      ],
+      "outline": "o",
+      "cleanup": { "strays": true }
+    }
+  }
+}

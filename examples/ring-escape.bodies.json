@@ -1,0 +1,54 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "ring-escape",
+  "width": 96,
+  "height": 96,
+  "palette": {
+    "b": "#f1f0ea",
+    "k": "#1d1d22",
+    "t": "#2b2b31",
+    "p": "#9b4dff",
+    "c": "#2ec4e6",
+    "m": "#ff3d7f",
+    "o": "#ff7a1a",
+    "g": "#2ee68f"
+  },
+  "effects": {
+    "ring-escape": {
+      "frames": 256,
+      "duration": 40,
+      "gravity": [0, 0.12],
+      "background": "b",
+      "bodies": [
+        {
+          "name": "ball",
+          "shape": "circle",
+          "radius": 3,
+          "at": [48, 44],
+          "velocity": [2.5, -1.5],
+          "bounce": 1,
+          "friction": 0,
+          "tireless": true,
+          "fill": ["p", "c", "m", "o", "g"],
+          "outline": "k",
+          "trail": { "color": "t", "length": 3 }
+        },
+        {
+          "shape": "box",
+          "size": [4, 4],
+          "at": [48, 48],
+          "ring": { "radius": 30, "count": 42 },
+          "asleep": true,
+          "weightless": true,
+          "density": 6,
+          "drag": 0.08,
+          "spinDrag": 0.1,
+          "friction": 0.3,
+          "bounce": 0,
+          "fill": "k"
+        }
+      ]
+    }
+  }
+}

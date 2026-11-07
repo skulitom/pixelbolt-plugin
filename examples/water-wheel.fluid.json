@@ -1,0 +1,61 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "water-wheel",
+  "width": 56,
+  "height": 44,
+  "subpixels": 4,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "s": "#8a8f99",
+    "S": "#5d626b",
+    "y": "#ffd23f",
+    "k": "#14141c",
+    "h": "#c98c4f",
+    "o": "#3b2414"
+  },
+  "effects": {
+    "water-wheel": {
+      "kind": "liquid",
+      "frames": 40,
+      "duration": 60,
+      "loop": true,
+      "warmup": 3,
+      "seed": 3,
+      "walls": ["left", "right", "bottom"],
+      "flip": 0.6,
+      "drag": 0.03,
+      "fill": [{ "x": 0, "y": 16, "w": 56, "h": 28 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 5, 10], "dither": 0 }
+      ],
+      "bodies": [
+        { "shape": "box", "size": [2, 20], "at": [28, 27], "fixed": true, "spin": 4.5, "fill": "s", "outline": "S" },
+        { "shape": "box", "size": [20, 2], "at": [28, 27], "fixed": true, "spin": 4.5, "fill": "s", "outline": "S" },
+        {
+          "name": "duck",
+          "shape": "circle",
+          "radius": 2.5,
+          "at": [14, 14],
+          "density": 0.4,
+          "fill": "y",
+          "outline": "k"
+        },
+        {
+          "name": "crate",
+          "shape": "box",
+          "size": [6, 6],
+          "at": [42, 13],
+          "density": 0.15,
+          "fill": "h",
+          "outline": "o"
+        }
+      ]
+    }
+  }
+}

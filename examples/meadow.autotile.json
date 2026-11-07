@@ -1,0 +1,65 @@
+{
+  "format": "pixelforge-autotile",
+  "version": 1,
+  "name": "meadow",
+  "tile": 16,
+  "palette": {
+    "k": "#1e2b22",
+    "D": "#2d4a2c",
+    "d": "#3c6b35",
+    "g": "#4f8a3f",
+    "G": "#67a447",
+    "L": "#8fc75a",
+    "y": "#f0d76a",
+    "w": "#f4f1e2",
+    "s": "#20140c59",
+    "u": "#7a5534"
+  },
+  "symbols": {
+    "daisy": [
+      ".w.",
+      "wyw",
+      ".w."
+    ],
+    "buttercup": [
+      "y.",
+      ".y"
+    ]
+  },
+  "terrain": {
+    "seed": 4,
+    "fill": {
+      "color": "g",
+      "speckle": [
+        { "color": "d", "amount": 0.22, "size": 5 },
+        { "color": "G", "amount": 0.16, "size": 4 },
+        { "color": "L", "amount": 0.03, "size": 2 }
+      ]
+    },
+    "edges": {
+      "all": { "depth": 2, "jitter": 1, "size": 5, "bands": ["k", "d"] },
+      "n": { "bands": ["k", "G"], "tufts": { "colors": ["g", "G"], "amount": 0.4 } },
+      "s": { "depth": 3, "bands": ["k", "D"], "outside": ["s"] }
+    },
+    "round": 2,
+    "inner": 1
+  },
+  "frame": "meadow-{mask}-{variant}",
+  "variants": [
+    { "name": "a", "weight": 4 },
+    { "name": "b", "weight": 4, "terrain": { "fill": { "seed": 11 } } },
+    { "name": "c", "weight": 4, "terrain": { "fill": { "seed": 23 } } },
+    {
+      "name": "flowers",
+      "weight": 1,
+      "terrain": { "fill": { "seed": 37 } },
+      "ops": [
+        { "op": "stamp", "symbol": "daisy", "x": 9, "y": 25 },
+        { "op": "stamp", "symbol": "buttercup", "x": 18, "y": 34 },
+        { "op": "stamp", "symbol": "daisy", "x": 19, "y": 3 }
+      ]
+    }
+  ],
+  "preview": { "background": "u" },
+  "sheet": { "columns": 16 }
+}

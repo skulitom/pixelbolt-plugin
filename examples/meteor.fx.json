@@ -1,0 +1,158 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "meteor",
+  "width": 64,
+  "height": 64,
+  "anchor": [40, 54],
+  "palette": {
+    "r": "#8a2a1a",
+    "o": "#e0661e",
+    "y": "#ffc23a",
+    "W": "#fff6d8",
+    "s": "#5e5458",
+    "g": "#8a8084",
+    "l": "#b8b0b0",
+    "k": "#3e3438"
+  },
+  "symbols": {
+    "ember": ["y"],
+    "ember-dim": ["o"],
+    "ember-out": ["r"],
+    "chip": [
+      ".s",
+      "sg"
+    ],
+    "chip-big": [
+      ".ss",
+      "sgg",
+      "sg."
+    ]
+  },
+  "effects": {
+    "meteor": {
+      "frames": 22,
+      "edges": ["top"],
+      "duration": 60,
+      "seed": 3,
+      "looks": {
+        "smoke": {
+          "colors": ["s", "g", "l"],
+          "thresholds": [0.3, 0.6, 0.95],
+          "lit": { "colors": ["l"], "thresholds": [0.35] },
+          "shade": { "colors": ["k"], "thresholds": [0.45] },
+          "reach": 2
+        },
+        "fire": { "colors": ["r", "o", "y", "W"], "thresholds": [0.2, 0.42, 0.66, 0.86], "dither": 0.3 }
+      },
+      "layers": [
+        {
+          "kind": "burst",
+          "look": "fire",
+          "path": [[6, 4], [22, 26], [40, 54]],
+          "frames": [0, 9],
+          "radius": [4.5, 6],
+          "noise": 0.3,
+          "ease": "linear",
+          "power": 1.4
+        },
+        {
+          "kind": "burst",
+          "look": "fire",
+          "at": [40, 54],
+          "frames": [8, 15],
+          "radius": [4, 13, 9],
+          "noise": [0.2, 0.7],
+          "hole": [0, 0, 0.6],
+          "power": [1.4, 0.4],
+          "squash": [1, 0.7],
+          "cue": "impact"
+        },
+        {
+          "kind": "ring",
+          "look": "fire",
+          "at": [40, 55],
+          "frames": [9, 15],
+          "radius": [4, 22],
+          "width": [4, 2],
+          "squash": [1, 0.35],
+          "noise": 0.5,
+          "power": [1.1, 0.5]
+        }
+      ],
+      "emitters": [
+        {
+          "path": [[6, 4], [22, 26], [40, 54]],
+          "rate": [1.4, 3],
+          "end": 9,
+          "angle": [250, 290],
+          "speed": [0.1, 0.25],
+          "life": [8, 12],
+          "drag": 0.1,
+          "turbulence": { "strength": 0.08, "scale": 6 },
+          "blob": { "look": "smoke", "radius": [1.8, 3, 2.2], "size": [0.8, 1.3] }
+        },
+        {
+          "path": [[6, 4], [22, 26], [40, 54]],
+          "rate": 3,
+          "end": 9,
+          "angle": [215, 245],
+          "speed": [0.4, 0.8],
+          "life": [3, 5],
+          "drag": 0.1,
+          "blob": { "look": "fire", "radius": [2.4, 1.2], "power": [1.5, 0.3] }
+        },
+        {
+          "path": [[6, 4], [22, 26], [40, 54]],
+          "rate": 1,
+          "end": 9,
+          "angle": [200, 250],
+          "speed": [0.5, 1],
+          "life": [3, 6],
+          "shapes": ["ember", "ember-dim", "ember-out"]
+        },
+        {
+          "at": [40, 52],
+          "area": [6, 2],
+          "burst": 14,
+          "start": 9,
+          "angle": [195, 345],
+          "speed": [1.2, 2.6],
+          "life": [8, 13],
+          "gravity": [0, 0.22],
+          "floor": 56,
+          "bounce": 0.3,
+          "blob": { "look": "fire", "radius": 1.3, "power": [1.6, 0.5] }
+        },
+        {
+          "at": [40, 52],
+          "area": [8, 2],
+          "burst": 6,
+          "start": 9,
+          "angle": [200, 340],
+          "speed": [1.4, 2.4],
+          "life": [8, 11],
+          "gravity": [0, 0.25],
+          "floor": 57,
+          "bounce": 0.25,
+          "spin": [-90, 90],
+          "shapes": [["chip"], ["chip-big"]],
+          "dissolve": 0.4
+        },
+        {
+          "at": [40, 52],
+          "area": [18, 3],
+          "rate": [3, 0],
+          "start": 10,
+          "end": 16,
+          "angle": [255, 285],
+          "speed": [0.5, 0.9],
+          "life": [6, 9],
+          "drag": 0.06,
+          "turbulence": { "strength": 0.1, "scale": 7 },
+          "blob": { "look": "smoke", "radius": [2.4, 4, 1], "size": [0.7, 1.4] }
+        }
+      ]
+    }
+  }
+}

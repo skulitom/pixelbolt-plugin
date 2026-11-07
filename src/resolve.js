@@ -110,12 +110,12 @@ async function resolveScene(scene, baseDir, context) {
 }
 /**
  * Returns the document with references inlined, plus the files it read. Works for recipes, pose sources,
- * autotile templates, effect and fluid sources, normal sources and scenes. `revisions(id)` supplies saved recipes for
+ * autotile templates, effect, fluid and body sources, normal sources and scenes. `revisions(id)` supplies saved recipes for
  * `{ "revision": id }` scene assets, normal sources and effect symbols taken from a recipe's frame.
  */
 export async function resolveReferences(document, { baseDir = process.cwd(), root, revisions } = {}) {
   const context = { root, revisions, files: new Set(), palettes: [] };
-  const sidecars = { 'pixelforge-poses': 'poses', 'pixelforge-autotile': 'autotile', 'pixelforge-fx': 'fx', 'pixelforge-fluid': 'fluid', 'pixelforge-wave': 'wave' };
+  const sidecars = { 'pixelforge-poses': 'poses', 'pixelforge-autotile': 'autotile', 'pixelforge-fx': 'fx', 'pixelforge-fluid': 'fluid', 'pixelforge-wave': 'wave', 'pixelforge-bodies': 'bodies' };
   const resolved = document?.format === 'pixelforge-scene' ? await resolveScene(document, baseDir, context)
     : document?.format === 'pixelforge-normals' && document.recipe !== undefined ? { ...document, recipe: await loadRecipe(document.recipe, baseDir, context, 'normals.recipe') }
       : document?.format === 'pixelforge-fx' ? await resolveEffects(document, baseDir, context)

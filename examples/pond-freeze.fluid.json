@@ -1,0 +1,75 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "pond-freeze",
+  "width": 56,
+  "height": 36,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "I": "#6f9fcf",
+    "i": "#b9e2f5",
+    "W": "#f6fdff",
+    "m": "#5a4a44",
+    "M": "#3d322f",
+    "n": "#e8eef8",
+    "N": "#b7c4d9",
+    "k": "#16263f"
+  },
+  "symbols": {
+    "shore": [
+      "nnn..................................................nnn",
+      "NNN..................................................NNN",
+      "mmm..................................................mmm",
+      "mmm..................................................mmm",
+      "mmmm................................................mmmm"
+    ],
+    "bed": [
+      "MMMm................................................mMMM",
+      "MMMmm..............................................mmMMM",
+      "MMMMm..............................................mMMMM",
+      "MMMMMm............................................mMMMMM",
+      "MMMMMMm..........................................mMMMMMM",
+      "MMMMMMMm........................................mMMMMMMM",
+      "MMMMMMMMm......................................mMMMMMMMM",
+      "MMMMMMMMMmm..................................mmMMMMMMMMM",
+      "MMMMMMMMMMmm................................mmMMMMMMMMMM",
+      "MMMMMMMMMMMMmm............................mmMMMMMMMMMMMM",
+      "MMMMMMMMMMMMMMmmm......................mmmMMMMMMMMMMMMMM",
+      "MMMMMMMMMMMMMMMMmmmm................mmmmMMMMMMMMMMMMMMMM",
+      "MMMMMMMMMMMMMMMMMMMMmmmmmmmmmmmmmmmmMMMMMMMMMMMMMMMMMMMM",
+      "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM"
+    ]
+  },
+  "effects": {
+    "pond-freeze": {
+      "kind": "liquid",
+      "frames": 80,
+      "duration": 70,
+      "seed": 4,
+      "walls": ["left", "right", "bottom"],
+      "gravity": [0, 0.3],
+      "flip": 0.5,
+      "drag": 0.08,
+      "heat": { "ambient": -1.7, "air": 0.03, "conduct": 0.12, "contact": 0.2, "latent": 0.3, "grain": 0.6 },
+      "ice": {
+        "look": [
+          { "field": "density", "colors": ["i"], "thresholds": [0.5], "dither": 0 },
+          { "field": "shadow", "colors": ["I"], "thresholds": [0.5], "dither": 0 },
+          { "field": "light", "colors": ["W"], "thresholds": [0.5], "dither": 0 }
+        ]
+      },
+      "obstacles": [{ "symbol": "shore", "x": 0, "y": 17, "temperature": -2.5 }, { "symbol": "bed", "x": 0, "y": 22 }],
+      "fill": [{ "x": 0, "y": 20, "w": 56, "h": 16, "temperature": -0.48 }],
+      "emitters": [],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["b", "B"], "thresholds": [1, 6], "dither": 0 }
+      ],
+      "outline": "k",
+      "cleanup": { "strays": true }
+    }
+  }
+}

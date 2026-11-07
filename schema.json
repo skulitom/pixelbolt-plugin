@@ -92,8 +92,8 @@
     "animations": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 65525,
-      "description": "ZIP32 bundle budget: animation count + frame count + 9 support files must not exceed 65,535.",
+      "maxProperties": 65524,
+      "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -275,6 +275,82 @@
             "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
           },
           "description": "Named frame positions (hands, hit points, glyph advance), exported in the atlas in exported pixels."
+        },
+        "tile": {
+          "type": "object",
+          "properties": {
+            "terrain": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "The autotile set this frame belongs to; default the recipe name. Each terrain is a Godot terrain set of its own."
+            },
+            "corners": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "description": "A layered set's tile: the terrains at its NW, NE, SW and SE corners, instead of terrain. The recipe's layered tiles are one Godot corner terrain set, its terrains in order of first appearance, the first the ground under the others."
+            },
+            "weight": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "description": "How often this frame is picked against the other frames for the same cell; default 1."
+            },
+            "collision": {
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                  },
+                  "maxItems": 32,
+                  "minItems": 3
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                    },
+                    "maxItems": 32,
+                    "minItems": 3
+                  },
+                  "maxItems": 8,
+                  "minItems": 1
+                }
+              ],
+              "description": "Polygon around the solid part in canvas pixels (pixel corners from [0, 0] to [width, height]), in order around the shape; or a list of up to 8 for separate parts."
+            },
+            "oneWay": {
+              "type": "boolean",
+              "description": "Bodies pass up through the collision polygon and land on top (a platform)."
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "description": "This frame as a tile in the Godot TileSet: its terrain, weight and collision. A frame with tile makes the export write a TileSet."
         },
         "ops": {
           "type": "array",
@@ -988,14 +1064,15 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 255,
-              "description": "Neighbour mask. Blob: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128, reduced so a diagonal counts only with both of its sides. Cardinal: N=1, E=2, S=4, W=8."
+              "description": "Neighbour mask. Blob: N=1, NE=2, E=4, SE=8, S=16, SW=32, W=64, NW=128, reduced so a diagonal counts only with both of its sides. Cardinal: N=1, E=2, S=4, W=8. Corner: the terrain cells among the four the tile sits between, NW=1, NE=2, SW=4, SE=8."
             },
             "mode": {
               "enum": [
                 "blob",
-                "cardinal"
+                "cardinal",
+                "corner"
               ],
-              "description": "blob (default) or cardinal."
+              "description": "blob (default), cardinal or corner."
             },
             "remap": {
               "type": "object",
@@ -1586,9 +1663,10 @@
                       "autotile": {
                         "enum": [
                           "blob",
-                          "cardinal"
+                          "cardinal",
+                          "corner"
                         ],
-                        "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                        "description": "Pick by neighbour mask: 47-value blob, 16-value cardinal, or 16-value corner (a tile where four cells meet, half a cell up and left; {corners} in a name becomes those four cells' characters, for a layered set, and its variants with no tile there are left out)."
                       },
                       "match": {
                         "type": "string",
@@ -1649,9 +1727,10 @@
                             "autotile": {
                               "enum": [
                                 "blob",
-                                "cardinal"
+                                "cardinal",
+                                "corner"
                               ],
-                              "description": "Pick by neighbour mask: 47-value blob or 16-value cardinal."
+                              "description": "Pick by neighbour mask: 47-value blob, 16-value cardinal, or 16-value corner (a tile where four cells meet, half a cell up and left; {corners} in a name becomes those four cells' characters, for a layered set, and its variants with no tile there are left out)."
                             },
                             "match": {
                               "type": "string",

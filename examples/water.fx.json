@@ -3,7 +3,7 @@
   "version": 1,
   "name": "water",
   "width": 64,
-  "height": 64,
+  "height": 68,
   "palette": { "o": "#123c40", "d": "#2a7f86", "m": "#4fb3b5", "b": "#9fe3e0", "h": "#e8fffb" },
   "effects": {
     "geyser": {

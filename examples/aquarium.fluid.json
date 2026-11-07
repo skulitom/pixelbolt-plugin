@@ -1,0 +1,176 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "aquarium",
+  "width": 56,
+  "height": 48,
+  "palette": {
+    "B": "#1d3f7a",
+    "b": "#2f6fc0",
+    "c": "#5fb4e8",
+    "w": "#dff6ff",
+    "s": "#e8c98a",
+    "d": "#c9a464",
+    "S": "#9c7a45",
+    "l": "#9e97ad",
+    "r": "#6b6478",
+    "R": "#45405a",
+    "g": "#8a8f99",
+    "G": "#5e6270",
+    "h": "#3f5f8f",
+    "p": "#9aa4b0",
+    "k": "#3b4150",
+    "e": "#4fa65a",
+    "E": "#2f6e3d"
+  },
+  "symbols": {
+    "sand": [
+      "............................ssss........................",
+      ".........................sssddddssss.......sssssssssssss",
+      "..........ssss........sssdSdddddddddsssssssdddddSddddddd",
+      "ssssssssssddddssssssssddddddSddddddddddSddddddddddSddddd",
+      "ddddddddSddddddddddSddddddddddSddddddddddSddddddddddSddd",
+      "ddddddddddSddddddddddSddddddddddSddddddddddSddddddddddSd",
+      "dSddddddddddSddddddddddSddddddddddSddddddddddSdddddddddd"
+    ],
+    "ledge": [
+      "................ll",
+      "..llllllllllllllrr",
+      ".lrRrrrrrrrrRrrrrr",
+      "lRRrrrrrrRrrrrrrrr",
+      "...RRRRrrrrrrrrRrr",
+      "......RRRrrrRrrrrr",
+      ".........RRRrrrrrr",
+      "............RRRRrr",
+      "...............RRR",
+      "..................",
+      ".................."
+    ],
+    "stone": [
+      ".gg.",
+      "gGGg"
+    ],
+    "nook": [
+      ".ggg",
+      "gGGG"
+    ],
+    "hose": [
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h",
+      "h"
+    ],
+    "spout": [
+      "kkkkkkkkkkkkkkkkkkkk",
+      "kppppppppppppppppppp",
+      ".ppppppppppppppppppp",
+      "kkkkkkkkkkkkkkkkkkkk"
+    ],
+    "weed": [
+      "..E..",
+      "..ee.",
+      "...e.",
+      "...E.",
+      "...e.",
+      "...ee",
+      "..E..",
+      "..e..",
+      "..e..",
+      ".Ee..",
+      ".e...",
+      ".e...",
+      ".E...",
+      "..ee."
+    ]
+  },
+  "effects": {
+    "aquarium": {
+      "kind": "liquid",
+      "frames": 48,
+      "duration": 70,
+      "loop": true,
+      "warmup": 2,
+      "seed": 4,
+      "walls": ["left", "right", "bottom"],
+      "flip": 0.6,
+      "drag": 0.04,
+      "obstacles": [
+        { "symbol": "hose", "x": 4, "y": 7, "solid": false },
+        { "symbol": "sand", "x": 0, "y": 41 },
+        { "symbol": "ledge", "x": 38, "y": 24 },
+        { "symbol": "stone", "x": 5, "y": 40 },
+        { "symbol": "nook", "x": 52, "y": 40 },
+        { "symbol": "spout", "x": 36, "y": 3 },
+        { "symbol": "weed", "x": 13, "y": 30, "solid": false },
+        { "symbol": "weed", "x": 19, "y": 33, "solid": false }
+      ],
+      "fill": [{ "x": 0, "y": 18, "w": 56, "h": 30 }],
+      "emitters": [
+        { "name": "filter", "at": [35, 5], "area": [2, 2], "rate": 1, "velocity": [-0.9, 0.4] },
+        { "name": "intake", "at": [46, 39], "area": [8, 3], "rate": 1, "density": -0.12 },
+        {
+          "name": "air-stone",
+          "at": [7, 39],
+          "radius": 1,
+          "rate": 1,
+          "density": 0,
+          "sparks": {
+            "count": 0.6,
+            "life": [50, 60],
+            "colors": ["w"],
+            "rise": 0.55,
+            "wobble": 0.5,
+            "lift": 1,
+            "pop": true
+          }
+        },
+        {
+          "name": "under-ledge",
+          "at": [54, 39],
+          "radius": 1,
+          "rate": 1,
+          "density": 0,
+          "sparks": { "count": 0.3, "life": [60, 80], "colors": ["w"], "rise": 0.5, "wobble": 0.3, "pop": true }
+        }
+      ],
+      "whitewater": [
+        { "speed": 1.2, "chance": 0.03, "life": [24, 48], "colors": ["w", "c"], "rise": 0.45, "wobble": 0.4 }
+      ],
+      "look": [
+        { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
+        { "field": "depth", "colors": ["c", "b", "B"], "thresholds": [1, 2, 14], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

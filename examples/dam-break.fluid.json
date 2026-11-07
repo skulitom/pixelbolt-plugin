@@ -65,10 +65,11 @@
       "walls": ["left", "right", "bottom"],
       "gravity": [0, 0.3],
       "apic": true,
+      "keys": [{ "frame": 16, "drag": 0.07, "over": 8 }],
       "obstacles": [
         { "symbol": "basin", "x": 0, "y": 30 },
         { "symbol": "rock", "x": 40, "y": 25 },
-        { "symbol": "plank", "x": 20, "y": 8, "keys": [{ "frame": 14, "show": false }] }
+        { "symbol": "plank", "x": 20, "y": 8, "keys": [{ "frame": 4, "y": -22, "over": 6 }] }
       ],
       "fill": [{ "x": 0, "y": 10, "w": 20, "h": 20 }],
       "emitters": [],

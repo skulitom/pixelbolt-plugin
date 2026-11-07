@@ -1,0 +1,45 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "slime-idle",
+  "width": 32,
+  "height": 32,
+  "palette": { "k": "#1d2b3a", "d": "#2b7a3d", "g": "#3fa34d", "l": "#8fd16a", "w": "#f4f4e8" },
+  "ramps": [["d", "g", "l"]],
+  "light": 225,
+  "parts": {
+    "body": {
+      "mass": { "size": [23, 12], "ramp": 0, "base": 1, "outline": "k", "flat": true },
+      "points": { "face": [0, -5], "shine": [-6, -8] }
+    },
+    "eyes": {
+      "rows": [
+        "ww...ww",
+        "kk...kk",
+        "kk...kk"
+      ],
+      "anchor": [3, 1]
+    },
+    "shine": {
+      "rows": [
+        "ww",
+        "w."
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "idle-0",
+      "duration": 140,
+      "origin": [16, 28],
+      "parts": [
+        { "name": "body", "part": "body", "at": [0, -1] },
+        { "name": "eyes", "part": "eyes", "attach": { "part": "body", "point": "face" } },
+        { "name": "shine", "part": "shine", "attach": { "part": "body", "point": "shine" } }
+      ]
+    }
+  ],
+  "rig": { "ground": 28, "body": "body", "rest": "idle-0" },
+  "motions": { "idle": { "template": "idle", "frames": 8, "squash": 0.15, "duration": 140 } },
+  "sheet": { "columns": 8 }
+}

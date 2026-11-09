@@ -398,7 +398,18 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid."
+                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid. With pivot, where the pivot is."
+                },
+                "pivot": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -128,
+                    "maximum": 128
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Fixed body: the point it turns about, [x, y] from its centre before it turns (a blade about its hilt: [-length / 2, 0]); at places it. Default its centre."
                 },
                 "angle": {
                   "type": "number",
@@ -501,6 +512,12 @@
                   ],
                   "description": "Palette key, or a list the body steps through at each hit."
                 },
+                "fillEvery": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "With a list of fills: the list steps every this many frames instead of at each hit. The body keeps its fill until it splits; then it and its copies take the fill of that frame, so each generation of a crowd that multiplies has its own colour."
+                },
                 "outline": {
                   "type": "string",
                   "minLength": 1,
@@ -531,6 +548,60 @@
                     "color"
                   ],
                   "additionalProperties": false
+                },
+                "smear": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key; dot and space are reserved."
+                      },
+                      "maxItems": 8,
+                      "minItems": 1,
+                      "description": "The most recent part of the sweep first."
+                    },
+                    "frames": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8,
+                      "description": "Frames of sweep. Default 1."
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The shape swept over its last frames, drawn under it, banded from the first colour behind it to the last: a blade's swish. Not for a hoop."
+                },
+                "breaks": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "number",
+                      "minimum": 0.1,
+                      "maximum": 16,
+                      "description": "How hard a knock breaks it: the speed it is hit at where it is hit (with the bounce), in pixels a frame, shared with what hits it by how easily each gives there. Default 3."
+                    },
+                    "pieces": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 16,
+                      "description": "Pieces it breaks into, fewer where a piece would be too small to read. Default 6."
+                    },
+                    "speed": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 8,
+                      "description": "Pixels a frame the pieces fly apart at, away from where it was hit, on top of its own motion. Default 0.5."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false,
+                  "description": "A free body that breaks when knocked hard enough, in a pixelforge-bodies source: into convex pieces cut through its shape about where it was hit, smaller there, each a body of its own carrying its part of the picture. Pieces do not break again."
                 },
                 "ring": {
                   "type": "object",
@@ -613,6 +684,12 @@
             "minItems": 1,
             "description": "At most 256 bodies with their copies."
           },
+          "most": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "description": "The most bodies split powers and breaks may make in all, copies and pieces included: at least the bodies listed. Default 256, or room for every body with breaks to break into all its pieces (up to 4096)."
+          },
           "pickups": {
             "type": "array",
             "items": {
@@ -662,9 +739,11 @@
                     "grow",
                     "speed",
                     "warp",
-                    "magnet"
+                    "magnet",
+                    "vanish",
+                    "break"
                   ],
-                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames."
+                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames; vanish: the body is gone (an event may take a fixed body away: a ring bursts); break: the body breaks into count pieces, each carrying its part of the picture (an event may break a fixed body, whose pieces fall)."
                 },
                 "label": {
                   "type": "string",
@@ -675,7 +754,7 @@
                   "type": "integer",
                   "minimum": 2,
                   "maximum": 8,
-                  "description": "split: bodies after. Default 3."
+                  "description": "split: bodies after. Default 3. break: pieces. Default 6."
                 },
                 "spread": {
                   "type": "number",
@@ -748,9 +827,11 @@
                     "grow",
                     "speed",
                     "warp",
-                    "magnet"
+                    "magnet",
+                    "vanish",
+                    "break"
                   ],
-                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames."
+                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames; vanish: the body is gone (an event may take a fixed body away: a ring bursts); break: the body breaks into count pieces, each carrying its part of the picture (an event may break a fixed body, whose pieces fall)."
                 },
                 "label": {
                   "type": "string",
@@ -761,7 +842,7 @@
                   "type": "integer",
                   "minimum": 2,
                   "maximum": 8,
-                  "description": "split: bodies after. Default 3."
+                  "description": "split: bodies after. Default 3. break: pieces. Default 6."
                 },
                 "spread": {
                   "type": "number",
@@ -814,6 +895,112 @@
             },
             "maxItems": 64,
             "description": "Powers given to a named body at the end of a frame."
+          },
+          "strikes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "by": {
+                  "type": "string",
+                  "description": "A named body: what it pushes (a hit, or a push along) takes the power."
+                },
+                "rest": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "Frames before a body can take this strike again. Default 10."
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 18000,
+                  "description": "First frame it works. Default 0."
+                },
+                "until": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18001
+                },
+                "cut": {
+                  "type": "number",
+                  "minimum": 0.1,
+                  "maximum": 8,
+                  "description": "Cut instead of push: the body passes through the free bodies it touches, and what it strikes leaves behind it at this speed (pixels a frame), the pieces of a split fanned about that way, so they lie in its wake."
+                },
+                "power": {
+                  "enum": [
+                    "split",
+                    "grow",
+                    "speed",
+                    "warp",
+                    "magnet",
+                    "vanish",
+                    "break"
+                  ],
+                  "description": "split: copies turned about its heading; grow: a bigger body for frames; speed: its held speed (or speed) times factor for frames; warp: moves it to to; magnet: pulls the other teams' bodies toward to (default the pickup) for frames; vanish: the body is gone (an event may take a fixed body away: a ring bursts); break: the body breaks into count pieces, each carrying its part of the picture (an event may break a fixed body, whose pieces fall)."
+                },
+                "label": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "For {news}. Default the power in capitals."
+                },
+                "count": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 8,
+                  "description": "split: bodies after. Default 3. break: pieces. Default 6."
+                },
+                "spread": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 180,
+                  "description": "split: degrees between headings. Default 30."
+                },
+                "scale": {
+                  "type": "number",
+                  "minimum": 1.25,
+                  "maximum": 4,
+                  "description": "grow. Default 2."
+                },
+                "factor": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 4,
+                  "description": "speed. Default 1.5."
+                },
+                "to": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 8192
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "warp, magnet: a canvas point [x, y], each from minus the canvas side to twice it."
+                },
+                "strength": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1,
+                  "description": "magnet: pixels a frame² . Default 0.05."
+                },
+                "frames": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "grow, speed, magnet: how long. Default 120."
+                }
+              },
+              "required": [
+                "by",
+                "power"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "description": "Powers given at the end of a frame to every body a named body struck in it: with split, a blade that multiplies each ball it touches (raise most for a crowd)."
           },
           "hud": {
             "type": "array",

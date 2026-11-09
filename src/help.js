@@ -7,7 +7,7 @@ import { PixelError } from './core.js';
 export const QUICK_START = '../docs/agent-quick-start.md';
 export const HELP_TOPICS = {
   guide: '../docs/agent-guide.md', workflow: '../docs/art-workflow.md', schema: '../schema.json', example: '../examples/forest-spirit.json',
-  poses: '../poses.schema.json', scenes: '../scene.schema.json', autotile: '../autotile.schema.json', fx: '../fx.schema.json', fluid: '../fluid.schema.json', wave: '../wave.schema.json', bodies: '../bodies.schema.json', normals: '../normals.schema.json'
+  poses: '../poses.schema.json', scenes: '../scene.schema.json', autotile: '../autotile.schema.json', fx: '../fx.schema.json', fluid: '../fluid.schema.json', wave: '../wave.schema.json', crystal: '../crystal.schema.json', powder: '../powder.schema.json', bodies: '../bodies.schema.json', normals: '../normals.schema.json'
 };
 export const TOPICS = [...Object.keys(HELP_TOPICS), 'presets', 'preset'];
 // Topics whose file is JSON (the schemas and the example), which MCP returns parsed.

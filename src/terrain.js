@@ -155,7 +155,7 @@ export function drawTerrain(spec, map, mode = 'blob') {
     const cx = Math.floor(x / tile), cy = Math.floor(y / tile), lx = x - cx * tile, ly = y - cy * tile, west = lx < q, north = ly < q;
     const across = west ? 'w' : 'e', upDown = north ? 'n' : 's', hx = cx + (west ? -1 : 1), vy = cy + (north ? -1 : 1);
     const openH = !filled(hx, cy), openV = !filled(cx, vy), corner = mode === 'blob' && !openH && !openV && !filled(hx, vy);
-    return { cx, cy, lx, ly, across, upDown, ax: west ? lx : tile - 1 - lx, ay: north ? ly : tile - 1 - ly, openH, openV, corner, dH: sides[across].profile[ly], dV: sides[upDown].profile[lx] };
+    return { across, upDown, ax: west ? lx : tile - 1 - lx, ay: north ? ly : tile - 1 - ly, openH, openV, corner, dH: sides[across].profile[ly], dV: sides[upDown].profile[lx] };
   };
   const member = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -441,6 +441,9 @@ export function layeredTestMap(n) {
 // terrain goes on past the map's edge. A layer with variants ({ weight, variants: [{ symbol, weight }] }) then has them
 // drawn over its plain tiles, picked at each point as a scene legend { frames: [plain, ...variants], weights } with
 // seed 0 picks them, so a scene with that legend draws the same pixels.
+// A test map's name: the set's own, cut to leave room for "-test-map" in the 64 characters a recipe's name may have
+// (a set named with 56 or more drew no test map, and MCP pixel_compile always draws one).
+const testMapName = name => `${name.slice(0, 64 - '-test-map'.length)}-test-map`;
 export function layeredTestMapRecipe(recipe, layers, { background } = {}) {
   const tile = recipe.width, map = layeredTestMap(layers.length), rows = map.map(row => row.map(i => layers[i].key).join(''));
   const width = rows[0].length * tile, height = rows.length * tile;
@@ -458,7 +461,7 @@ export function layeredTestMapRecipe(recipe, layers, { background } = {}) {
     while (left >= weights[k]) left -= weights[k++];
     if (k) variants.push({ op: 'autotile', symbol: layer.variants[k - 1].symbol, mask: 15, mode: 'corner', x: x * tile - tile / 2, y: y * tile - tile / 2 });
   }
-  return { version: 1, name: `${recipe.name}-test-map`, width, height, palette: recipe.palette, ...(recipe.ramps && { ramps: recipe.ramps }), symbols,
+  return { version: 1, name: testMapName(recipe.name), width, height, palette: recipe.palette, ...(recipe.ramps && { ramps: recipe.ramps }), symbols,
     frames: [{ name: 'test-map', ops: [...(background !== undefined ? [{ op: 'rect', x: 0, y: 0, w: width, h: height, color: background }] : []), ...maps, ...variants] }] };
 }
 // A one-frame recipe that draws a compiled set's templates over the test map (variants with templates of their own
@@ -470,7 +473,7 @@ export function testMapRecipe(recipe, { templates, weights, mode = 'blob', backg
   const symbols = Object.fromEntries(names.map(name => [name, recipe.symbols[name]]));
   const set = templates.length === 1 ? { template: templates[0], autotile: mode } : { templates, ...(weights && { weights }), autotile: mode };
   const hills = slopes ? [{ op: 'tilemap', y: TEST_MAP.length * tile, tile: [tile, tile], rows: [...SLOPE_MAP], outside: 'match', legend: slopeLegend(slopes, set, key => ({ symbol: `slope-${key}` })) }] : [];
-  return { version: 1, name: `${recipe.name}-test-map`, width, height, palette: recipe.palette, ...(recipe.ramps && { ramps: recipe.ramps }), symbols,
+  return { version: 1, name: testMapName(recipe.name), width, height, palette: recipe.palette, ...(recipe.ramps && { ramps: recipe.ramps }), symbols,
     frames: [{ name: 'test-map', ops: [...(background !== undefined ? [{ op: 'rect', x: 0, y: 0, w: width, h: height, color: background }] : []), { op: 'tilemap', tile: [tile, tile], rows: [...TEST_MAP], legend: { '#': set } }, ...hills] }] };
 }
 // The enlargement that shows a test map at about 768 pixels across, as scene views are.

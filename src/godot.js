@@ -99,6 +99,39 @@ export function normalsYUp(data) {
   return out;
 }
 
+// ---- Parallax scenes -----------------------------------------------------------------------------------------------
+// A Godot 4.3+ scene (.tscn) of a scene's planes (scenePlanes in scene.js): a Camera2D at the camera's start, anchored
+// at its top-left as Pixelbolt's camera is; the background colour, the scene's size, on a Parallax2D that stays on
+// screen; then one Parallax2D per plane, in drawing order, its scroll_scale the plane's parallax, holding a Sprite2D of
+// the plane's image at the plane's scene position. Godot keeps a Parallax2D at (1 − scroll_scale) × the camera's
+// top-left, so each plane is drawn at its position less parallax × the camera, as renderScene draws it. The root draws
+// with nearest filtering, which the planes take. `planes` lists { name, image (relative to the .tscn), at, parallax };
+// `background` is RGBA from 0 to 255 and `camera` the camera's start, [x, y].
+// Godot's node names can't hold . : @ / " or %, and siblings need their own names: those characters become
+// underscores, a plane's name a sibling already has gets a number, and an empty one is "plane" ("scene" for the root).
+export function parallaxScene({ name, width, height, background, camera, planes }) {
+  const vector = ([x, y]) => `Vector2(${x}, ${y})`, taken = new Set(['Camera2D', 'Background']);
+  const clean = text => String(text).replace(/[.:@/"%\u0000-\u001f]/g, '_').trim();
+  const node = text => {
+    const base = clean(text) || 'plane';
+    let id = base;
+    for (let n = 2; taken.has(id); n++) id = `${base} ${n}`;
+    taken.add(id);
+    return id;
+  };
+  const lines = ['[gd_scene format=3]', '', ...planes.map((plane, k) => `[ext_resource type="Texture2D" path=${quote(plane.image)} id="${k + 1}_plane"]`), ...(planes.length ? [''] : []),
+    `[node name=${quote(clean(name) || 'scene')} type="Node2D"]`, 'texture_filter = 1', '',
+    '[node name="Camera2D" type="Camera2D" parent="."]', ...(camera[0] || camera[1] ? [`position = ${vector(camera)}`] : []), 'anchor_mode = 0', '',
+    '[node name="Background" type="Parallax2D" parent="."]', 'scroll_scale = Vector2(0, 0)', '',
+    '[node name="Color" type="ColorRect" parent="Background"]', `offset_right = ${real(width)}`, `offset_bottom = ${real(height)}`, `color = Color(${background.map(channel).join(', ')})`, ''];
+  planes.forEach((plane, k) => {
+    const id = node(plane.name);
+    lines.push(`[node name=${quote(id)} type="Parallax2D" parent="."]`, ...(plane.parallax[0] !== 1 || plane.parallax[1] !== 1 ? [`scroll_scale = ${vector(plane.parallax)}`] : []), '',
+      `[node name="Image" type="Sprite2D" parent=${quote(id)}]`, ...(plane.at[0] || plane.at[1] ? [`position = ${vector(plane.at)}`] : []), `texture = ExtResource("${k + 1}_plane")`, 'centered = false', '');
+  });
+  return lines.join('\n');
+}
+
 // ---- Tile sets ---------------------------------------------------------------------------------------------------
 // Godot's names for a tile's neighbours, in the order Godot writes them, with the Pixelbolt mask bit of each. A blob
 // set matches corners and sides (Godot terrain mode 0), a cardinal set sides only (mode 2) and a corner set corners

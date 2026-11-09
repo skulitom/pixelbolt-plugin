@@ -1,0 +1,113 @@
+/* The Powder lab, on the Fluid lab's layout (fluid.css): the grid with its brush overlay, the brush palette and the
+   share field. */
+.powder-preview{
+  padding:12px
+}
+.powder-canvas{
+  position:relative;
+  flex-shrink:0;
+  line-height:0
+}
+.powder-canvas canvas{
+  image-rendering:pixelated;
+  display:block
+}
+#canvas{
+  cursor:crosshair;
+  touch-action:none
+}
+#overlay{
+  position:absolute;
+  left:0;
+  top:0;
+  pointer-events:none;
+  opacity:.55
+}
+.powder-small{
+  padding:7px 12px
+}
+.powder-readout{
+  margin-top:12px;
+  font:11px var(--mono);
+  color:var(--muted);
+  min-height:16px
+}
+.powder-notice{
+  margin-top:10px;
+  font-size:12px;
+  line-height:1.5;
+  padding:9px;
+  background:var(--selection);
+  border-radius:5px;
+  overflow-wrap:anywhere
+}
+.powder-group-label{
+  font-size:11px;
+  color:var(--muted);
+  margin-top:16px
+}
+.powder-palette{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:6px;
+  margin-top:8px
+}
+.powder-palette button{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  min-width:0;
+  padding:7px 8px;
+  border:1px solid var(--line);
+  border-radius:6px;
+  background:var(--paper);
+  font-size:11px;
+  text-align:left
+}
+.powder-palette button span:last-child{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap
+}
+.powder-palette button:hover{
+  background:var(--raised)
+}
+.powder-palette button[aria-pressed=true]{
+  background:var(--selection);
+  border-color:var(--accent);
+  color:var(--ink)
+}
+.powder-palette .chip{
+  width:12px;
+  height:12px;
+  flex:none;
+  border-radius:3px;
+  border:1px solid #ffffff2e
+}
+.powder-palette .chip.erase{
+  background:linear-gradient(135deg,transparent 42%,#f5b5ad 42% 58%,transparent 58%);
+  border-color:#f5b5ad80
+}
+.powder-sliders{
+  margin:20px 0 14px
+}
+.powder-section{
+  margin-top:26px;
+  padding-top:20px;
+  border-top:1px solid var(--line)
+}
+.powder-share{
+  margin:14px 0 10px
+}
+.powder-link{
+  width:100%;
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:7px 9px;
+  background:var(--raised);
+  color:var(--ink);
+  font:11px var(--mono)
+}
+.fluid-controls code{
+  font:11px var(--mono)
+}

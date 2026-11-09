@@ -1,0 +1,1043 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt falling sand",
+  "description": "A falling-sand material grid: every pixel holds one material from a table (powders, liquids, gases, fire, fixed solids and solids that fall as rigid pieces), the heavier sinking through the lighter, with velocity (falls that speed up, splashes, surges), heat with phase changes and latent heat, burning, lives, reactions between neighbours and moving air. base \"sandbox\" starts from the starter materials. The same source runs live (createLivePowder, a frame at a time with pointer input) and compiles to an ordinary recipe of palette grids: each clip samples the grid every `every` frames (60 a second). Deterministic: the same source draws the same pixels everywhere.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "format": {
+      "const": "pixelforge-powder"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "The recipe's name, and its clip's when there are no clips.",
+      "maxLength": 60
+    },
+    "base": {
+      "enum": [
+        "sandbox"
+      ],
+      "description": "Start from the starter table: sand, water, stone, wood, fire, smoke, steam, oil, lava, ice, ash, moss and wall, their reactions, moving air and a dark background. Materials named again replace the base's, a reaction for a pair the base has replaces the base's, and air.flow merges field by field."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 1024,
+      "description": "At most 256 to compile; up to 1024 live."
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 8,
+      "maximum": 1024,
+      "description": "At most 256 to compile; up to 1024 live."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2147483647,
+      "description": "Seeds every draw. Default 1."
+    },
+    "ambient": {
+      "type": "number",
+      "minimum": -2000,
+      "maximum": 9000,
+      "description": "Degrees everything drifts toward. Default 20."
+    },
+    "background": {
+      "type": "string",
+      "description": "Drawn where nothing is (and the compiled recipe's background). Default transparent."
+    },
+    "gravity": {
+      "type": "number",
+      "minimum": 0.02,
+      "maximum": 1,
+      "description": "Pixels a frame gained each frame by whatever falls (at least a pixel a frame, at most 6). Default 0.15."
+    },
+    "air": {
+      "type": "object",
+      "properties": {
+        "conduct": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How air passes heat on. Default 0.01."
+        },
+        "cool": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "How fast air drifts to the ambient temperature. Default 0.03."
+        },
+        "flow": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "cell": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 16,
+                  "description": "Pixels a side of each air cell. Default 4."
+                },
+                "wind": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -2,
+                    "maximum": 2
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "[x, y] pixels a frame the air settles toward. Default [0, 0]."
+                },
+                "rise": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4,
+                  "description": "How strongly heat lifts the air. Default 0.25."
+                },
+                "swirl": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "How much the air curls. Default 0.3."
+                },
+                "calm": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How fast the air settles to the wind, a frame. Default 0.02."
+                },
+                "carry": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How much the air carries falling powders and liquids, by their lightness. Default 0.3."
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          ],
+          "description": "Moving air: it carries gases and flames, lifts over heat and takes push and burst inputs. Edges are open but for the floor."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "wall": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,23}$",
+      "description": "The fixed solid the wall input paints; default the material named \"wall\"."
+    },
+    "pieces": {
+      "enum": [
+        "drop",
+        "tumble"
+      ],
+      "description": "How a loose piece of solids that fall comes down. \"drop\" (default): straight down as one block, held while any cell touches a fixed solid or the floor. \"tumble\": as a rigid body that turns, tips off ledges and stubs its weight is not over, floats in denser liquids, pushes what it lands in aside and comes to rest, its cells keeping their material, burning and heat; held only where a fixed solid is beside it or over it (or under a material that clings)."
+    },
+    "materials": {
+      "type": "object",
+      "maxProperties": 200,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,23}$",
+        "description": "A material: lower-case letters, digits and hyphens, starting with a letter (to clear cells, erase)."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "enum": [
+              "powder",
+              "liquid",
+              "gas",
+              "solid",
+              "fire"
+            ],
+            "description": "powder and liquid fall and pile or spread; gas and fire drift up (lighter than air) or down; a solid stays put, unless it falls."
+          },
+          "density": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1000,
+            "description": "Relative to air (1): the heavier sinks through the lighter. Defaults: powder 16, liquid 10, gas 0.5, fire 0.2, a solid that falls 50."
+          },
+          "spread": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16,
+            "description": "Liquids, gases and fire: cells it runs sideways a frame. Defaults: liquid 4, gas 2, fire 1."
+          },
+          "speed": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Gases and fire: how fast it rises (or sinks) on its own, as a chance a frame, or in pixels a frame in moving air. Default 1."
+          },
+          "expand": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4,
+            "description": "Gases: extra free cells beside it that it fills when a phase change or reaction makes it (steam billows). Default 0."
+          },
+          "viscosity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.95,
+            "description": "Liquids: how slow it is to slide and spread once landed. Default 0."
+          },
+          "drag": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.95,
+            "description": "Liquids and gases: how much it slows what sinks through it. Default 0.5 for a liquid."
+          },
+          "splash": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Powders and liquids: the share of fast landings thrown back up as spray. Default 0.12 for a liquid, 0 for a powder."
+          },
+          "falls": {
+            "type": "boolean",
+            "description": "Solids: drops as a rigid piece, with every solid that falls touching it, once no fixed solid and no floor holds the piece up; it sinks through lighter liquids and floats on denser ones. How it comes down is set by the source's pieces."
+          },
+          "clings": {
+            "type": "boolean",
+            "description": "A solid that falls (moss): with pieces \"tumble\", held by any fixed solid it touches, under it too, and a piece of its own apart from other falling solids, as a plant holds on; without it a piece standing on a fixed solid rests there and topples off it. Default false."
+          },
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+              "description": "An opaque colour: #RGB or #RRGGBB."
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "description": "Opaque colours: a seeded one per cell (or by pattern, age, density or shimmer)."
+          },
+          "pattern": {
+            "enum": [
+              "speckle",
+              "blotch",
+              "grain"
+            ],
+            "description": "How a cell's colour is chosen where it is made: a seeded draw (speckle, default), soft blotches, or streaks along the rows (grain, for wood)."
+          },
+          "top": {
+            "type": "string",
+            "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+            "description": "Liquids: the colour of a cell with air or gas above it, a surface line."
+          },
+          "streak": {
+            "type": "string",
+            "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+            "description": "Powders and liquids: drawn in empty pixels above a cell falling two pixels a frame or faster, so rain reads as rain."
+          },
+          "haze": {
+            "type": "string",
+            "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+            "description": "Gases and fire not drawn by density: an empty pixel between two or more of its cells takes this colour."
+          },
+          "colorBy": {
+            "enum": [
+              "cell",
+              "age",
+              "density"
+            ],
+            "description": "cell (default): a seeded colour per cell; age: young to old, for a material with a life; density: thin to thick, a gas or flame drawn as a cloud by how its cells crowd (a lone gas cell is not drawn)."
+          },
+          "shimmer": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 600,
+            "description": "Frames for a cell's colour to cycle once through the colours (lava)."
+          },
+          "hot": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "Below this its own colours."
+              },
+              "to": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "At this the last glow colour."
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+                  "description": "An opaque colour: #RGB or #RRGGBB."
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Glow colours from cool to hot."
+              }
+            },
+            "required": [
+              "from",
+              "to",
+              "colors"
+            ],
+            "additionalProperties": false
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": -2000,
+            "maximum": 9000,
+            "description": "Degrees it is made at. Default the ambient."
+          },
+          "conduct": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How fast heat passes through it (an edge moves at the lower of its two cells). Default 0.2."
+          },
+          "cool": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How fast it drifts toward the ambient temperature on its own. Default 0."
+          },
+          "heat": {
+            "type": "number",
+            "minimum": -2000,
+            "maximum": 9000,
+            "description": "It holds at least this temperature (fire)."
+          },
+          "life": {
+            "type": "object",
+            "properties": {
+              "frames": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[fewest, most] frames it lives, drawn per cell."
+              },
+              "into": {
+                "type": "string",
+                "description": "What it becomes; default \"empty\"."
+              },
+              "chance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "The chance it becomes that rather than empty. Default 1."
+              }
+            },
+            "required": [
+              "frames"
+            ],
+            "additionalProperties": false
+          },
+          "above": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "Degrees past which it changes."
+              },
+              "into": {
+                "type": "string",
+                "description": "A material, or \"empty\"."
+              },
+              "chance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "A frame, once past the temperature. Default 1."
+              },
+              "latent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9000,
+                "description": "Degrees more it must take in (above) or give out (below) first, so a hot stone boils a few cells of a pool rather than all of it; the new material starts at the temperature. Default 0."
+              }
+            },
+            "required": [
+              "temperature",
+              "into"
+            ],
+            "additionalProperties": false
+          },
+          "below": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "Degrees past which it changes."
+              },
+              "into": {
+                "type": "string",
+                "description": "A material, or \"empty\"."
+              },
+              "chance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "A frame, once past the temperature. Default 1."
+              },
+              "latent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 9000,
+                "description": "Degrees more it must take in (above) or give out (below) first, so a hot stone boils a few cells of a pool rather than all of it; the new material starts at the temperature. Default 0."
+              }
+            },
+            "required": [
+              "temperature",
+              "into"
+            ],
+            "additionalProperties": false
+          },
+          "burn": {
+            "type": "object",
+            "properties": {
+              "temperature": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "It lights at this."
+              },
+              "frames": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 65535
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[fewest, most] frames it burns."
+              },
+              "heat": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 9000,
+                "description": "Holds at least this while it burns. Default 600."
+              },
+              "emit": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "material": {
+                      "type": "string",
+                      "pattern": "^[a-z][a-z0-9-]{0,23}$",
+                      "description": "A material: lower-case letters, digits and hyphens, starting with a letter (to clear cells, erase)."
+                    },
+                    "chance": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "A frame."
+                    }
+                  },
+                  "required": [
+                    "material",
+                    "chance"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 2,
+                "description": "Given off into a free neighbour, upward more often than sideways."
+              },
+              "into": {
+                "type": "string",
+                "description": "What it leaves; default \"empty\"."
+              },
+              "chance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "The chance it leaves that. Default 1."
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^#([a-fA-F0-9]{3}[fF]?|[a-fA-F0-9]{6}([fF]{2})?)$",
+                  "description": "An opaque colour: #RGB or #RRGGBB."
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "description": "Burning flicker; default the colours of the flame it gives off."
+              }
+            },
+            "required": [
+              "temperature",
+              "frames"
+            ],
+            "additionalProperties": false
+          },
+          "emit": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "material": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9-]{0,23}$",
+                  "description": "A material: lower-case letters, digits and hyphens, starting with a letter (to clear cells, erase)."
+                },
+                "chance": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "A frame."
+                }
+              },
+              "required": [
+                "material",
+                "chance"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 2,
+            "description": "Given off into a free neighbour, upward more often than sideways."
+          }
+        },
+        "required": [
+          "state",
+          "colors"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Materials by name; at most 89 different colours in all, the base's included (base sandbox uses 76): share colours between materials, or replace base materials you do not use with one colour each."
+    },
+    "reactions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "a": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,23}$",
+            "description": "A material: lower-case letters, digits and hyphens, starting with a letter (to clear cells, erase)."
+          },
+          "b": {
+            "type": "string",
+            "description": "A material, or \"empty\"."
+          },
+          "into": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[what a becomes, what b becomes]: a material, \"empty\", or null to keep it."
+          },
+          "chance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "A frame, when one picks the other as its neighbour. Default 1."
+          },
+          "heat": {
+            "type": "number",
+            "minimum": -2000,
+            "maximum": 9000,
+            "description": "Degrees added to both (negative cools)."
+          },
+          "ignite": {
+            "enum": [
+              "a",
+              "b"
+            ],
+            "description": "Lights that side (it must burn)."
+          },
+          "douse": {
+            "enum": [
+              "a",
+              "b"
+            ],
+            "description": "Puts that side out, cooling it to the temperature it is made at."
+          },
+          "burning": {
+            "enum": [
+              "a",
+              "b"
+            ],
+            "description": "Only while that side burns."
+          }
+        },
+        "required": [
+          "a",
+          "b"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 256,
+      "description": "A cell of a next to a cell of b; one reaction per pair."
+    },
+    "scene": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "material": {
+            "type": "string"
+          },
+          "rect": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 4,
+            "minItems": 4,
+            "description": "[x, y, width, height]."
+          },
+          "disc": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "description": "[x, y, radius]."
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "maxItems": 1024,
+            "description": "Rows of characters drawn with legend from at."
+          },
+          "at": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "legend": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Character → material."
+          },
+          "fill": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "The share of cells filled. Default 1."
+          },
+          "replace": {
+            "type": "boolean",
+            "description": "false keeps what earlier fills put there. Default true."
+          },
+          "temperature": {
+            "type": "number",
+            "minimum": -2000,
+            "maximum": 9000,
+            "description": "Degrees the cells start at."
+          },
+          "burning": {
+            "type": "boolean",
+            "description": "Starts alight (a material that burns)."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "maxItems": 512,
+      "description": "The starting grid, filled in order: exactly one of rect, disc or rows each."
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000,
+            "description": "The frame it happens on."
+          },
+          "frames": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 20000
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[first, last]: every frame between, or every `every`th."
+          },
+          "every": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20000,
+            "description": "Default 1."
+          },
+          "paint": {
+            "type": "object",
+            "properties": {
+              "material": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,23}$",
+                "description": "A material: lower-case letters, digits and hyphens, starting with a letter (to clear cells, erase)."
+              },
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "x2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "With y2: a stroke along a segment."
+              },
+              "y2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              },
+              "fill": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "The share of cells filled: below 1 is a spray. Default 1."
+              },
+              "replace": {
+                "type": "boolean",
+                "description": "Paint over what is there. Default false: only empty cells."
+              }
+            },
+            "required": [
+              "material",
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "erase": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "x2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "With y2: a stroke along a segment."
+              },
+              "y2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "wall": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "x2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "With y2: a stroke along a segment."
+              },
+              "y2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "heat": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "x2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "With y2: a stroke along a segment."
+              },
+              "y2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              },
+              "amount": {
+                "type": "number",
+                "minimum": -2000,
+                "maximum": 2000,
+                "description": "Degrees added to every cell in the stroke, air included; negative cools. Default 200."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "push": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "x2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "With y2: a stroke along a segment."
+              },
+              "y2": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              },
+              "vx": {
+                "type": "number",
+                "minimum": -8,
+                "maximum": 8,
+                "description": "Pixels a frame."
+              },
+              "vy": {
+                "type": "number",
+                "minimum": -8,
+                "maximum": 8
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          },
+          "burst": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096,
+                "description": "Canvas pixels; quarter pixels are kept."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -4096,
+                "maximum": 4096
+              },
+              "radius": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Default 3."
+              },
+              "strength": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8,
+                "description": "Pixels a frame at the middle. Default 3."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "maxItems": 512,
+      "description": "Scripted strokes, each exactly one of paint, erase, wall, heat, push or burst, at the start of a frame: the compiler and the live runner both play them."
+    },
+    "clips": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20000,
+            "description": "The frame it starts on. Default 0."
+          },
+          "frames": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 256,
+            "description": "Frames drawn. Default 60."
+          },
+          "every": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60,
+            "description": "Frames simulated between drawn frames. Default 2."
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 10,
+            "maximum": 10000,
+            "description": "Milliseconds a drawn frame shows. Default every × 1000 / 60."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "description": "One-shot animations sampled from the one run; default one clip named after the source. At most 256 frames and 4,194,304 pixels in all, and about 200 million cell steps, scripted inputs and tumbling pieces counted in."
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height"
+  ],
+  "additionalProperties": false,
+  "anyOf": [
+    {
+      "required": [
+        "base"
+      ]
+    },
+    {
+      "required": [
+        "materials"
+      ]
+    }
+  ]
+}

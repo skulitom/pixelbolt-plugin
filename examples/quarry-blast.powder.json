@@ -1,0 +1,21 @@
+{
+  "format": "pixelforge-powder",
+  "version": 1,
+  "name": "quarry-blast",
+  "base": "sandbox",
+  "width": 128,
+  "height": 80,
+  "seed": 11,
+  "scene": [
+    { "material": "stone", "rect": [0, 76, 128, 4] },
+    { "material": "stone", "rect": [100, 30, 28, 46] },
+    { "material": "stone", "rect": [92, 50, 8, 26] },
+    { "material": "sand", "rect": [40, 58, 52, 18] },
+    { "material": "ash", "rect": [56, 54, 20, 4], "fill": 0.8 },
+    { "material": "stone", "rect": [4, 66, 4, 10] },
+    { "material": "stone", "rect": [34, 66, 4, 10] },
+    { "material": "water", "rect": [8, 64, 26, 12] }
+  ],
+  "inputs": [{ "frame": 12, "burst": { "x": 66, "y": 66, "radius": 16, "strength": 5 } }],
+  "clips": { "quarry-blast": { "frames": 60, "every": 3 } }
+}

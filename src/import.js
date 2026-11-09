@@ -27,7 +27,7 @@ export function decodePNG(bytes) {
     if (type === 'IHDR') {
       if (header || length !== 13) fail('invalid IHDR');
       const width = data.readUInt32BE(0), height = data.readUInt32BE(4), depth = data[8], kind = COLOR_TYPES[data[9]];
-      if (!width || !height || width > 4096 || height > 4096 || width * height > 16777216) fail('PNG dimensions exceed 4096 per side or 16,777,216 pixels');
+      if (!width || !height || width > 4096 || height > 4096) fail('PNG dimensions exceed 4096 per side or 16,777,216 pixels');
       if (!kind || !kind[2].includes(depth) || data[10] || data[11] || data[12] > 1) fail('invalid IHDR: unknown colour type, bit depth, compression, filter or interlace method');
       if (depth === 16) fail(`16-bit ${kind[0]} PNG is unsupported: Pixelbolt keeps 8 bits per channel and does not round colours; export 8 bits per channel`);
       if (data[12]) fail('interlaced PNG is unsupported; save it without interlacing');

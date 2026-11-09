@@ -4,20 +4,29 @@ import path from 'node:path';
 import { inspectMotion } from '../src/motion.js';
 import { expandPoses } from '../src/authoring.js';
 import { compileWaves } from '../src/wave.js';
+import { compileCrystals } from '../src/crystal.js';
+import { compilePowder } from '../src/powder.js';
 import { compileBodies } from '../src/bodies.js';
 import { readExpect, checkDelivery } from '../src/check.js';
 import { embedBundleRecipe, sameFiles, outputSummary, withRates } from '../src/export.js';
 import { shareLink, readEmbeddedRecipe, recipeKind } from '../src/share.js';
-import { PRESET_FOLDER, listPresets, findPreset, loadPreset, compilePreset, presetNext } from '../src/presets.js';
-import { renderProject, animationGIF, createSequence, frameGrid, createSceneSequence, createBodiesSequence, figuresSummary, prepareScene, renderScene, sceneImage, createBundle, writeBundle, inspectProject, compareProjects, patchRecipe, encodePNG, compilePoses, compileAutotile, compileEffects, compileFluid, compileNormals, formatJSON, createSceneBundle, createOverlay, applyOverlay, importPNG, resolveReferences, restorePaletteReference, testMapScale } from '../src/index.js';
+import { PRESET_FOLDER, listPresets, briefListing, findPreset, loadPreset, compilePreset, presetNext } from '../src/presets.js';
+import { renderProject, animationGIF, createSequence, frameGrid, createSceneSequence, createBodiesSequence, figuresSummary, prepareScene, renderScene, sceneImage, createBundle, writeBundle, inspectProject, compareProjects, patchRecipe, encodePNG, compilePoses, draftViews, compileAutotile, compileEffects, compileFluid, compileNormals, formatJSON, createSceneBundle, createOverlay, applyOverlay, importPNG, resolveReferences, restorePaletteReference, testMapScale } from '../src/index.js';
+
+// A reader that stops early (`| head -1`) closes the pipe: stop quietly, as other command-line tools do. Commands print
+// their reply after writing their files, so only the rest of the reply is lost.
+process.stdout.on('error', error => {
+  if (error.code !== 'EPIPE') throw error;
+  process.exit(process.exitCode ?? 0);
+});
 
 const HELP = `Pixelbolt — text to pixels, without dependencies
 
   pixelbolt init [file.json]               Create an editable example
   pixelbolt help [topic] [section]         One reference, as MCP pixel_help gives it: quickstart, guide, workflow,
                                            schema, example, presets, preset <name>, poses, scenes, autotile, fx,
-                                           fluid, wave, bodies or normals. guide and workflow list their sections first; name
-                                           one to print only it: help workflow "Particle effects"
+                                           fluid, wave, crystal, powder, bodies or normals. guide and workflow list their
+                                           sections first; name one to print only it: help workflow "Particle effects"
   pixelbolt validate <file.json|-> [--fps 30]
                                            Validate and describe a project; --fps lists durations off that video frame grid
   pixelbolt inspect <file.json|-> [--out sheet.png] [--grid]
@@ -39,15 +48,19 @@ const HELP = `Pixelbolt — text to pixels, without dependencies
   pixelbolt compile <source.json> --out recipe.json [--metadata meta.json]
                                            Build a recipe from authored poses, an autotile template, particle effects,
                                            a wave source (looping interference and portals), a fluid source (smoke, fire,
-                                           explosions, magic and water) or a
+                                           explosions, magic and water), a crystal source (crystals, geodes and
+                                           snowflakes that grow and rest), a powder source (falling-sand sandboxes) or a
                                            normals source (a lighting normal pass derived from a colour recipe)
   pixelbolt compile <source.json> --expand [--out expanded.poses.json]
                                            Print editable poses with motion templates expanded
+  pixelbolt compile <source.json> --draft-views boot:30,330[,hand:45] [--preview drafts.png] [--out drafts.json]
+                                           Draft turned views of small grid parts to correct and paste into
+                                           parts.<name>.views; --preview draws flat, today's turn, draft and drawn
   pixelbolt compile --preset <name> --out recipe.json [--metadata meta.json]
                                            Compile a shipped preset (smoke-puff, campfire, fire-spells, hero...) as
                                            its examples/ file compiles; --expand for a poses preset
-  pixelbolt presets [name]                 List the presets (size, frames, loop, colours, what each is for), or print
-                                           one preset's source to edit
+  pixelbolt presets [name] [--full]        List the presets, a line each (size, frames, loop, colours, what each is
+                                           for; --full adds every animation and file), or print one preset's source
   pixelbolt autotile <template.json> --out recipe.json [--metadata masks.json] [--preview map.png]
                                            Build a 47-tile blob or 16-tile cardinal set from template rows or a
                                            terrain description; --preview draws every tile over a test map
@@ -76,11 +89,13 @@ input file's folder.
 Inspect: --frames a,b or --animation name picks cells (* and ? in a name match frames: --frames 'flash-*');
 --step n [--offset k] keeps every nth cell from position k (0 is the first); --region x,y,w,h crops;
 --grid adds palette-key rows; --scale 1-16 and --background color style the sheet.
---view color|silhouette|grayscale|onion|tile; --native adds a 1x PNG; --diagnostics adds advisory evidence.
+--view color|silhouette|grayscale|onion|tile|parts (each pixel coloured by the layer or pose part that drew it);
+--native adds a 1x PNG; --diagnostics adds advisory evidence.
 --guides '{"horizon":40,"vanish":[[64,40]],"iso":{"tile":[32,16]}}' (or a file) draws perspective guides over the
 enlarged sheet; scene --image takes the same.
---motion name --speed px/s reviews contacts, ground, pose spread and loop seam. Input may be a pose source,
-or a compiled recipe with --metadata meta.json. --ground row overrides the metadata's ground.
+--motion name --speed px/s reviews contacts, ground, pose spread, loop seam and gait, and draws the limb arcs.
+Input may be a pose source, or a compiled recipe with --metadata meta.json. --ground row overrides the
+metadata's ground.
 --max-cells 1-256 samples long sequences with explicit omission metadata; evenly spaced samples can alias with a
 repeating pattern (a strobe alternating A and B), so pick positions with --step and --offset.
 Patch accepts correction overlays as --changes; a changed base fails with a fingerprint conflict.
@@ -103,8 +118,8 @@ Checkout: node bin/pixelbolt.js <command>. Portable build folder: .\\pixelbolt (
 function parseArgs(args) {
   const positional = [], options = {};
   for (let i = 0; i < args.length; i++) {
-    if (['--force', '--grid', '--native', '--diagnostics', '--open', '--expand', '--embed-recipe', '--embedded', '--project', '--list-files'].includes(args[i])) options[args[i].slice(2)] = true;
-    else if (['--preset', '--out', '--dir', '--port', '--frames', '--animation', '--region', '--scale', '--background', '--changes', '--image', '--view', '--max-cells', '--metadata', '--selections', '--atlas', '--name', '--layers', '--reference', '--root', '--time-limit', '--fps', '--size', '--align', '--offset', '--loops', '--seconds', '--step', '--fit', '--prefix', '--motion', '--speed', '--ground', '--expect', '--guides', '--time', '--preview'].includes(args[i])) {
+    if (['--force', '--grid', '--native', '--diagnostics', '--open', '--expand', '--embed-recipe', '--embedded', '--project', '--list-files', '--full'].includes(args[i])) options[args[i].slice(2)] = true;
+    else if (['--preset', '--out', '--dir', '--port', '--frames', '--animation', '--region', '--scale', '--background', '--changes', '--image', '--view', '--max-cells', '--metadata', '--selections', '--atlas', '--name', '--layers', '--reference', '--root', '--time-limit', '--fps', '--size', '--align', '--offset', '--loops', '--seconds', '--step', '--fit', '--prefix', '--motion', '--speed', '--ground', '--expect', '--guides', '--time', '--preview', '--draft-views'].includes(args[i])) {
       const key = args[i].slice(2);
       if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`--${key} requires a value`);
       options[key] = args[++i];
@@ -113,6 +128,19 @@ function parseArgs(args) {
   }
   return { positional, options };
 }
+// --draft-views boot:30,330,hand:45: a name followed by a colon starts a part; the numbers after it are its angles.
+function readDraftViews(value) {
+  const request = {};
+  let part = null;
+  for (const token of value.split(',').map(item => item.trim())) {
+    const named = /^([A-Za-z][A-Za-z0-9_-]{0,63}):(.*)$/.exec(token), angle = named ? named[2] : token;
+    if (named) { part = named[1]; if (Object.hasOwn(request, part)) throw new Error(`--draft-views names ${part} twice`); request[part] = []; }
+    if (part === null || !/^\d{1,3}$/.test(angle)) throw new Error(`--draft-views expects part:angle,angle such as boot:30,330 or boot:30,hand:45; got ${JSON.stringify(token)}`);
+    request[part].push(Number(angle));
+  }
+  return request;
+}
+const DRAFT_NEXT = 'Drafts, not art: compare each with the flat drawing and correct its rows by eye, then paste the view into parts.<name>.views of your source. A view is drawn at angles within 22.5° of its key. Nothing was written to the source.';
 // --expect and --guides take inline JSON or a file holding it. Windows PowerShell 5.1 strips the double quotes from the
 // arguments it passes to a program, so '{"width":32}' arrives as {width:32}: with no quote left, quote the bare keys
 // back (no value either option takes is a string).
@@ -147,7 +175,7 @@ const removedBy = files => (files.removed ? { removed: files.removed } : {});
 const bundleFiles = (directory, files, options) => { const { files: listed, removed } = outputSummary(directory, files, options['list-files'] === true); return { directory, files: listed, ...(removed && { removed }) }; };
 // The documents whose shared-palette link carries over to the recipe they are or compile to (a normal source's recipe
 // and a scene's assets do not).
-const LINKED_SOURCES = ['poses', 'autotile', 'fx', 'fluid', 'wave', 'project'];
+const LINKED_SOURCES = ['poses', 'autotile', 'fx', 'fluid', 'wave', 'crystal', 'powder', 'project'];
 // Compiled output keeps a shared-palette link, rewritten relative to where the output is written.
 function linkPalette(recipe, input, outFile) {
   const link = input.resolution.palettes.find(entry => LINKED_SOURCES.includes(entry.where));
@@ -193,14 +221,15 @@ async function writeOutputs(targets, force, inputs = []) {
   return Object.fromEntries(entries.map(([label, target]) => [label, target]));
 }
 // Sidecar sources compile by their format; `autotile` remains a dedicated command for templates.
-const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
+const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
 const summary = (project, recipe) => ({ name: project.name, width: project.width, height: project.height, frames: project.frames.length, animations: Object.keys(project.animations), ...withRates(project, recipe), warnings: project.warnings, ...(project.clipping && { clipping: project.clipping }), ...(project.clippingOmitted && { clippingOmitted: project.clippingOmitted }) });
 const referenced = input => input.resolution.files.length ? { resolved: input.resolution.files } : {};
 const engineVersion = async () => JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
-// `presets [name]`, and `help presets` or `help preset <name>`: every preset, or one preset's source. A shell has no
-// time limit, so every preset is measured.
-async function presetsText(name) {
-  if (name === undefined) return JSON.stringify(await listPresets({ budget: Infinity }), null, 2);
+// `presets [name] [--full]`, and `help presets [--full]` or `help preset <name>`: every preset, a line each or in full,
+// or one preset's source. A shell has no time limit, so every preset is measured.
+async function presetsText(name, full = false) {
+  if (name === undefined) { const listing = await listPresets({ budget: Infinity }); return JSON.stringify(full ? listing : briefListing(listing), null, 2); }
+  if (full) throw new Error('--full goes with the listing (pixelbolt presets --full); pixelbolt presets <name> prints one preset\'s source');
   const entry = await findPreset(name, 'name'), { source, inlined } = await loadPreset(entry);
   return JSON.stringify({ name: entry.name, file: `examples/${entry.file}`, ...(inlined.length && { inlined }), next: presetNext(entry, true), source }, null, 2);
 }
@@ -216,8 +245,9 @@ async function helpTopic([topic, ...words]) {
   if (!TOPICS.includes(topic)) throw new Error(`Unknown help topic "${topic}"; topics: quickstart, ${TOPICS.join(', ')}`);
   if (topic === 'presets' || topic === 'preset') {
     if (topic === 'preset' && name === undefined) throw new Error('help preset needs a preset name: pixelbolt help preset smoke-puff (pixelbolt help presets lists them)');
-    if (topic === 'presets' && name !== undefined) throw new Error('help presets lists every preset; for one preset\'s source run pixelbolt help preset <name>');
-    return `${await presetsText(name)}\n`;
+    const full = topic === 'presets' && name === '--full';
+    if (topic === 'presets' && name !== undefined && !full) throw new Error('help presets lists every preset (--full adds every animation and file); for one preset\'s source run pixelbolt help preset <name>');
+    return `${await presetsText(full ? undefined : name, full)}\n`;
   }
   if (name !== undefined && !SECTIONED.has(topic)) throw new Error(`help ${topic} has no sections; only guide and workflow do`);
   return helpText(topic, name, 'cli');
@@ -232,8 +262,8 @@ try {
     if (positional.length > 1) throw new Error('Too many positional arguments');
     const allowed = { init: ['force'], validate: ['fps'], inspect: ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'out', 'force', 'view', 'native', 'diagnostics', 'max-cells', 'step', 'offset', 'layers', 'reference', 'guides'], patch: ['changes', 'out', 'image', 'force'], render: ['out', 'force', 'expect', 'animation', 'list-files'], gif: ['out', 'animation', 'scale', 'background', 'force'], 'gif-frames': ['out', 'fps', 'loops', 'background', 'prefix', 'force'], sequence: ['out', 'fps', 'animation', 'size', 'scale', 'fit', 'align', 'offset', 'background', 'loops', 'seconds', 'step', 'force'], preview: ['port', 'open'], mcp: ['out', 'root', 'time-limit'], schema: [], compile: ['out', 'metadata', 'preview', 'force'], autotile: ['out', 'metadata', 'preview', 'force'], scene: ['out', 'force', 'image', 'time', 'view', 'scale', 'guides', 'list-files'], overlay: ['changes', 'selections', 'out', 'force'], import: ['out', 'name', 'atlas', 'metadata', 'force'] };
     allowed.inspect.push('motion', 'speed', 'ground', 'metadata');
-    allowed.compile.push('expand', 'preset');
-    allowed.presets = [];
+    allowed.compile.push('expand', 'preset', 'draft-views');
+    allowed.presets = ['full'];
     allowed.share = [];
     allowed.skill = ['project', 'dir', 'force'];
     allowed.render.push('embed-recipe'); allowed.scene.push('embed-recipe'); allowed.import.push('embedded');
@@ -257,7 +287,7 @@ try {
       console.log(JSON.stringify({ ok: true, file }));
     } else if (command === 'schema') process.stdout.write(await readFile(new URL('../schema.json', import.meta.url), 'utf8'));
     else if (command === 'presets') {
-      console.log(await presetsText(positional[0]));
+      console.log(await presetsText(positional[0], options.full === true));
     } else if (command === 'skill') {
       if (positional[0] !== 'install') throw new Error('Usage: pixelbolt skill install [--project | --dir <skills folder>] [--force]');
       const { installSkill } = await import('../src/skill.js');
@@ -287,6 +317,18 @@ try {
       // A port you name is used or refused; the usual one gives way to any free port when something else has it.
       const server = await startStudio({ port, project, source, sharedPalette, fallback: options.port === undefined });
       if (options.open && !await openBrowser(`http://127.0.0.1:${server.address().port}/`)) console.log('No browser was opened. Copy the address above into your browser.');
+    } else if (command === 'compile' && options['draft-views'] !== undefined) {
+      // Drafts are printed (or saved with --out) for the author to correct and paste; the source is never touched.
+      for (const key of ['metadata', 'expand']) if (options[key] !== undefined) throw new Error(`--${key} cannot be combined with --draft-views`);
+      if (options.out && !/\.json$/i.test(options.out)) throw new Error('--out must name a new .json file for the drafts');
+      if (options.preview !== undefined && !/\.png$/i.test(options.preview)) throw new Error('--preview must name a new .png file');
+      // The sheet is drawn only for --preview; one too large to draw leaves the drafts to come back without it.
+      const input = await readResolved(positional[0]), { drafts, sheet, noSheet } = draftViews(input.document, readDraftViews(options['draft-views']), { sheet: options.preview !== undefined });
+      const reply = { ok: true, drafts, next: DRAFT_NEXT };
+      const written = await writeOutputs({ ...(options.out && { drafts: [options.out, formatJSON(reply)] }), ...(sheet && { preview: [options.preview, encodePNG(sheet.data, sheet.width, sheet.height)] }) }, options.force, inputsOf(input));
+      const unwritten = noSheet && { preview: `not written: ${noSheet}` };
+      if (options.out) console.log(JSON.stringify({ ok: true, ...written, ...unwritten, parts: Object.keys(drafts), next: DRAFT_NEXT, ...referenced(input) }, null, 2));
+      else process.stdout.write(formatJSON({ ...reply, ...written, ...unwritten, ...(options.preview === undefined && { hint: 'Pass --preview <new.png> to see each draft beside the flat drawing, the turn the compiler draws today and any drawn view.' }), ...referenced(input) }));
     } else if (command === 'compile' && options.expand) {
       if (options.metadata) throw new Error('--expand prints source annotations; omit --metadata');
       if (options.out && !/\.json$/i.test(options.out)) throw new Error('--out must name a .json file');
@@ -295,10 +337,12 @@ try {
       else process.stdout.write(formatJSON(expanded));
     } else if (command === 'share') {
       const input = await readResolved(positional[0]), version = await engineVersion();
-      // The hosted playground can play these ordinary grids even before its engine gains wave sources.
-      const document = input.document?.format === 'pixelforge-wave' ? compileWaves(input.document).recipe : input.document;
+      // The hosted playground has no compiler for wave, crystal, powder or bodies sources, so they are shared as the
+      // ordinary grids they compile to.
+      const compile = { 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies }[input.document?.format];
+      const document = compile ? compile(input.document).recipe : input.document;
       const link = await shareLink(document, version);
-      console.log(JSON.stringify({ ok: true, link, characters: link.length, version, kind: recipeKind(document), ...(document !== input.document && { compiledFrom: 'pixelforge-wave' }) }));
+      console.log(JSON.stringify({ ok: true, link, characters: link.length, version, kind: recipeKind(document), ...(compile && { compiledFrom: input.document.format }) }));
     } else if (command === 'import' && options.embedded) {
       if (!options.out || !/\.json$/i.test(options.out)) throw new Error('import requires --out <new.json>');
       if (!positional[0] || positional[0] === '-') throw new Error('import requires a PNG filename');
@@ -365,7 +409,7 @@ try {
       const input = await readResolved(positional[0]), compiled = input.document.format === 'pixelforge-poses' ? compilePoses(input.document) : input.document.format === 'pixelforge-wave' ? compileWaves(input.document) : null;
       if (input.document.format === 'pixelforge-wave' && options.motion) throw new Error('--motion reviews character poses; inspect a wave without --motion');
       if (compiled && options.metadata) throw new Error('A pose source supplies its own metadata; omit --metadata');
-      const recipe = compiled?.recipe ?? input.document, project = renderProject(recipe, layerOptions);
+      const recipe = compiled?.recipe ?? input.document, project = renderProject(recipe, { ...layerOptions, ...(options.view === 'parts' && { owners: true }) });
       const comparison = options.reference ? compareProjects(renderProject((await readResolved(options.reference)).document, layerOptions), project) : undefined;
       const { image: referenceImage, ...comparisonReport } = comparison ?? {};
       const view = options.motion ? inspectMotion(project, { animation: options.motion, metadata: compiled?.metadata ?? (options.metadata ? await readProject(options.metadata) : undefined),
@@ -403,7 +447,8 @@ try {
       const document = bodies ? input.document : Object.hasOwn(COMPILERS, input.document?.format ?? '') ? COMPILERS[input.document.format](input.document).recipe : input.document;
       const numeric = key => options[key] === undefined ? {} : { [key]: Number(options[key]) }, text = key => options[key] === undefined ? {} : { [key]: options[key] };
       const settings = { ...text('fps'), ...text('animation'), ...text('size'), ...numeric('scale'), ...text('fit'), ...text('align'), ...(options.offset !== undefined && { offset: options.offset.split(',').map(Number) }), ...text('background'), ...numeric('loops'), ...numeric('seconds'), ...numeric('step') };
-      const sequence = bodies ? createBodiesSequence(document, settings) : document?.format === 'pixelforge-scene' ? createSceneSequence(prepareScene(document), document.name, settings) : createSequence(renderProject(document), settings);
+      // A match is simulated, drawn and written a frame at a time, so its length isn't bounded by memory.
+      const sequence = bodies ? createBodiesSequence(document, settings, { stream: true }) : document?.format === 'pixelforge-scene' ? createSceneSequence(prepareScene(document), document.name, settings) : createSequence(renderProject(document), settings);
       const files = await writeBundle(sequence, options.out, { force: options.force, inputs: inputsOf(input) }), { timing, figures, ...info } = sequence.info;
       // A match's every-frame figures stay in sequence.json; the reply carries their summary, after where the files went.
       console.log(JSON.stringify({ ok: true, ...info, directory: path.resolve(options.out), files: files.length, ...removedBy(files), ...referenced(input), ...(figures && { figures: figuresSummary(figures) }) }, null, 2));

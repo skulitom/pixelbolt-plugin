@@ -11,6 +11,7 @@ import { prepareScene } from './scene.js';
 import { compilePoses } from './authoring.js';
 import { compileWaves } from './wave.js';
 import { EFFECT_PRESETS } from '../studio/effects-controls.js';
+import { POWDER_PRESETS } from '../studio/powder-controls.js';
 
 const routes = new Map([
   ['/', ['../studio/index.html', 'text/html; charset=utf-8']],
@@ -46,6 +47,13 @@ const routes = new Map([
   ['/effects-controls.js', ['../studio/effects-controls.js', 'text/javascript; charset=utf-8']],
   ['/fx.js', ['./fx.js', 'text/javascript; charset=utf-8']],
   ['/shapes.js', ['./shapes.js', 'text/javascript; charset=utf-8']],
+  ['/powder.html', ['../studio/powder.html', 'text/html; charset=utf-8']],
+  ['/powder.css', ['../studio/powder.css', 'text/css; charset=utf-8']],
+  ['/powder-lab.js', ['../studio/powder-lab.js', 'text/javascript; charset=utf-8']],
+  ['/powder-controls.js', ['../studio/powder-controls.js', 'text/javascript; charset=utf-8']],
+  ['/powder.js', ['./powder.js', 'text/javascript; charset=utf-8']],
+  // The powder lab runs these sources live in the browser.
+  ...POWDER_PRESETS.map(({ file }) => [`/examples/${file}.powder.json`, [`../examples/${file}.powder.json`, 'application/json']]),
   // The effects lab compiles these sources in the browser.
   ...EFFECT_PRESETS.map(({ file }) => [`/examples/${file}.fx.json`, [`../examples/${file}.fx.json`, 'application/json']]),
   ...['interference', 'portal'].map(name => [`/examples/${name}.wave.json`, [`../examples/${name}.wave.json`, 'application/json']]),

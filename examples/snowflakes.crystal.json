@@ -1,0 +1,49 @@
+{
+  "format": "pixelforge-crystal",
+  "version": 1,
+  "name": "snowflakes",
+  "width": 96,
+  "height": 52,
+  "palette": { "i": "#3b6ea8", "j": "#8cc4ec", "k": "#e2f4ff", "w": "#ffffff" },
+  "looks": { "ice": { "colors": ["i", "j", "k"], "glint": "w" } },
+  "effects": {
+    "snowflakes": {
+      "frames": 44,
+      "duration": 70,
+      "seed": 3,
+      "crystals": [
+        {
+          "habit": "snowflake",
+          "at": [48, 26],
+          "radius": 23,
+          "spacing": 5,
+          "branches": 0.7,
+          "twigs": 0.5,
+          "plate": 1,
+          "start": 0,
+          "grow": 34
+        },
+        {
+          "habit": "snowflake",
+          "at": [13, 15],
+          "radius": 11,
+          "spacing": 3,
+          "branches": 0.5,
+          "plate": 6,
+          "start": 6,
+          "grow": 26
+        },
+        {
+          "habit": "snowflake",
+          "at": [84, 37],
+          "radius": 12,
+          "spacing": 3,
+          "branches": 1,
+          "arms": "horizontal",
+          "start": 4,
+          "grow": 30
+        }
+      ]
+    }
+  }
+}

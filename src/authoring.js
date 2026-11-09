@@ -1,9 +1,9 @@
 // Optional authoring compilers. All output is ordinary, editable version-1 recipe data.
-import { PixelError, CANVAS_SIDE, parseColor, renderProject, describeStampRecipe, readRows } from './core.js';
+import { PixelError, CANVAS_SIDE, parseColor, renderProject, describeStampRecipe, readRows, pictureSheet } from './core.js';
 import { AUTOTILE_MODES, MODE_MASKS, MODE_BITS, tilePieces, templatePiece } from './autotile.js';
 import { terrainTemplate, mergeTerrain, normalTerrain, readTerrain, templateSeams, seamWarnings, testMapRecipe, layeredTestMapRecipe } from './terrain.js';
 import { slopeTiles, slopeCollision, slopeLegend, SLOPE_MAP } from './slopes.js';
-import { EASINGS, ease, rotateRows, rasterizeBone, rasterizeMass } from './craft.js';
+import { EASINGS, ease, rotateRows, draftTurn, rasterizeBone, rasterizeMass } from './craft.js';
 import { turn, angleDelta, solveReach } from './pose-geometry.js';
 import { expandMotions, validateRig, MOTION_TEMPLATES } from './motions.js';
 
@@ -22,6 +22,16 @@ const identifier = (value, path) => {
 };
 // Compiled output is plain JSON data (null-prototype maps are only used while compiling).
 const plain = value => JSON.parse(JSON.stringify(value));
+
+// An authored view of a grid part: its rows, its anchor and every point the part names, as the compiler draws it.
+const VIEW_KEY = /^(0|[1-9][0-9]{0,2})$/;
+function checkView(view, path, part, palette) {
+  fields(view, ['rows', 'anchor', 'points'], path);
+  readRows(view.rows, `${path}.rows`, palette);
+  point(view.anchor, `${path}.anchor`);
+  if (view.points !== undefined) fields(view.points, Object.keys(part.points ?? {}), `${path}.points`);
+  for (const key of Object.keys(part.points ?? {})) point(view.points?.[key], `${path}.points.${key}`);
+}
 
 function structuralPart(part, source, path) {
   const kind = part.bone !== undefined ? 'bone' : 'mass', shape = part[kind], p = `${path}.${kind}`;
@@ -104,9 +114,10 @@ const span = (low, high) => low === high ? `${low}` : `${low} to ${high}`;
 export function compilePoses(source, mode) {
   let written = null;
   if (source?.motions !== undefined) { const input = source; source = expandPoses(source); written = writtenPoses(input, source); }
-  fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
+  fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'innerLines', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
   if (source.format !== 'pixelforge-poses' || source.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
   if (source.light !== undefined && (!Number.isInteger(source.light) || source.light < 0 || source.light > 359)) fail('poses.light', 'expected whole degrees from 0 to 359');
+  if (source.innerLines !== undefined && !['shade', 'outline'].includes(source.innerLines)) fail('poses.innerLines', 'expected shade (the default) or outline');
   if (source.ramps !== undefined && (!Array.isArray(source.ramps) || source.ramps.length > 64)) fail('poses.ramps', 'expected at most 64 colour ramps');
   if (source.rig !== undefined) validateRig(source.rig, source.height);
   if (!source.parts || Array.isArray(source.parts) || typeof source.parts !== 'object' || Object.keys(source.parts).length > 256) fail('poses.parts', 'expected at most 256 part definitions');
@@ -132,12 +143,8 @@ export function compilePoses(source, mode) {
       if (structural) fail(vp, 'authored views belong to grid parts');
       if (!part.views || typeof part.views !== 'object' || Array.isArray(part.views) || !Object.keys(part.views).length || Object.keys(part.views).length > 16) fail(vp, 'expected 1–16 drawings keyed by whole degrees from 0 to 359');
       for (const [angle, view] of Object.entries(part.views)) {
-        if (!/^(0|[1-9][0-9]{0,2})$/.test(angle) || Number(angle) > 359) fail(`${vp}.${angle}`, 'expected whole degrees from 0 to 359');
-        fields(view, ['rows', 'anchor', 'points'], `${vp}.${angle}`);
-        readRows(view.rows, `${vp}.${angle}.rows`, source.palette ?? {});
-        point(view.anchor, `${vp}.${angle}.anchor`);
-        if (view.points !== undefined) fields(view.points, Object.keys(part.points ?? {}), `${vp}.${angle}.points`);
-        for (const key of Object.keys(part.points ?? {})) point(view.points?.[key], `${vp}.${angle}.points.${key}`);
+        if (!VIEW_KEY.test(angle) || Number(angle) > 359) fail(`${vp}.${angle}`, 'expected whole degrees from 0 to 359');
+        checkView(view, `${vp}.${angle}`, part, source.palette ?? {});
       }
     }
   }
@@ -146,10 +153,36 @@ export function compilePoses(source, mode) {
   if (source.rig !== undefined) metadata.rig = { ...source.rig };
   // generated: what a warning on a generated pose is about, so the text warnings can say it once per motion.
   const compiled = Object.create(null), shapes = new Map(), warnings = [], generated = new WeakMap();
+  // Bone and mass drawings with an outline: which of their pixels are outline, and the shade an outline takes where it
+  // falls inside the figure (one ramp step below the part's base colour), by symbol.
+  const lineShades = new Map();
+  // A pixel artist outlines a figure once, round its silhouette. Where a bone or mass crosses another part (an arm over
+  // the chest, the near leg over the far one), its outline is drawn in that shade instead, so the parts stay apart
+  // without black lines through the body. These are the frame's final pixels; innerLines: "outline" keeps them black.
+  const innerLinePixels = layers => {
+    if (source.innerLines === 'outline' || !lineShades.size) return [];
+    const width = source.width, height = source.height, owner = new Uint8Array(width * height), shade = new Array(width * height).fill(null);
+    for (const layer of layers) {
+      const stamp = layer.ops[0], rows = symbols[stamp.symbol], line = lineShades.get(stamp.symbol), w = rows[0].length;
+      for (let sy = 0; sy < rows.length; sy++) for (let sx = 0; sx < w; sx++) {
+        const key = rows[sy][sx];
+        if (key === '.' || key === ' ' || source.palette?.[key] === 'transparent') continue;
+        const x = stamp.x + (stamp.flipX ? w - 1 - sx : sx), y = stamp.y + sy;
+        if (x < 0 || y < 0 || x >= width || y >= height) continue;
+        owner[y * width + x] = 1; shade[y * width + x] = line?.outline[sy * w + sx] ? line.shade : null;
+      }
+    }
+    const pixels = [];
+    for (let y = 1; y < height - 1; y++) for (let x = 1; x < width - 1; x++) {
+      const at = y * width + x;
+      if (shade[at] !== null && owner[at - 1] && owner[at + 1] && owner[at - width] && owner[at + width]) pixels.push({ x, y, color: shade[at] });
+    }
+    return pixels;
+  };
   let rasterWork = 0;
   // The drawn shape of a part instance. Flips alone stay a stamp flag; a rotation (after any flip) is baked into a new
   // editable symbol named <part>-r<degrees> (-fr when flipped, -raw without cleanup) around the part's anchor pixel.
-  const shapeOf = (name, flipX, rotate, cleanup, where, squash = 1) => {
+  const shapeOf = (name, flipX, rotate, cleanup, where, squash) => {
     const definition = source.parts[name];
     const angle = ((rotate % 360) + 360) % 360;
     if (definition.bone || definition.mass) {
@@ -164,6 +197,8 @@ export function compilePoses(source, mode) {
         rasterWork += raster.work;
         if (rasterWork > RASTER_BUDGET) fail(where, `drawing bone and mass parts exceeds the 8,388,608-pixel budget; reuse angles and squash values, or use smaller masses`);
         symbols[symbol] = raster.rows;
+        const ramp = source.ramps[shape.ramp], line = shape.outline === 'selective' ? ramp[0] : shape.outline, inner = ramp[Math.max(0, shape.base - 1)];
+        if (line && inner !== line) lineShades.set(symbol, { outline: raster.outlineMask, shade: inner });
         shapes.set(key, { symbol, width: raster.width, height: raster.height, fill: raster.fill, outline: raster.outlineMask,
           flipX: false, anchor: raster.pivot, end: raster.end, point: p => p === 'end' ? raster.end : raster.map(p) });
       }
@@ -390,6 +425,7 @@ export function compilePoses(source, mode) {
             const joined = rows.map(row => row.join(''));
             if (symbol.length > 64 || Object.hasOwn(source.parts, symbol) || (symbols[symbol] && JSON.stringify(symbols[symbol]) !== JSON.stringify(joined))) fail(partsPath, `socket symbol ${symbol} collides or is too long; shorten or rename the part`);
             symbols[symbol] = joined; part.symbol = symbol;
+            if (lineShades.has(shape.symbol)) lineShades.set(symbol, lineShades.get(shape.symbol));
           }
         }
         return { name: instance.name, ops: [{ op: 'stamp', symbol, x: part.topLeft[0], y: part.topLeft[1], ...(shape.flipX && { flipX: true }) }] };
@@ -415,7 +451,8 @@ export function compilePoses(source, mode) {
     compiled[pose.name] = { origin, placed, layers, markers, contacts, duration, inputs, mirrorInputs };
     metadata.poses[pose.name] = { origin, ...(pose.mirror !== undefined && { mirror: pose.mirror }), ...(pose.relight !== undefined && { relight: pose.relight }), ...(tween && { tween }), parts: placed, markers, ...(contacts !== undefined && { contacts }) };
     // The pose origin becomes the frame anchor; marker positions become named frame points in the atlas.
-    return { name: pose.name, ...(duration !== undefined && { duration }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers };
+    const lines = mode === PROBE ? [] : innerLinePixels(layers);
+    return { name: pose.name, ...(duration !== undefined && { duration }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers, ...(lines.length && { pixels: lines }) };
   });
   if (mode === PROBE) return { metadata: { poses: metadata.poses } };
   // When every pose shares one origin, it is declared once as the recipe anchor.
@@ -425,7 +462,7 @@ export function compilePoses(source, mode) {
   if (source.rig?.rest !== undefined) {
     const rest = compiled[source.rig.rest];
     if (!rest) fail('poses.rig.rest', 'unknown rest pose');
-    for (const name of [source.rig.body, source.rig.head, ...(source.rig.legs ?? []).flat(), ...(source.rig.arms ?? []).flat(), ...(source.rig.tail ?? [])].filter(n => n !== undefined)) if (!Object.hasOwn(rest.placed, name)) fail('poses.rig', `unknown rest-pose instance ${name}`);
+    for (const name of [source.rig.body, source.rig.chest, source.rig.neck, source.rig.head, ...['legs', 'hind', 'fore', 'arms'].flatMap(role => (source.rig[role] ?? []).flat()), ...(source.rig.tail ?? [])].filter(n => n !== undefined)) if (!Object.hasOwn(rest.placed, name)) fail('poses.rig', `unknown rest-pose instance ${name}`);
     // Rig output keeps only used, distinct drawings. Lexical selection is independent of cache insertion order.
     const used = [...new Set(frames.flatMap(frame => frame.layers.map(layer => layer.ops[0].symbol)))].sort();
     const canonical = new Map(), aliases = new Map(), unique = {};
@@ -442,19 +479,28 @@ export function compilePoses(source, mode) {
     recipe.symbols = unique;
   }
   const project = describeStampRecipe(recipe);
+  // An expanded source cut down to fewer animations still carries the other motions' notes: those are skipped with a
+  // warning that names them, so cutting an expanded source needs no second edit.
+  const motionInfo = Object.create(null), dropped = [];
   if (source.motionInfo !== undefined) {
-    fields(source.motionInfo, Object.keys(project.animations), 'poses.motionInfo');
+    if (!source.motionInfo || typeof source.motionInfo !== 'object' || Array.isArray(source.motionInfo)) fail('poses.motionInfo', 'expected an object');
     for (const [name, info] of Object.entries(source.motionInfo)) {
+      if (!Object.hasOwn(project.animations, name)) { dropped.push(name); continue; }
       const path = `poses.motionInfo.${name}`; fields(info, ['template', 'speed', 'keyPoses'], path);
       if (!MOTION_TEMPLATES.includes(info.template)) fail(`${path}.template`, 'expected a motion template name');
       if (typeof info.speed !== 'number' || !Number.isFinite(info.speed) || Math.abs(info.speed) > 1024) fail(`${path}.speed`, 'expected pixels per second within ±1024');
       const names = new Set(project.animations[name].frames.map(index => project.frames[index].name));
-      if (!Array.isArray(info.keyPoses) || !info.keyPoses.length || info.keyPoses.length > 256 || new Set(info.keyPoses).size !== info.keyPoses.length || info.keyPoses.some(pose => !names.has(pose))) fail(`${path}.keyPoses`, 'expected unique key-pose names from this animation');
+      if (!Array.isArray(info.keyPoses) || !info.keyPoses.length || info.keyPoses.length > 256 || new Set(info.keyPoses).size !== info.keyPoses.length || info.keyPoses.some(pose => typeof pose !== 'string')) fail(`${path}.keyPoses`, 'expected unique key-pose names from this animation');
+      const missing = info.keyPoses.filter(pose => !names.has(pose));
+      if (missing.length) fail(`${path}.keyPoses`, `${nameList(missing.map(pose => `"${pose}"`))} ${missing.length === 1 ? 'is' : 'are'} not in animation ${name}; remove ${missing.length === 1 ? 'it' : 'them'} from keyPoses, or delete motionInfo.${name}`);
+      motionInfo[name] = info;
     }
   }
+  if (dropped.length === 1) warnings.push({ path: `poses.motionInfo.${dropped[0]}`, message: `There is no animation "${dropped[0]}", so this entry was skipped: delete it, or rename it to match a renamed animation.` });
+  else if (dropped.length) warnings.push({ path: 'poses.motionInfo', message: `There are no animations ${nameList(dropped.map(name => `"${name}"`), 6)}, so their entries were skipped: delete them, or rename them to match renamed animations.` });
   for (const [name, animation] of Object.entries(project.animations)) {
     let start = 0;
-    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, ...(source.motionInfo?.[name] && source.motionInfo[name]), entries: animation.frames.map((index, position) => {
+    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, ...(motionInfo[name] && motionInfo[name]), entries: animation.frames.map((index, position) => {
       const frame = project.frames[index], pose = metadata.poses[frame.name], entry = { position, frame: frame.name, start, duration: frame.duration, markers: pose.markers, ...(pose.contacts !== undefined && { contacts: pose.contacts }) };
       start += frame.duration; return entry;
     }) };
@@ -481,7 +527,9 @@ export function compilePoses(source, mode) {
   // a target out of reach without anyone asking for the metadata. Warnings on generated poses are said once per
   // motion and chain, naming the poses, instead of once per pose at a path the author never wrote. A leg that already
   // ends away from rig.ground in the rest pose misses in every motion for that one reason, so it is said once per leg.
-  const restEnd = part => rig?.legs?.some(chain => chain.at(-1) === part) ? rest?.placed[part]?.joints?.end : undefined;
+  // Where a leg ends (legs, or a four-legged rig's hind and fore legs) is said at its rig path.
+  const legAt = part => { for (const role of ['legs', 'hind', 'fore']) { const index = (rig?.[role] ?? []).findIndex(chain => chain.at(-1) === part); if (index >= 0) return `poses.rig.${role}[${index}]`; } };
+  const restEnd = part => legAt(part) ? rest?.placed[part]?.joints?.end : undefined;
   const offGround = part => { const end = restEnd(part); return end !== undefined && Math.abs(end[1] - rig.ground) > 1; };
   const text = [], groups = new Map();
   for (const warning of warnings) {
@@ -499,8 +547,8 @@ export function compilePoses(source, mode) {
       const errors = items.map(item => round(item.error)), by = `by ${span(Math.min(...errors), Math.max(...errors))} px`;
       const shape = items.every(item => item.straightened) ? 'straight' : items.some(item => item.straightened) ? 'straight or folded' : 'folded';
       if (offGround(part)) {
-        const motions = [...new Set(items.map(item => item.motion))], leg = rig.legs.findIndex(chain => chain.at(-1) === part);
-        return `poses.rig.legs[${leg}] (${part}): Motion templates aim the feet at rig.ground (row ${rig.ground}), but in the rest pose "${rig.rest}" this leg ends at row ${restEnd(part)[1]}, so its target is out of reach in ${items.length} generated pose${one ? '' : 's'} (${nameList(motions, 6)}) ${by} and the chain uses its closest ${shape} pose. Move the body or the pose origin until the leg ends near row ${rig.ground}, or set rig.ground to match.`;
+        const motions = [...new Set(items.map(item => item.motion))];
+        return `${legAt(part)} (${part}): Motion templates aim the feet at rig.ground (row ${rig.ground}), but in the rest pose "${rig.rest}" this leg ends at row ${restEnd(part)[1]}, so its target is out of reach in ${items.length} generated pose${one ? '' : 's'} (${nameList(motions, 6)}) ${by} and the chain uses its closest ${shape} pose. Move the body or the pose origin until the leg ends near row ${rig.ground}, or set rig.ground to match.`;
       }
       return `poses.motions.${motion} (${part}).reach: Target is out of reach in ${items.length} of ${new Set(source.animations[motion].frames).size} poses (${names}) ${by}; the chain uses its closest ${shape} pose.${restEnd(part) ? ` In the rest pose "${rig.rest}" this leg ends on rig.ground (row ${rig.ground}), so the motion asks for more than it reaches: lower its stride, lift or bob, or lengthen the leg.` : ''}`;
     }
@@ -556,6 +604,71 @@ function drawOverTemplate(rows, ops, { tile, palette, ramps, symbols, path, rows
   return out;
 }
 
+// Draft drawings of grid parts turned to the angles asked for (craft.js draftTurn), as the source an author pastes into
+// parts.<name>.views once each is corrected. Only the parts asked about are checked, so a draft can be had while the
+// rest of a source is unfinished; an unfinished authored view is named in its note and left off the sheet. Nothing is
+// compiled: the poses compiler draws authored views and never a draft.
+// `request` maps part names to whole degrees, { boot: [30, 330] }. Returns { drafts: { <part>: { views, notes } },
+// sheet }: each view's rows, anchor and points, a note on how it was drafted, and a picture sheet with one row per
+// draft beside the flat drawing, the part as the compiler turns it without a view, and the authored view it draws at
+// that angle, if any. A sheet too large to draw is null, with the reason as `noSheet`, and the drafts still come
+// back; `{ sheet: false }` leaves the sheet out.
+export const DRAFT_LIMITS = Object.freeze({ drafts: 32, side: 64 });
+export function draftViews(source, request, { sheet: drawSheet = true } = {}) {
+  if (source?.format !== 'pixelforge-poses') fail('poses', 'draft views come from a pixelforge-poses source');
+  if (!source.parts || typeof source.parts !== 'object' || Array.isArray(source.parts)) fail('poses.parts', 'expected part definitions');
+  if (!request || typeof request !== 'object' || Array.isArray(request) || !Object.keys(request).length) fail('draftViews', 'name grid parts and the angles to draft, such as {"boot": [30, 330]}');
+  const total = Object.values(request).reduce((sum, angles) => sum + (Array.isArray(angles) ? angles.length : 0), 0);
+  if (total > DRAFT_LIMITS.drafts) fail('draftViews', `at most ${DRAFT_LIMITS.drafts} drafts in one call; this asks for ${total}`);
+  const palette = source.palette ?? {}, drafts = {}, lines = [];
+  let drawn = false;
+  for (const [name, angles] of Object.entries(request)) {
+    const path = `draftViews.${name}`, part = Object.hasOwn(source.parts, name) ? source.parts[name] : undefined;
+    if (!part) fail(path, `no part named ${name}; the source defines ${nameList(Object.keys(source.parts), 8) || 'none'}`);
+    if (part.rows === undefined) fail(path, `${name} is a ${part.bone ? 'bone' : 'mass'} part, which the compiler draws afresh at every angle; drafts are for grid parts (rows)`);
+    readRows(part.rows, `poses.parts.${name}.rows`, palette);
+    if (part.rows.length > DRAFT_LIMITS.side || part.rows[0].length > DRAFT_LIMITS.side) fail(`poses.parts.${name}.rows`, `drafts are for small parts, at most ${DRAFT_LIMITS.side}×${DRAFT_LIMITS.side} pixels; this one is ${part.rows[0].length}×${part.rows.length}`);
+    const anchor = point(part.anchor ?? [0, 0], `poses.parts.${name}.anchor`);
+    if (part.points !== undefined && (!part.points || typeof part.points !== 'object' || Array.isArray(part.points))) fail(`poses.parts.${name}.points`, 'expected named attachment points');
+    const points = Object.fromEntries(Object.entries(part.points ?? {}).map(([key, value]) => [key, point(value, `poses.parts.${name}.points.${key}`)]));
+    if (!Array.isArray(angles) || !angles.length || angles.length > 16) fail(path, 'expected 1–16 angles: a part holds at most 16 views');
+    angles.forEach((angle, i) => { if (!Number.isInteger(angle) || angle < 0 || angle > 359) fail(`${path}[${i}]`, 'expected whole degrees from 0 to 359, clockwise'); });
+    if (new Set(angles).size !== angles.length) fail(path, 'each angle once');
+    const views = {}, notes = {}, authored = part.views && typeof part.views === 'object' && !Array.isArray(part.views) ? part.views : {};
+    const keys = Object.keys(authored).filter(key => VIEW_KEY.test(key) && Number(key) <= 359).map(Number);
+    for (const angle of angles) {
+      const draft = draftTurn(part.rows, angle, { anchor, points });
+      views[angle] = { rows: draft.rows, anchor: draft.anchor, ...(Object.keys(points).length && { points: draft.points }) };
+      // The view the compiler draws at this angle today: the nearest authored one within 22.5°, as shapeOf picks it,
+      // checked as the compiler checks it. One still unfinished is named in the note and left off the sheet.
+      const nearest = [...keys].sort((a, b) => Math.abs(angleDelta(angle, a)) - Math.abs(angleDelta(angle, b)) || a - b)[0];
+      const used = nearest !== undefined && Math.abs(angleDelta(angle, nearest)) <= 22.5 ? nearest : undefined;
+      let view = null, unfinished = null;
+      if (used !== undefined) {
+        try { checkView(authored[used], `poses.parts.${name}.views.${used}`, part, palette); view = authored[used]; } catch (error) { if (!(error instanceof PixelError)) throw error; unfinished = error.message; }
+      }
+      notes[angle] = [draft.how === 'shear' ? `columns slid along a ${draft.slope} slope` : draft.how === 'cover' ? 'turned silhouette, colours by ring' : draft.how === 'quarter' ? 'exact quarter turn' : 'unturned: under 5° from flat or a quarter turn',
+        draft.shortened && `${draft.shortened} repeated column${draft.shortened > 1 ? 's' : ''} dropped`, draft.closed && `${draft.closed} outline pixel${draft.closed > 1 ? 's' : ''} added`, draft.nubs && `${draft.nubs} lone outline pixel${draft.nubs > 1 ? 's' : ''} removed`,
+        view && `the compiler draws authored view ${used} here`, unfinished && `authored view ${used} would be drawn here but is unfinished (${unfinished}), so the sheet leaves it out`].filter(Boolean).join('; ');
+      if (!drawSheet) continue;
+      const turned = angle ? rotateRows(part.rows, angle, anchor, { cleanup: angle % 90 !== 0 }) : null;
+      const today = turned ? { rows: turned.rows, anchor: turned.pivot, points: Object.fromEntries(Object.keys(points).map(key => [key, turned.map(points[key])])) } : { rows: part.rows, anchor, points };
+      if (view) drawn = true;
+      lines.push({ label: `${name} ${angle}°`, cells: [{ rows: part.rows, anchor, points }, today, views[angle], view && { rows: view.rows, anchor: view.anchor, points: view.points }] });
+    }
+    drafts[name] = { views, notes };
+  }
+  if (!drawSheet) return { drafts };
+  // The drafts are the answer: a sheet that cannot be drawn (a far anchor or point widens every cell) is left out.
+  try {
+    return { drafts, sheet: pictureSheet({ palette, headings: ['flat', 'turned today', 'draft', ...(drawn ? ['drawn'] : [])], rows: drawn ? lines : lines.map(line => ({ ...line, cells: line.cells.slice(0, 3) })),
+      scale: Math.max(6, Math.min(10, Math.floor(96 / Math.max(...lines.flatMap(line => line.cells.filter(Boolean).map(cell => Math.max(cell.rows.length, cell.rows[0].length))))))) }) };
+  } catch (error) {
+    if (!(error instanceof PixelError)) throw error;
+    return { drafts, sheet: null, noSheet: error.message.replace(/^sheet: /, '') };
+  }
+}
+
 // Compiles an autotile set from a template two tiles wide and three tall:
 //   [ preview (unused) ][ inner corners ]
 //   [ 2x2 island whose quadrants give outer corners, edges and fill ]
@@ -563,8 +676,10 @@ function drawOverTemplate(rows, ops, { tile, palette, ramps, symbols, path, rows
 // nothing, once: Godot's painter puts it on a painted cell with no terrain point, which would otherwise lose its
 // terrain).
 // The template is given as rows, or drawn from a `terrain` description (src/terrain.js), with optional `ops` drawn over
-// it. Every output frame is one `autotile` operation naming its neighbour mask, so editing the template updates the
-// set. The result also carries a seam report (as warnings and in the metadata) and `preview`, a one-frame recipe that
+// it. A tile's frame is one `autotile` operation naming its neighbour mask (in a layered set, one for each terrain at
+// its corners), so editing a template updates the set; a slope's frame stamps a symbol cut from the template when the
+// set compiles.
+// The result also carries a seam report (as warnings and in the metadata) and `preview`, a one-frame recipe that
 // draws the set over a test map holding every tile.
 export function compileAutotile(source) {
   fields(source, ['format', 'version', 'name', 'tile', 'mode', 'palette', 'ramps', 'symbols', 'template', 'terrain', 'ops', 'collision', 'frame', 'variants', 'animation', 'slopes', 'layers', 'preview', 'sheet'], 'autotile');
@@ -654,8 +769,8 @@ export function compileAutotile(source) {
   renderProject(recipe);
   const report = templateSeams(templates, tile, mode, drawn), warnings = seamWarnings(report, tile);
   const count = kind => report.seams.reduce((sum, seam) => sum + seam.pixels.filter(p => (kind === 'corner' ? seam.corner : !seam.corner && (kind === 'shape') === p.shape)).length, 0);
-  // At 84 pixels a tile the test map is 1680 × 1176, inside the size of a still. It mixes the templates the frames draw,
-  // each as often as the variants that draw it.
+  // At 84 pixels a tile the test map is 1680 × 1176 (2016 × 1596 with slopes), inside the size of a still. It mixes
+  // the templates the frames draw, each as often as the variants that draw it.
   const share = new Map();
   for (const variant of variants) share.set(symbolOf(variant), (share.get(symbolOf(variant)) ?? 0) + (variant.weight ?? 1));
   const most = Math.max(...share.values()), weighted = variants.some(variant => (variant.weight ?? 1) !== 1);

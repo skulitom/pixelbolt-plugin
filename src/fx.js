@@ -897,7 +897,9 @@ function followed(layer, path, frames) {
   return { ...rest, points, ...(follow.pivot !== undefined && { pivot: recipePoints(follow, `${path}.follow`, 'pivot') }) };
 }
 
-export function compileEffects(source) {
+// With `stats`, the result also has `work`: the pixels its shape layers' painting visited (`painted`), every frame and
+// each loop's seam probe together, to hold the work instead of timing it.
+export function compileEffects(source, { stats = false } = {}) {
   fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'symbols', 'anchor', 'effects', 'sheet'], 'fx');
   if (source.format !== 'pixelforge-fx' || source.version !== 1) fail('fx', 'expected version-1 pixelforge-fx');
   if (source.palette !== undefined && !isObject(source.palette)) fail('fx.palette', 'expected a palette object');
@@ -925,7 +927,7 @@ export function compileEffects(source) {
   // Shape painting, and measuring auras' distance fields, share one work budget across every effect and frame
   // (shapes.js SHAPE_WORK).
   // touching: the canvas sides each animation may draw on (its effect's edges, turned with a turned copy).
-  const shapeWork = { spent: 0 }, pointed = new Set(), touching = new Map();
+  const shapeWork = { spent: 0 }, probed = { spent: 0 }, pointed = new Set(), touching = new Map();
   let totalFrames = 0;
   // A broken layer or emitter is noted and the rest of the source is still read, so one reply names every one (up to
   // ten), as for recipes. An effect with a noted error is not simulated; anything else still stops at once.
@@ -1040,25 +1042,31 @@ export function compileEffects(source) {
         return { ops: [...back, ...drawn.between, ...front], back, front };
       };
       const drawnAt = i => ({ output: run.output[i], behind: run.behind[i], back: { output: run.back.output[i], behind: run.back.behind[i] }, between: run.between[i], blobs: run.blobs[i] });
-      // A loop's bands go into its first frame holding what its last frame leaves them: the cycle is read once to settle
-      // that, then drawn. The reading has a budget of its own as large, so a loop that draws within the budget compiles
-      // whether or not its looks hold (charged to the drawing's, a held loop had half the room).
-      if (memory && loop) {
-        const reads = shapes.looks.map(() => []), traced = { spent: 0 };
+      // A loop's bands go into its first frame holding what its last frame leaves them: the cycle is painted once (on the
+      // drawing's budget, as any frames are), its readings taped, settled, and the frames drawn from the tape. (Painted
+      // again to draw, a held loop took twice as long, and needed a budget of its own for the reading.)
+      const tape = memory && loop ? Array.from({ length: count }, () => []) : null;
+      if (tape) {
+        const reads = shapes.looks.map(() => []);
+        let at = 0;
         memory.trace = (look, codes) => reads[look].push(codes);
-        for (let i = 0; i < count; i++) opsAt(i, drawnAt(i), traced);
+        memory.tape = (look, record) => { tape[at][look] = record; };
+        for (; at < count; at++) opsAt(at, drawnAt(at), shapeWork);
+        memory.tape = null;
         settleHolds(memory, reads, width * height);
       }
       const names = run.output.map((output, i) => {
         const points = Object.keys(run.cues[i]).length ? run.cues[i] : null;
         if (points) for (const [cue, at] of Object.entries(points)) cues.push({ name: cue, frame: i, at });
+        if (tape) { memory.replay = tape[i]; tape[i] = null; }
         const { ops, back, front } = opsAt(i, drawnAt(i), shapeWork);
+        if (tape) memory.replay = null;
         if (parts) for (const [side, sideOps] of [['back', back], ['front', front]]) partFrames[side].push({ name: `${parts[side]}-${i}`, duration: durations[i], ...(points && { points }), ...(sideOps.length && { ops: sideOps }) });
         frames.push({ name: `${name}-${i}`, duration: durations[i], ...(points && { points }), ...(ops.length && { ops }) });
         return `${name}-${i}`;
       });
       // The frame after a loop's last, for the seam review; it takes its own painting budget and joins no animation.
-      if (loop) nextFrames.push({ name: `${name}-next`, duration: 100, ...((ops => ops.length && { ops })(opsAt(count, run.next, { spent: 0 }).ops)) });
+      if (loop) { const own = { spent: 0 }; nextFrames.push({ name: `${name}-next`, duration: 100, ...((ops => ops.length && { ops })(opsAt(count, run.next, own).ops)) }); probed.spent += own.spent; }
       animations[name] = { frames: names, ...(!loop && { loop: false }) };
       metadata.effects[name] = { frames: count, loop, seed: effect.seed ?? 1, ...(view !== undefined && name !== base && { turn: { of: base, angle: view?.turn ?? 0, mirror: view?.mirror ?? false } }), ...(parts && { parts }), operations: run.operations, culled: run.culled, emitters: run.stats, ...(shapes?.layers.length ? { layers: shapes.layers.map(l => ({ kind: l.kind, look: l.look, frames: [l.t0, l.t1] })) } : {}), ...(cues.length && { cues }) };
       if (parts) for (const side of ['back', 'front']) {
@@ -1145,7 +1153,7 @@ export function compileEffects(source) {
     effect.seam = { pixels: seam, largestStep: largest, jump };
     if (jump) warnings.push(`fx.effects.${of}: ${name} jumps at its loop point: its first frame differs in ${jump} pixel${jump === 1 ? '' : 's'} from the frame that should follow its last, so end keys where they start, spin and sway by whole turns, close paths, and give flicker an even frame count`);
   }
-  return JSON.parse(JSON.stringify({ recipe, metadata, ...(warnings.length && { warnings }) }));
+  return JSON.parse(JSON.stringify({ recipe, metadata, ...(warnings.length && { warnings }), ...(stats && { work: { painted: shapeWork.spent + probed.spent } }) }));
 }
 
 // The canvas sides an effect is meant to touch: each once.

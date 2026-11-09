@@ -1,6 +1,6 @@
 import { renderProject, buildAtlas, scalePixels, PixelError, animationFps } from './core.js';
 import { encodePNG, encodeAPNG, crc32 } from './png.js';
-import { readFile, readdir, mkdir, writeFile, access, rm, stat, realpath } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile, access, rm, rmdir, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { embedRecipe, recipeKind } from './share.js';
 import { spriteFrames, tileSets } from './godot.js';
@@ -308,8 +308,9 @@ export async function sameFiles(targets, inputs) {
 // outside `owns.folders` that fails `owns.match` is ever listed, except an `owns.resources` file whose text shows the
 // earlier export wrote it (a tile set's .tsx after the recipe stops being one). Where `owns.listed` reads the files an export wrote
 // from its marker, only files the earlier marker lists are leftovers, and none that another export's marker in the
-// folder (`owns.peers`) lists: a sprite's frames are not another sprite's to remove. When the marker or a peer can't
-// be read, what it lists is unknown, so nothing goes.
+// folder (`owns.peers`) lists: a sprite's frames are not another sprite's to remove. `owns.folders` may be a function
+// of that listing, for a bundle whose folders are named by what it holds (a scene's assets/<n>/haze-<amount>/). When
+// the marker or a peer can't be read, what it lists is unknown, so nothing goes.
 async function leftovers(bundle, root) {
   const { owns } = bundle;
   if (!owns) return [];
@@ -320,7 +321,7 @@ async function leftovers(bundle, root) {
     earlier = await listing(owns.marker);
     if (!earlier?.length) return [];
     // The marker under another spelling, where the folder ignores case, is the earlier export's own, not a peer's.
-    for (const file of await readdir(root).catch(() => [])) if (owns.peers.test(file) && file !== owns.marker && !await oneFile(root, file, owns.marker)) peers.push(file);
+    for (const file of await readdir(root).catch(() => [])) if (owns.peers?.test(file) && file !== owns.marker && !await oneFile(root, file, owns.marker)) peers.push(file);
     const listings = await Promise.all(peers.map(listing));
     if (listings.includes(null)) return [];
     others = listings.flat();
@@ -334,7 +335,7 @@ async function leftovers(bundle, root) {
     const text = await stat(path.join(root, file)).then(info => (info.isFile() && info.size <= 16777216 ? readFile(path.join(root, file), 'utf8') : null), () => null);
     if (text !== null && await wrote(text)) found.push(file);
   }
-  for (const folder of owns.folders) {
+  for (const folder of typeof owns.folders === 'function' ? owns.folders(earlier ?? []) : owns.folders) {
     let entries;
     try { entries = (await readdir(path.join(root, folder), { withFileTypes: true })).filter(entry => entry.isFile()); } catch { continue; }
     // Where this folder ignores letter case, an earlier export's frames/Run.png is this export's frames/run.png, not a
@@ -406,12 +407,27 @@ export async function writeBundle(bundle, directory, { force = false, inputs = [
   const stale = force ? await leftovers(bundle, root) : [];
   if (force) for (const filename of await respelled(bundle, root)) await rm(path.join(root, filename), { force: true });
   await mkdir(root, { recursive: true });
-  for (const [filename, data] of bundle.files) {
-    const target = path.join(root, filename);
-    await mkdir(path.dirname(target), { recursive: true });
-    await writeFile(target, data, { flag: force ? 'w' : 'wx' });
+  // A file's bytes may be a function that makes them, called as the file is written, in order, so a long sequence is
+  // made a frame at a time. If one fails, the files this export has written so far are removed again (with force they
+  // replaced earlier files, so they stay), and nothing of a half-made export is left in a new folder.
+  const made = [];
+  try {
+    for (const [filename, data] of bundle.files) {
+      const target = path.join(root, filename);
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, typeof data === 'function' ? await data() : data, { flag: force ? 'w' : 'wx' });
+      made.push(target);
+    }
+  } catch (error) {
+    if (!force) for (const target of made) await rm(target, { force: true });
+    throw error;
   }
   for (const filename of stale) await rm(path.join(root, filename), { force: true });
+  // A folder that held only leftovers (an earlier scene's assets/2/haze-0.7/) goes with them, deepest first, and so do
+  // the folders above it that it leaves empty; rmdir removes only an empty folder, so one holding anything else stays.
+  const emptied = new Set();
+  for (const filename of stale) for (let folder = path.posix.dirname(filename); folder !== '.'; folder = path.posix.dirname(folder)) emptied.add(folder);
+  for (const folder of [...emptied].sort((a, b) => b.split('/').length - a.split('/').length)) await rmdir(path.join(root, folder)).catch(() => {});
   const written = [...bundle.files.keys()].map(filename => path.join(root, filename));
   return stale.length ? Object.assign(written, { removed: stale.map(filename => path.join(root, filename)) }) : written;
 }

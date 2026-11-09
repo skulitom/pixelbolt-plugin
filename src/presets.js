@@ -1,8 +1,9 @@
 // Node-side: the shipped examples an agent can start from instead of drawing an effect or a character from scratch.
 // They are read from examples/ whenever they are asked for, so the listing always matches the folder. A preset is a
-// top-level examples/*.fluid.json, *.fx.json, *.wave.json, *.bodies.json or *.poses.json source, or a plain recipe whose animations
-// all loop (a coin spin, a flickering ember) and that no source there compiles to. Titles and notes come from the
-// Fluid and Effects labs' lists where those have one; anything else is described from its own name and animations.
+// top-level examples/*.fluid.json, *.fx.json, *.wave.json, *.crystal.json, *.powder.json, *.bodies.json or *.poses.json source, or a
+// plain recipe whose animations all loop (a coin spin, a flickering ember) and that no source there compiles to. Titles
+// and notes come from the Fluid and Effects labs' lists where those have one; anything else is described from its own
+// name and animations.
 import { readdir, readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -15,14 +16,17 @@ import { compilePoses } from './authoring.js';
 import { compileEffects } from './fx.js';
 import { compileFluid } from './fluid.js';
 import { compileWaves } from './wave.js';
+import { compileCrystals } from './crystal.js';
+import { compilePowder } from './powder.js';
 import { compileBodies } from './bodies.js';
 import { EFFECT_PRESETS } from '../studio/effects-controls.js';
 import { FLUID_PRESETS } from '../studio/fluid-controls.js';
+import { POWDER_PRESETS } from '../studio/powder-controls.js';
 
 export const PRESET_FOLDER = fileURLToPath(new URL('../examples/', import.meta.url));
-const SOURCE = /^(.+)\.(fluid|fx|wave|bodies|poses)\.json$/;
-const COMPILERS = { 'pixelforge-fluid': compileFluid, 'pixelforge-fx': compileEffects, 'pixelforge-wave': compileWaves, 'pixelforge-bodies': compileBodies, 'pixelforge-poses': compilePoses };
-const TITLES = new Map([...FLUID_PRESETS.map(entry => [`fluid:${entry.file}`, entry]), ...EFFECT_PRESETS.map(entry => [`fx:${entry.file}`, entry])]);
+const SOURCE = /^(.+)\.(fluid|fx|wave|crystal|powder|bodies|poses)\.json$/;
+const COMPILERS = { 'pixelforge-fluid': compileFluid, 'pixelforge-fx': compileEffects, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-poses': compilePoses };
+const TITLES = new Map([...FLUID_PRESETS.map(entry => [`fluid:${entry.file}`, entry]), ...EFFECT_PRESETS.map(entry => [`fx:${entry.file}`, entry]), ...POWDER_PRESETS.map(entry => [`powder:${entry.file}`, entry])]);
 
 // How to use the listing, and the one way to get fewer frames: a source's own `frames` is its simulation or timeline
 // length, so lowering it cuts the effect off before it ends instead of sampling it.
@@ -94,20 +98,44 @@ const plays = animations => {
   return loops === animations.length ? 'loop' : loops ? 'loops and one-shots' : 'one-shot';
 };
 const listNames = names => names.length <= 6 ? names.join(', ') : `${names.slice(0, 6).join(', ')} and ${names.length - 6} more`;
+// A lab's title and note ("Campfire", "gas · loop"), without the loop or one-shot the listing already gives.
+const titleLine = ({ title, note }) => {
+  const kept = note.split('·').map(part => part.trim()).filter(part => part && !/^(loop|one-shot)$/i.test(part)).join(' · ');
+  return kept ? `${title}: ${kept.toLowerCase()}.` : `${title}.`;
+};
 function about(entry, source, animations) {
   const titled = TITLES.get(`${entry.kind}:${entry.base}`), names = animations.map(([name]) => name);
   if (entry.kind === 'fluid') {
     const liquid = Object.values(source.effects ?? {}).some(effect => effect?.kind === 'liquid');
     const kind = liquid ? 'A simulated liquid, not a character.' : 'A simulated gas.';
-    return titled ? `${titled.title}: ${titled.note.toLowerCase()}.${liquid ? ` ${kind}` : ''}` : kind;
+    return titled ? `${titleLine(titled)}${liquid ? ' A liquid, not a character.' : ''}` : kind;
   }
-  if (titled) return `${titled.title}: ${titled.note.toLowerCase()}.`;
+  if (titled && entry.kind !== 'powder') return titleLine(titled);
   if (entry.kind === 'poses') {
     const templates = [...new Set(Object.values(source.motions ?? {}).map(motion => motion?.template).filter(Boolean))];
-    return templates.length ? `A rig whose motion templates make ${listNames(templates)}.` : `Posed parts: ${listNames(names)}.`;
+    // A grid part attached to the last bone of a rig arm in the rest pose is held: a figure with a sword lists as one.
+    // A part named as a hand is the hand itself, not something in it.
+    const hands = new Set((Array.isArray(source.rig?.arms) ? source.rig.arms : []).filter(Array.isArray).map(chain => chain.at(-1)).filter(name => typeof name === 'string'));
+    const rest = Array.isArray(source.poses) ? source.poses.find(pose => pose?.name === source.rig?.rest) : undefined;
+    const held = (Array.isArray(rest?.parts) ? rest.parts : []).filter(part => hands.has(part?.attach?.part) && source.parts?.[part.part]?.rows
+      && !/hand/i.test(`${part.name} ${part.part}`)).map(part => part.name);
+    return templates.length ? `A ${source.rig?.fore ? 'four-legged ' : ''}rig whose motion templates make ${listNames(templates)}${held.length ? `, with ${listNames(held)} in hand` : ''}.` : `Posed parts: ${listNames(names)}.`;
   }
   if (entry.kind === 'fx') return `Particles and effect shapes: ${listNames(names)}.`;
   if (entry.kind === 'wave') return `A looping wave pattern: ${listNames(names)}.`;
+  if (entry.kind === 'crystal') {
+    // What grows: each habit counted with the crystals of its clusters.
+    const counts = new Map();
+    for (const effect of Object.values(source.effects ?? {})) for (const crystal of effect?.crystals ?? []) counts.set(crystal?.habit, (counts.get(crystal?.habit) ?? 0) + (Number.isInteger(crystal?.count) ? crystal.count : 1));
+    const parts = [...counts].filter(([habit]) => typeof habit === 'string').map(([habit, n]) => `${n} ${habit === 'octahedron' ? (n === 1 ? 'octahedron' : 'octahedra') : `${habit}${n === 1 ? '' : 's'}`}`);
+    return `Crystals that grow and come to rest: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'none'}.`;
+  }
+  if (entry.kind === 'powder') {
+    // What happens (the Powder lab's title and note), then what the sandbox holds, from its scene.
+    const named = [...new Set((source.scene ?? []).flatMap(fill => (fill?.legend ? Object.values(fill.legend) : [fill?.material])).filter(name => typeof name === 'string' && name !== 'empty'))];
+    const of = named.length ? ` of ${listNames(named)}` : '';
+    return titled ? `${titleLine({ ...titled, note: titled.note.replace(/:\s*/g, ', ') })} Falling sand${of}.` : `A falling-sand sandbox${of}.`;
+  }
   if (entry.kind === 'bodies') {
     // What falls, bounces and topples: each shape counted with its copies on a ring or a grid.
     const counts = new Map();
@@ -157,7 +185,7 @@ export function measurePreset(entry, source) {
 // change, released or not. It is hashed when this module loads, which is when the running code was read, and again for
 // each listing: if the files changed since (an update under a running server), this process runs the old code, so it
 // neither reads nor writes the cache. Null when the files can't be read, which turns the cache off.
-const ENGINE_FILES = [new URL('../package.json', import.meta.url), new URL('../studio/effects-controls.js', import.meta.url), new URL('../studio/fluid-controls.js', import.meta.url)];
+const ENGINE_FILES = [new URL('../package.json', import.meta.url), new URL('../studio/effects-controls.js', import.meta.url), new URL('../studio/fluid-controls.js', import.meta.url), new URL('../studio/powder-controls.js', import.meta.url)];
 async function engineFingerprint() {
   try {
     const src = fileURLToPath(new URL('./', import.meta.url)), files = (await readdir(src)).filter(name => name.endsWith('.js')).sort().map(name => path.join(src, name));
@@ -237,6 +265,20 @@ export async function listPresets({ budget = 20000, cache, concurrency = Math.ma
   // Only presets in this listing are kept, so the file never grows past the folder.
   if (store && (added || Object.keys(kept).length !== Object.keys(store.cached).length)) await store.save(kept).catch(() => {});
   return { guide: PRESET_GUIDE, presets, ...(unmeasured && { note: `${unmeasured} presets were listed without measuring them, to keep this call short; pixel_compile one by name to see it.` }) };
+}
+
+// What pixel_help topic presets and `pixelbolt presets` return unless asked for the full listing: one line per preset,
+// keyed by its name, with the facts an agent compares with a request and what the preset is for. The full listing
+// (the file and every animation's frames) was 21 KB for 72 presets, read on every effect request.
+export const BRIEF_NOTE = 'Each preset reads: kind, size, frames (in how many animations, when more than one), loop or one-shot, colours, then what it is for. pixel_help {"topic": "presets", "full": true} (pixelbolt presets --full) adds each preset\'s file and every animation\'s frames.';
+export function briefListing({ guide, presets, note }) {
+  const line = entry => {
+    if (entry.error !== undefined) return `${entry.kind}; fails to compile: ${entry.error}`;
+    if (entry.unmeasured) return `${entry.kind}; not measured, to keep this call short`;
+    const count = Object.keys(entry.animations).length + (entry.moreAnimations ?? 0);
+    return `${entry.kind}, ${entry.size}, ${entry.frames} frames${count > 1 ? ` in ${count} animations` : ''}, ${entry.plays}, ${entry.colors} colours. ${entry.for}`;
+  };
+  return { guide: `${guide} ${BRIEF_NOTE}`, presets: Object.fromEntries(presets.map(entry => [entry.name, line(entry)])), ...(note && { note }) };
 }
 
 async function parallelSummaries(entries, store, deadline, concurrency) {

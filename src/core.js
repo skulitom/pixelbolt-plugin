@@ -1,7 +1,7 @@
 // Browser-compatible, deterministic rasterizer. No I/O and no dependencies.
 import { patternProblem, ditherThreshold, traceLine, pixelId, colorOf, idsOf, cleanupIds, ruleVariants, rewriteIds } from './craft.js';
 import { AUTOTILE_MODES, tilePieces, templatePiece, expandTilemap, isoLayout } from './autotile.js';
-import { layoutText } from './font.js';
+import { layoutText, FONT_HEIGHT, FONT_CHARACTERS } from './font.js';
 export class PixelError extends Error {
   constructor(path, message) { super(`${path}: ${message}`); this.name = 'PixelError'; this.path = path; }
 }
@@ -250,8 +250,9 @@ export function inlineSharedPalette(document, { palette, ramps = null }) {
 }
 
 export function renderProject(spec, options = {}) {
-  object(options, 'render', ['layers', 'stats']);
+  object(options, 'render', ['layers', 'stats', 'owners']);
   if (options.stats !== undefined) boolean(options.stats, 'render.stats');
+  if (options.owners !== undefined) boolean(options.owners, 'render.owners');
   if (options.layers !== undefined) {
     renderProject(spec); // Validate the complete recipe before hiding any drawing.
     list(options.layers, 'render.layers', 64);
@@ -260,7 +261,7 @@ export function renderProject(spec, options = {}) {
     for (const ref of options.layers) if (typeof ref !== 'string' || !known.has(ref)) fail('render.layers', `unknown layer ${JSON.stringify(ref)}`);
     const isolated = structuredClone(spec); isolated.background = 'transparent';
     for (const frame of isolated.frames) { delete frame.ops; delete frame.pixels; frame.layers = (frame.layers ?? []).filter(layer => options.layers.includes(layer.name)); }
-    return renderProject(isolated, { ...(options.stats && { stats: true }) });
+    return renderProject(isolated, { ...(options.stats && { stats: true }), ...(options.owners && { owners: true }) });
   }
   const { projectName, width, height, palette, ramps, background, projectAnchor, symbols } = readProject(spec);
   // Rectangles, ellipses and dither or shade regions may overhang the canvas: up to 512 pixels, or twice the side of a
@@ -269,6 +270,10 @@ export function renderProject(spec, options = {}) {
   let activePalette = palette;
   const color = (value, path) => parseColor(value, activePalette, path);
   let work = 0, operationCount = 0, layerPixels = 0;
+  // With owners, each frame also records what drew each pixel last: a number into ownerNames (a layer's name, or
+  // layers[i] for an unnamed one, background, frame.ops or frame.pixels), 0 for nothing. Only the parts view asks.
+  const ownerNames = options.owners ? [] : null, ownerIds = new Map();
+  const ownerId = label => { if (!ownerIds.has(label)) { ownerNames.push(label); ownerIds.set(label, ownerNames.length); } return ownerIds.get(label); };
   const spend = amount => { work += amount; if (work > 67108864) fail('project', 'drawing work exceeds the 67-million-pixel budget; simplify repeated operations'); };
   // An invalid drawing operation is noted and skipped while the rest are checked, so one reply names every broken
   // operation (up to ten) instead of one per run. Operations don't depend on each other being valid, and a render that
@@ -736,11 +741,15 @@ export function renderProject(spec, options = {}) {
       points = Object.fromEntries(Object.entries(frame.points).map(([key, value]) => [name(key, `${p}.points.${key}`), point(value, `${p}.points.${key}`)]));
     }
     const tile = frame.tile === undefined ? null : tileFacts(frame.tile, `${p}.tile`, width, height);
-    let data = new Uint8ClampedArray(width * height * 4);
+    let data = new Uint8ClampedArray(width * height * 4), owner = ownerNames && new Uint16Array(width * height);
     if (frame.from !== undefined) {
       if (typeof frame.from !== 'string' || !rendered.has(frame.from)) fail(`${p}.from`, 'must name an earlier frame');
       data.set(rendered.get(frame.from).data);
-    } else if (background.some(Boolean)) for (let i = 0; i < data.length; i += 4) data.set(background, i);
+      owner?.set(rendered.get(frame.from).owners);
+    } else if (background.some(Boolean)) {
+      for (let i = 0; i < data.length; i += 4) data.set(background, i);
+      if (owner && background[3]) owner.fill(ownerId('background'));
+    }
     const translate = frame.translate ?? [0, 0];
     list(translate, `${p}.translate`, 2);
     if (translate.length !== 2) fail(`${p}.translate`, 'expected [x, y]');
@@ -748,16 +757,27 @@ export function renderProject(spec, options = {}) {
     const flipX = boolean(frame.flipX ?? false, `${p}.flipX`), flipY = boolean(frame.flipY ?? false, `${p}.flipY`);
     const wrap = boolean(frame.wrap ?? false, `${p}.wrap`);
     if (dx || dy || flipX || flipY) {
-      const transformed = new Uint8ClampedArray(data.length);
+      const transformed = new Uint8ClampedArray(data.length), moved = owner && new Uint16Array(owner.length);
       for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
         let px = (flipX ? width - 1 - x : x) + dx, py = (flipY ? height - 1 - y : y) + dy;
         if (wrap) { px = ((px % width) + width) % width; py = ((py % height) + height) % height; }
-        if (px >= 0 && py >= 0 && px < width && py < height) transformed.set(data.subarray((y * width + x) * 4, (y * width + x) * 4 + 4), (py * width + px) * 4);
-        else if (data[(y * width + x) * 4 + 3]) clip(`${p}.translate`);
+        if (px >= 0 && py >= 0 && px < width && py < height) {
+          transformed.set(data.subarray((y * width + x) * 4, (y * width + x) * 4 + 4), (py * width + px) * 4);
+          if (moved) moved[py * width + px] = owner[y * width + x];
+        } else if (data[(y * width + x) * 4 + 3]) clip(`${p}.translate`);
       }
-      data = transformed;
+      data = transformed; owner = moved;
     }
+    // Frame operations may draw anywhere and erase: what they changed is theirs.
+    const unchanged = owner && frame.ops?.length ? data.slice() : null;
     drawOps(data, frame.ops ?? [], `${p}.ops`);
+    if (unchanged) {
+      const id = ownerId('frame.ops');
+      for (let at = 0; at < owner.length; at++) {
+        const i = at * 4;
+        if (data[i] !== unchanged[i] || data[i + 1] !== unchanged[i + 1] || data[i + 2] !== unchanged[i + 2] || data[i + 3] !== unchanged[i + 3]) owner[at] = data[i + 3] ? id : 0;
+      }
+    }
     list(frame.layers ?? [], `${p}.layers`, 64);
     const framePalette = activePalette, layerPalettes = [];
     // Reuse a layer scratch buffer; clear only dirty rows after compositing. Empty layers allocate nothing extra.
@@ -799,6 +819,13 @@ export function renderProject(spec, options = {}) {
             } else blend(data, to, pixels.subarray(i, i + 4), opacity);
           } else clip(lp);
         }
+        if (owner) {
+          const id = ownerId(layer.name ?? `layers[${li}]`);
+          for (let y = bounds[1]; y <= bounds[3]; y++) for (let x = bounds[0]; x <= bounds[2]; x++) {
+            const tx = x + lx, ty = y + ly;
+            if (pixels[(y * width + x) * 4 + 3] && tx >= 0 && tx < width && ty >= 0 && ty < height) owner[ty * width + tx] = id;
+          }
+        }
       }
       for (let y = bounds[1]; y <= bounds[3]; y++) pixels.fill(0, (y * width + bounds[0]) * 4, (y * width + bounds[2] + 1) * 4);
     }
@@ -810,9 +837,12 @@ export function renderProject(spec, options = {}) {
       object(pixel, pp, ['x', 'y', 'color']);
       const x = integer(pixel.x, `${pp}.x`, 0, width - 1), y = integer(pixel.y, `${pp}.y`, 0, height - 1);
       data.set(color(pixel.color, `${pp}.color`), (y * width + x) * 4);
+      // A correction over drawn pixels recolours them (a pose's inner lines recolour its parts' outlines), so they
+      // stay their owner's; one on empty canvas is its own.
+      if (owner) owner[y * width + x] = !data[(y * width + x) * 4 + 3] ? 0 : owner[y * width + x] || ownerId('frame.pixels');
     }
     activePalette = palette;
-    const result = { name: frameName, duration, data, ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
+    const result = { name: frameName, duration, data, ...(owner && { owners: owner }), ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
     rendered.set(frameName, result);
     return result;
   }));
@@ -824,6 +854,7 @@ export function renderProject(spec, options = {}) {
   return {
     name: projectName, width, height, frames, animations, palette, ramps,
     ...(options.stats && { work: { pixels: work, layerPixels, operations: operationCount } }),
+    ...(ownerNames && { ownerNames }),
     sheet,
     warnings, ...(clipping.length && { clipping: clipping.slice(0, 16), ...(clipping.length > 16 && { clippingOmitted: clipping.length - 16 }) })
   };
@@ -852,7 +883,7 @@ export function describeStampRecipe(spec) {
   };
   const frames = spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
-    object(frame, p, ['name', 'duration', 'anchor', 'points', 'layers']);
+    object(frame, p, ['name', 'duration', 'anchor', 'points', 'layers', 'pixels']);
     const frameName = name(frame.name, `${p}.name`);
     if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
     frameNames.add(frameName.toLowerCase());
@@ -895,6 +926,18 @@ export function describeStampRecipe(spec) {
       spend((x1 - x0 + 1) * (y1 - y0 + 1));
       left = Math.min(left, x0); right = Math.max(right, x1);
       top = Math.min(top, y0); bottom = Math.max(bottom, y1);
+    }
+    // Final pixels in palette keys, such as a posed figure's inner lines.
+    list(frame.pixels ?? [], `${p}.pixels`, 65536);
+    spend((frame.pixels ?? []).length);
+    for (const [i, pixel] of (frame.pixels ?? []).entries()) {
+      const pp = `${p}.pixels[${i}]`;
+      object(pixel, pp, ['x', 'y', 'color']);
+      const x = integer(pixel.x, `${pp}.x`, 0, width - 1), y = integer(pixel.y, `${pp}.y`, 0, height - 1);
+      if (typeof pixel.color !== 'string' || !alpha.has(pixel.color)) fail(`${pp}.color`, 'expected a palette key');
+      if (!alpha.get(pixel.color)) continue;
+      left = Math.min(left, x); right = Math.max(right, x);
+      top = Math.min(top, y); bottom = Math.max(bottom, y);
     }
     boxes.push(right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true }
       : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 });
@@ -969,9 +1012,15 @@ function packBoxes(boxes, padding, scale) {
 export function scalePixels(data, width, height, scale = 1) {
   integer(scale, 'scale', 1, 16);
   const result = new Uint8ClampedArray(width * height * scale * scale * 4);
-  for (let y = 0; y < height * scale; y++) for (let x = 0; x < width * scale; x++) {
-    const from = (Math.floor(y / scale) * width + Math.floor(x / scale)) * 4;
-    result.set(data.subarray(from, from + 4), (y * width * scale + x) * 4);
+  if (scale === 1) { result.set(data.length > result.length ? data.subarray(0, result.length) : data); return result; }
+  // Each source row is widened once, byte by byte, and that row copied into the rest of its `scale` rows.
+  const rowBytes = width * scale * 4;
+  for (let y = 0; y < height; y++) {
+    const top = y * scale * rowBytes;
+    for (let x = 0, from = y * width * 4, to = top; x < width; x++, from += 4) for (let r = 0; r < scale; r++, to += 4) {
+      result[to] = data[from]; result[to + 1] = data[from + 1]; result[to + 2] = data[from + 2]; result[to + 3] = data[from + 3];
+    }
+    for (let r = 1; r < scale; r++) result.copyWithin(top + r * rowBytes, top, top + rowBytes);
   }
   return result;
 }
@@ -1170,14 +1219,18 @@ function drawSheet(sources, width, region, { scale, background = null, columns, 
   }
   if (layout.width > SHEET_SIDE + 2 * (layout.columns + 1) || layout.height > SHEET_SIDE + 2 * (layout.rows + 1)) fail(where, `the contact sheet would be ${layout.width}×${layout.height} pixels, above the 4096-pixel limit (4096 pixels of frames and 2-pixel gutters); select fewer frames, a smaller region or a lower scale`);
   const data = new Uint8ClampedArray(layout.width * layout.height * 4), square = Math.max(2, Math.ceil(8 / layout.scale)), composed = new Map();
-  for (let i = 0; i < data.length; i += 4) data.set(gutterColor, i);
+  // The gutter colour is written once and doubled with copyWithin; each cell pixel's source colour is read into one
+  // reused buffer for blend, rather than a new view of the frame a pixel.
+  data.set(gutterColor, 0);
+  for (let filled = 4; filled < data.length; filled *= 2) data.copyWithin(filled, 0, Math.min(filled, data.length - filled));
+  const color = new Uint8ClampedArray(4);
   sources.forEach((source, n) => {
     if (!composed.has(source)) {
       const pixels = new Uint8ClampedArray(region.w * region.h * 4);
       for (let y = 0; y < region.h; y++) for (let x = 0; x < region.w; x++) {
-        const at = (y * region.w + x) * 4, from = ((region.y + y) * width + region.x + x) * 4;
-        pixels.set(background ?? checkerColors[(Math.floor(x / square) + Math.floor(y / square)) % 2], at);
-        if (source) blend(pixels, at, source.subarray(from, from + 4));
+        const at = (y * region.w + x) * 4, from = ((region.y + y) * width + region.x + x) * 4, under = background ?? checkerColors[(Math.floor(x / square) + Math.floor(y / square)) % 2];
+        pixels[at] = under[0]; pixels[at + 1] = under[1]; pixels[at + 2] = under[2]; pixels[at + 3] = under[3];
+        if (source) { color[0] = source[from]; color[1] = source[from + 1]; color[2] = source[from + 2]; color[3] = source[from + 3]; blend(pixels, at, color); }
       }
       composed.set(source, scalePixels(pixels, region.w, region.h, layout.scale));
     }
@@ -1242,6 +1295,120 @@ export function wildcard(pattern, text) {
   return p === pattern.length;
 }
 
+// The parts view: every pixel in one flat colour for what drew it last, so a stray pixel or a tangle where limbs cross
+// names its part. Colours go to the parts in the shown cells in drawing order, well apart in hue and lightness;
+// past twenty they repeat darker. A background shows in one dark grey. The studio's Parts view colours the same way.
+const PART_COLORS = ['#e6194b', '#3cb44b', '#4363d8', '#ffe119', '#911eb4', '#f58231', '#42d4f4', '#f032e6', '#bfef45', '#9a6324',
+  '#469990', '#fabed4', '#000075', '#aaffc3', '#800000', '#dcbeff', '#808000', '#ffd8b1', '#ffffff', '#fffac8'].map(hex => parseColor(hex));
+export function partColors(project, indices, region = { x: 0, y: 0, w: project.width, h: project.height }) {
+  const { width, frames, ownerNames } = project, counts = new Map();
+  for (const index of indices) {
+    const owners = frames[index].owners;
+    for (let y = region.y; y < region.y + region.h; y++) for (let x = region.x; x < region.x + region.w; x++) {
+      const id = owners[y * width + x];
+      if (id) counts.set(id, (counts.get(id) ?? 0) + 1);
+    }
+  }
+  let next = 0;
+  const legend = [...counts.keys()].sort((a, b) => a - b).map(id => {
+    const name = ownerNames[id - 1], round = Math.floor(next / PART_COLORS.length), base = PART_COLORS[next % PART_COLORS.length];
+    const color = name === 'background' ? [43, 48, 54, 255] : base.map((v, c) => c === 3 ? 255 : v >> round);
+    if (name !== 'background') next++;
+    return { id, name, color, pixels: counts.get(id) };
+  });
+  const colors = new Map(legend.map(entry => [entry.id, entry.color])), pixels = new Map();
+  for (const index of indices) {
+    const owners = frames[index].owners, data = new Uint8ClampedArray(owners.length * 4);
+    for (let at = 0; at < owners.length; at++) if (owners[at]) data.set(colors.get(owners[at]) ?? [128, 128, 128, 255], at * 4);
+    pixels.set(index, data);
+  }
+  return { legend, pixels };
+}
+// A legend to the right of a contact sheet: a swatch and the part's name in the built-in font, in columns of at most
+// as many rows as the sheet is tall (twelve at least). The cells keep their places.
+function drawPartLegend(sheet, legend) {
+  const t = Math.max(1, Math.min(2, Math.floor(sheet.scale / 2))), pad = 3 * t, row = (FONT_HEIGHT + 4) * t, swatch = 7 * t;
+  const perColumn = Math.max(1, Math.min(legend.length, Math.max(12, Math.floor((sheet.height - 2 * pad) / row))));
+  const texts = legend.map(entry => layoutText(entry.name)), columns = [];
+  for (let i = 0; i < legend.length; i += perColumn) columns.push(Math.max(...texts.slice(i, i + perColumn).map(text => text.width)) * t + swatch + 3 * t + pad);
+  const width = sheet.width + pad + columns.reduce((sum, w) => sum + w, 0), height = Math.max(sheet.height, perColumn * row + 2 * pad);
+  if (width > SHEET_SIDE * 2 || height > SHEET_SIDE * 2) fail('inspect.view', `the parts legend would make the sheet ${width}×${height} pixels; select fewer frames or a smaller region`);
+  const data = new Uint8ClampedArray(width * height * 4);
+  data.set(gutterColor, 0);
+  for (let filled = 4; filled < data.length; filled *= 2) data.copyWithin(filled, 0, Math.min(filled, data.length - filled));
+  for (let y = 0; y < sheet.height; y++) data.set(sheet.data.subarray(y * sheet.width * 4, (y + 1) * sheet.width * 4), y * width * 4);
+  const fill = (x0, y0, w, h, color) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) data.set(color, (y * width + x) * 4); };
+  let left = sheet.width + pad;
+  legend.forEach((entry, i) => {
+    const column = Math.floor(i / perColumn), top = pad + (i % perColumn) * row;
+    if (i % perColumn === 0 && column) left += columns[column - 1];
+    fill(left, top, swatch, swatch, [0, 0, 0, 255]); fill(left + t, top + t, swatch - 2 * t, swatch - 2 * t, entry.color);
+    const text = texts[i], x0 = left + swatch + 3 * t, y0 = top + text.top * t;
+    text.rows.forEach((cells, y) => { for (let x = 0; x < cells.length; x++) if (cells[x] === '#') fill(x0 + x * t, y0 + y * t, t, t, [230, 234, 238, 255]); });
+  });
+  return { ...sheet, width, height, data };
+}
+
+// Small palette pictures side by side for review, such as a part drawn flat, turned today and drafted: a heading over
+// each column and a label left of each row, in the built-in font. Every picture is enlarged `scale` times (at most 16;
+// lowered so a cell stays within 256 pixels) and placed so its anchor pixel sits at one spot in its column and on one
+// row across its row, so pictures compare pixel for pixel. The anchor pixel is outlined in magenta and named points in
+// cyan, around the pixel, never over it; a cell is wide enough for every picture's pixels, anchor and points. A
+// character of a label or heading that the font cannot draw is drawn as ?.
+// `rows` are [{ label, cells: [{ rows, anchor, points } | null] }].
+const ANCHOR_MARK = [255, 64, 224, 255], POINT_MARK = [64, 224, 255, 255], LABEL_INK = [230, 234, 238, 255];
+const FONT_GLYPHS = new Set(FONT_CHARACTERS), inFont = text => [...String(text).normalize('NFC')].map(c => FONT_GLYPHS.has(c) ? c : '?').join('');
+export function pictureSheet({ palette = {}, headings = [], rows: lines, scale = 6 }) {
+  // How far a picture reaches from its anchor pixel, in its own pixels: left and up before it, right and down from it.
+  const reach = c => {
+    const marks = Object.values(c.points ?? {}), xs = [0, c.rows[0].length - 1, ...marks.map(p => p[0])], ys = [0, c.rows.length - 1, ...marks.map(p => p[1])];
+    return { left: c.anchor[0] - Math.min(...xs), right: Math.max(...xs) + 1 - c.anchor[0], up: c.anchor[1] - Math.min(...ys), down: Math.max(...ys) + 1 - c.anchor[1] };
+  };
+  const cells = lines.flatMap(line => line.cells.filter(Boolean).map(reach));
+  const left = Math.max(0, ...cells.map(c => c.left)), right = Math.max(1, ...cells.map(c => c.right));
+  const across = left + right + 2, heights = lines.map(line => {
+    const shown = line.cells.filter(Boolean).map(reach);
+    return { up: Math.max(0, ...shown.map(c => c.up)) + 1, down: Math.max(1, ...shown.map(c => c.down)) + 1 };
+  });
+  const s = Math.max(1, Math.min(integer(scale, 'scale', 1, 16), Math.floor(256 / Math.max(across, ...heights.map(h => h.up + h.down))))), t = Math.max(1, Math.min(2, Math.floor(s / 3)));
+  const pad = 3 * t, gap = Math.max(2, s), labels = lines.map(line => layoutText(inFont(line.label))), heads = headings.map(text => layoutText(inFont(text)));
+  const labelWidth = Math.max(0, ...labels.map(text => text.width)) * t + 2 * pad, headHeight = heads.length ? (FONT_HEIGHT + 2) * t + 2 * pad : gap;
+  const columns = Math.max(heads.length, ...lines.map(line => line.cells.length)), cellWidth = Math.max(across * s, Math.max(0, ...heads.map(text => text.width)) * t + 2 * pad);
+  const width = labelWidth + columns * (cellWidth + gap) + gap, rowHeights = heights.map(h => Math.max((h.up + h.down) * s, (FONT_HEIGHT + 2) * t + 2 * pad));
+  const height = headHeight + rowHeights.reduce((sum, h) => sum + h + gap, 0);
+  if (width > SHEET_SIDE || height > SHEET_SIDE) fail('sheet', `the picture sheet would be ${width}×${height} pixels, above the 4096-pixel limit; show fewer or smaller pictures (every cell spans each picture's pixels, anchor and points, so an anchor or point far from its pixels widens them all)`);
+  const data = new Uint8ClampedArray(width * height * 4);
+  data.set(gutterColor, 0);
+  for (let filled = 4; filled < data.length; filled *= 2) data.copyWithin(filled, 0, Math.min(filled, data.length - filled));
+  const fill = (x0, y0, w, h, color) => { for (let y = Math.max(0, y0); y < Math.min(height, y0 + h); y++) for (let x = Math.max(0, x0); x < Math.min(width, x0 + w); x++) data.set(color, (y * width + x) * 4); };
+  const write = (text, x0, y0) => text.rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === '#') fill(x0 + x * t, y0 + (y + text.top) * t, t, t, LABEL_INK); });
+  const ring = (x0, y0, color) => { fill(x0 - 1, y0 - 1, s + 2, 1, color); fill(x0 - 1, y0 + s, s + 2, 1, color); fill(x0 - 1, y0, 1, s, color); fill(x0 + s, y0, 1, s, color); };
+  const colours = new Map(), colourOf = key => { if (!colours.has(key)) colours.set(key, parseColor(key, palette, `palette.${key}`)); return colours.get(key); };
+  heads.forEach((text, c) => write(text, labelWidth + gap + c * (cellWidth + gap) + Math.floor((cellWidth - text.width * t) / 2), pad + 2 * t));
+  let top = headHeight;
+  lines.forEach((line, r) => {
+    const rowHeight = rowHeights[r], { up } = heights[r], text = labels[r];
+    write(text, pad, top + Math.floor((rowHeight - FONT_HEIGHT * t) / 2));
+    line.cells.forEach((cell, c) => {
+      const x0 = labelWidth + gap + c * (cellWidth + gap), square = Math.max(2, Math.ceil(8 / s)) * s;
+      if (!cell) return;
+      for (let y = 0; y < rowHeight; y++) for (let x = 0; x < cellWidth; x++) data.set(checkerColors[(Math.floor(x / square) + Math.floor(y / square)) % 2], ((top + y) * width + x0 + x) * 4);
+      // The anchor's top-left corner in the cell, in sheet pixels.
+      const ax = x0 + Math.floor((cellWidth - across * s) / 2) + (left + 1) * s, ay = top + Math.floor((rowHeight - (heights[r].up + heights[r].down) * s) / 2) + up * s;
+      cell.rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) {
+        const key = row[x];
+        if (key === '.' || key === ' ') continue;
+        const color = colourOf(key), px = ax + (x - cell.anchor[0]) * s, py = ay + (y - cell.anchor[1]) * s;
+        if (color[3]) for (let yy = py; yy < py + s; yy++) for (let xx = px; xx < px + s; xx++) if (xx >= 0 && yy >= 0 && xx < width && yy < height) blend(data, (yy * width + xx) * 4, color);
+      } });
+      for (const p of Object.values(cell.points ?? {})) ring(ax + (p[0] - cell.anchor[0]) * s, ay + (p[1] - cell.anchor[1]) * s, POINT_MARK);
+      ring(ax, ay, ANCHOR_MARK);
+    });
+    top += rowHeight + gap;
+  });
+  return { width, height, scale: s, data };
+}
+
 export function inspectProject(project, options = {}) {
   object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'guides']);
   const { width, height, frames } = project;
@@ -1267,7 +1434,8 @@ export function inspectProject(project, options = {}) {
     if (cells.length > 1024) fail('inspect.frames', `the names and patterns select ${cells.length} frames; at most 1,024 cells`);
   }
   const mode = options.view ?? 'color';
-  if (!['color', 'silhouette', 'grayscale', 'onion', 'tile'].includes(mode)) fail('inspect.view', 'expected color, silhouette, grayscale, onion or tile');
+  if (!['color', 'silhouette', 'grayscale', 'onion', 'tile', 'parts'].includes(mode)) fail('inspect.view', 'expected color, silhouette, grayscale, onion, tile or parts');
+  if (mode === 'parts' && !project.ownerNames) fail('inspect.view', 'parts needs the project rendered with { owners: true }, which records the layer that drew each pixel');
   if (mode === 'onion' && options.animation === undefined) fail('inspect.view', 'onion requires an animation so neighbors have an unambiguous playback position');
   if (mode === 'tile' && options.region !== undefined) fail('inspect.region', 'tile view repeats whole frames; omit region');
   if (mode === 'tile' && options.guides !== undefined) fail('inspect.guides', 'guides draw over one canvas; tile view repeats it, so omit guides');
@@ -1311,7 +1479,8 @@ export function inspectProject(project, options = {}) {
     view.tiles = unique.map(i => ({ frame: frames[i].name, ...tileReport(frames[i].data, width, height) }));
     if (native) view.nativeSheet = drawSheet(cells.map(i => repeats.get(i)), width * 3, tiled, { scale: 1, background });
   } else {
-    const sources = cells.map((i, n) => mode === 'onion' ? onionPixels(project, project.animations[options.animation], positions[n]) : reviewPixels(frames[i].data, mode));
+    const parts = mode === 'parts' ? partColors(project, unique, region) : null;
+    const sources = cells.map((i, n) => mode === 'onion' ? onionPixels(project, project.animations[options.animation], positions[n]) : parts ? parts.pixels.get(i) : reviewPixels(frames[i].data, mode));
     view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(sources, width, region, { scale, background }) };
     if (guides) {
       // Over every cell of the enlarged sheet; the native sheet keeps its exact pixels.
@@ -1321,6 +1490,11 @@ export function inspectProject(project, options = {}) {
     }
     if (mode !== 'color') view.mode = mode;
     if (native) view.nativeSheet = drawSheet(sources, width, region, { scale: 1, background });
+    if (parts) {
+      view.parts = parts.legend.map(({ name, color, pixels }) => ({ name, color: toHex(color), pixels }));
+      view.sheet = drawPartLegend(view.sheet, parts.legend);
+      if (native) view.nativeSheet = drawPartLegend(view.nativeSheet, parts.legend);
+    }
   }
   if (total !== cells.length) view.sampling = { total, shown: cells.length, omitted: total - cells.length, positions, ...((step > 1 || offset > 0) && { step, offset }), method: `${methods.join(', then ')}; durations are original, not playback timing` };
   if (diagnostics) view.diagnostics = analyzeProject(project);
@@ -1332,6 +1506,15 @@ export function inspectProject(project, options = {}) {
     }) };
   }
   if (!grid) return view;
+  if (mode === 'parts') {
+    // One character per part: its legend symbol, "." where nothing drew.
+    const symbols = new Map(view.parts.map((part, i) => [part.name, legendSymbols[i] ?? '?']));
+    const key = id => id ? symbols.get(project.ownerNames[id - 1]) : '.';
+    view.grids = unique.map(index => ({ frame: frames[index].name, rows: Array.from({ length: region.h }, (_, y) =>
+      Array.from({ length: region.w }, (_, x) => key(frames[index].owners[(region.y + y) * width + region.x + x])).join('')) }));
+    view.legend = Object.fromEntries(view.parts.map((part, i) => [legendSymbols[i] ?? '?', { part: part.name, color: part.color }]));
+    return view;
+  }
   const namer = colorNamer(project);
   view.grids = unique.map(index => ({ frame: frames[index].name, rows: readRegion(frames[index].data, width, region, namer) }));
   view.legend = namer.legend();
@@ -1442,10 +1625,30 @@ export function analyzeProject(project) {
   return { advisory: true, frames: stats, animations, findings };
 }
 
+// Two names make one number: the first times NAME_PAIRS (2 to the 26th, more names than a frame has pixels) plus the second.
+const NAME_PAIRS = 67108864;
+// A namer's names as small numbers: `index` names a pixel's colour (once per colour, through `char`, which also notes
+// the legend) and returns the name's place in `chars`, the same place for colours that share a name.
+function nameIndex(namer) {
+  const byColor = new Map(), byChar = new Map(), chars = [];
+  return { chars, index(data, at) {
+    const id = colorId(data, at);
+    let place = byColor.get(id);
+    if (place === undefined) {
+      const char = namer.char(data, at);
+      place = byChar.get(char);
+      if (place === undefined) { place = chars.length; chars.push(char); byChar.set(char, place); }
+      byColor.set(id, place);
+    }
+    return place;
+  } };
+}
+
 // Compares two rendered revisions, matching frames by name, so a patch can report every visible effect.
 export function compareProjects(before, after) {
   const { width, height } = after, resized = before.width !== width || before.height !== height;
   const namer = colorNamer(after, [before]), previous = new Map(before.frames.map(frame => [frame.name, frame]));
+  const names = nameIndex(namer);
   const kept = new Set(after.frames.map(frame => frame.name)), changed = [], unchanged = [], added = [], durations = [], shown = [];
   for (const frame of after.frames) {
     const old = previous.get(frame.name);
@@ -1453,17 +1656,19 @@ export function compareProjects(before, after) {
     if (old.duration !== frame.duration) durations.push({ frame: frame.name, from: old.duration, to: frame.duration });
     if (resized) { changed.push({ frame: frame.name }); continue; }
     let pixels = 0, left = width, top = height, right = -1, bottom = -1;
-    const changes = [], transitions = new Map();
-    for (let at = 0; at < frame.data.length; at += 4) {
-      if (colorId(frame.data, at) === colorId(old.data, at) || (!frame.data[at + 3] && !old.data[at + 3])) continue;
-      const x = at / 4 % width, y = Math.floor(at / 4 / width), from = namer.char(old.data, at), to = namer.char(frame.data, at);
-      pixels++; left = Math.min(left, x); top = Math.min(top, y); right = Math.max(right, x); bottom = Math.max(bottom, y);
-      if (changes.length < 16) changes.push({ x, y, from, to });
-      transitions.set(from + to, (transitions.get(from + to) ?? 0) + 1);
+    // Each colour is named once and each pair of names counted under a number, in the order pairs first appear, so a
+    // still whose every pixel changes costs a few array reads a pixel instead of two lookups, a string and a map entry.
+    const changes = [], transitions = new Map(), { data } = frame, was = old.data;
+    for (let y = 0, at = 0; y < height; y++) for (let x = 0; x < width; x++, at += 4) {
+      if ((data[at] === was[at] && data[at + 1] === was[at + 1] && data[at + 2] === was[at + 2] && data[at + 3] === was[at + 3]) || (!data[at + 3] && !was[at + 3])) continue;
+      const from = names.index(was, at), to = names.index(data, at), pair = from * NAME_PAIRS + to;
+      pixels++; if (x < left) left = x; if (y < top) top = y; if (x > right) right = x; bottom = y;
+      if (changes.length < 16) changes.push({ x, y, from: names.chars[from], to: names.chars[to] });
+      transitions.set(pair, (transitions.get(pair) ?? 0) + 1);
     }
     if (!pixels) { unchanged.push(frame.name); continue; }
     const box = { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
-    const detail = pixels <= 16 ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: pair[0], to: pair[1], pixels: count })) };
+    const detail = pixels <= 16 ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: names.chars[Math.floor(pair / NAME_PAIRS)], to: names.chars[pair % NAME_PAIRS], pixels: count })) };
     changed.push({ frame: frame.name, pixels, box, ...detail });
     shown.push({ frame: frame.name, status: 'changed', before: old.data, after: frame.data, box });
   }

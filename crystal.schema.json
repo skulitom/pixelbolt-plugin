@@ -1,0 +1,812 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Pixelbolt crystal growth",
+  "description": "Crystals that grow from seeds and come to rest, compiled to editable palette grids: faceted prisms (quartz, amethyst, ice spikes; pointed, flat or doubly terminated), cubes (pyrite, salt) and octahedra drawn as small solids lit by one light, each face one band of its look, alone or in seeded clusters along a line or round a geode; and six-armed snowflakes grown as dendrites, with side branches and twigs that stop a pixel short of each other and mirror symmetry. One-shot: each crystal starts as a bright seed pixel, grows, glints along its lit edge once grown, and the picture holds still. Deterministic.",
+  "type": "object",
+  "properties": {
+    "format": {
+      "const": "pixelforge-crystal"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+      "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+    },
+    "width": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "height": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 256
+    },
+    "palette": {
+      "type": "object",
+      "maxProperties": 257,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "description": "Shared palette file, resolved by the CLI and MCP relative to this recipe. Local entries add to or override it."
+        }
+      },
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+      }
+    },
+    "anchor": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": -4096,
+        "maximum": 4096
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+    },
+    "sheet": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "trim": {
+          "type": "boolean",
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "looks": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 8,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "colors": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "A one-character palette key."
+            },
+            "maxItems": 6,
+            "minItems": 2,
+            "description": "Palette keys from the darkest face to the brightest: a face takes the band of how squarely it faces the light. A snowflake draws its arms in the last, its branches in the one before and its plate in the one before that."
+          },
+          "outline": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "Drawn round each crystal, over whatever it stands in front of."
+          },
+          "glint": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1,
+            "description": "The seed pixel, the spark that runs up a grown crystal's lit edge and twinkles at its end, and a snowflake's newest pixels."
+          }
+        },
+        "required": [
+          "colors"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Named colour ramps for the crystals."
+    },
+    "effects": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case.",
+        "maxLength": 60
+      },
+      "description": "Names become one-shot animations; unique ignoring case. At most 256 frames and 4,194,304 pixels in total.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "frames": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 256
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 20,
+            "maximum": 1000,
+            "description": "Milliseconds per frame. Default 80."
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2147483647,
+            "description": "Seeds the clusters' draws and the snowflakes' branch spacing. Default 0."
+          },
+          "light": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Direction [x, y] toward the light in the picture; it also comes from in front. Default [-1, -1], the upper left."
+          },
+          "crystals": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "habit": {
+                      "const": "prism"
+                    },
+                    "look": {
+                      "type": "string",
+                      "description": "Which of the source's looks colours it; default the only one."
+                    },
+                    "at": {
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -1024,
+                            "maximum": 1024
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": -1024,
+                              "maximum": 1024
+                            },
+                            "maxItems": 2,
+                            "minItems": 2
+                          },
+                          "maxItems": 16,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "The seed [x, y] in pixels (a whole number is a pixel's centre), or a line through 2–16 points [[x, y], …] along which a cluster's seeds spread evenly by length."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Crystals in this entry: a cluster whose seeds spread along at, each drawing its own size, angle and timing from the ranges. Default 1. A cluster is drawn longest first, so short crystals stand in front."
+                    },
+                    "start": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frame the crystal starts growing, as one bright seed pixel. Default 0. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "grow": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frames from seed to full size. Default 60% of the effect's frames. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "How growth runs over grow: default inOut for faceted crystals (a slow start, then a slowing finish) and out for snowflakes."
+                    },
+                    "angle": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -360,
+                            "maximum": 360
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees clockwise from right the crystal grows toward: -90 (default) is straight up. Snapped to the nearest clean pixel slope (level, 3:1, 2:1, 1:1, and steeper), so long edges run as even stairs. With count, a range fans the cluster from the first end of at to the last. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "toward": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -1024,
+                        "maximum": 1024
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Instead of angle: each crystal points at this [x, y], such as a geode's centre."
+                    },
+                    "spread": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 90,
+                      "description": "Degrees of seeded wobble around angle or toward. Default 0."
+                    },
+                    "tilt": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -80,
+                          "maximum": 80
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -80,
+                            "maximum": 80
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees the growth axis leans toward the viewer, showing its end. Default 0 (cube 30). A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "turn": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -360,
+                            "maximum": 360
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees the crystal spins about its own axis: a prism shows a face (0, default) or an edge (30) to the viewer. Default 0 (cube and octahedron 45). A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "length": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels from seed to tip. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 64
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 64
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels across. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "tip": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 3
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 3
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Length of the pointed end as a share of the width: 0 is flat, default 1. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "double": {
+                      "type": "boolean",
+                      "description": "Pointed at both ends (a floating crystal); at is then one end."
+                    }
+                  },
+                  "required": [
+                    "habit",
+                    "at",
+                    "length",
+                    "width"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "habit": {
+                      "enum": [
+                        "cube",
+                        "octahedron"
+                      ]
+                    },
+                    "look": {
+                      "type": "string",
+                      "description": "Which of the source's looks colours it; default the only one."
+                    },
+                    "at": {
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -1024,
+                            "maximum": 1024
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": -1024,
+                              "maximum": 1024
+                            },
+                            "maxItems": 2,
+                            "minItems": 2
+                          },
+                          "maxItems": 16,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "The seed [x, y] in pixels (a whole number is a pixel's centre), or a line through 2–16 points [[x, y], …] along which a cluster's seeds spread evenly by length."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 64,
+                      "description": "Crystals in this entry: a cluster whose seeds spread along at, each drawing its own size, angle and timing from the ranges. Default 1. A cluster is drawn longest first, so short crystals stand in front."
+                    },
+                    "start": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frame the crystal starts growing, as one bright seed pixel. Default 0. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "grow": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frames from seed to full size. Default 60% of the effect's frames. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "How growth runs over grow: default inOut for faceted crystals (a slow start, then a slowing finish) and out for snowflakes."
+                    },
+                    "angle": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -360,
+                            "maximum": 360
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees clockwise from right the crystal grows toward: -90 (default) is straight up. Snapped to the nearest clean pixel slope (level, 3:1, 2:1, 1:1, and steeper), so long edges run as even stairs. With count, a range fans the cluster from the first end of at to the last. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "toward": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -1024,
+                        "maximum": 1024
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Instead of angle: each crystal points at this [x, y], such as a geode's centre."
+                    },
+                    "spread": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 90,
+                      "description": "Degrees of seeded wobble around angle or toward. Default 0."
+                    },
+                    "tilt": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -80,
+                          "maximum": 80
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -80,
+                            "maximum": 80
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees the growth axis leans toward the viewer, showing its end. Default 0 (cube 30). A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "turn": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": -360,
+                          "maximum": 360
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -360,
+                            "maximum": 360
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Degrees the crystal spins about its own axis: a prism shows a face (0, default) or an edge (30) to the viewer. Default 0 (cube and octahedron 45). A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "size": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 1,
+                          "maximum": 128
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 1,
+                            "maximum": 128
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Pixels along each edge (a cube) or from point to point (an octahedron). A number, or [low, high] drawn per crystal from the seed."
+                    }
+                  },
+                  "required": [
+                    "habit",
+                    "at",
+                    "size"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "habit": {
+                      "const": "snowflake"
+                    },
+                    "look": {
+                      "type": "string",
+                      "description": "Which of the source's looks colours it; default the only one."
+                    },
+                    "at": {
+                      "oneOf": [
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -1024,
+                            "maximum": 1024
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "number",
+                              "minimum": -1024,
+                              "maximum": 1024
+                            },
+                            "maxItems": 2,
+                            "minItems": 2
+                          },
+                          "maxItems": 16,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "The seed [x, y] in pixels (a whole number is a pixel's centre), or a line through 2–16 points [[x, y], …] along which a cluster's seeds spread evenly by length."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1,
+                      "description": "A snowflake grows alone: give each snowflake its own entry."
+                    },
+                    "start": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 255
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frame the crystal starts growing, as one bright seed pixel. Default 0. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "grow": {
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 256
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 256
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ],
+                      "description": "Frames from seed to full size. Default 60% of the effect's frames. A number, or [low, high] drawn per crystal from the seed."
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "How growth runs over grow: default inOut for faceted crystals (a slow start, then a slowing finish) and out for snowflakes."
+                    },
+                    "radius": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "maximum": 64,
+                      "description": "Pixels from the centre to an arm tip."
+                    },
+                    "spacing": {
+                      "type": "number",
+                      "minimum": 2,
+                      "maximum": 16,
+                      "description": "Pixels between side branches along an arm. Default 4."
+                    },
+                    "branches": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "How long side branches grow: at 1 their tips reach the hexagon through the arm tips; 0 leaves bare arms. Default 0.7."
+                    },
+                    "twigs": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "The same for twigs off the side branches. Default 0."
+                    },
+                    "plate": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 32,
+                      "description": "Radius of a hexagonal plate at the centre, ribbed by the arms. Default 0."
+                    },
+                    "arms": {
+                      "enum": [
+                        "vertical",
+                        "horizontal"
+                      ],
+                      "description": "Two arms point up and down (default), or left and right."
+                    }
+                  },
+                  "required": [
+                    "habit",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "description": "Drawn in order, later ones in front; at most 256 with the counts."
+          },
+          "underlay": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "description": "A full-canvas palette grid drawn under (underlay) or over (overlay) the crystals, such as the rock they grow from. Dot or space leaves the pixel transparent."
+          },
+          "overlay": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "description": "A full-canvas palette grid drawn under (underlay) or over (overlay) the crystals, such as the rock they grow from. Dot or space leaves the pixel transparent."
+          }
+        },
+        "required": [
+          "frames",
+          "crystals"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "width",
+    "height",
+    "palette",
+    "looks",
+    "effects"
+  ],
+  "additionalProperties": false
+}

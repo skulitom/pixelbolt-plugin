@@ -1,0 +1,53 @@
+{
+  "format": "pixelforge-powder",
+  "version": 1,
+  "name": "rain-on-fire",
+  "base": "sandbox",
+  "width": 112,
+  "height": 72,
+  "seed": 5,
+  "air": { "flow": { "wind": [0.35, 0] } },
+  "reactions": [
+    { "a": "water", "b": "fire", "into": ["steam", "steam"], "chance": 0.5 },
+    { "a": "water", "b": "wood", "burning": "b", "douse": "b", "into": ["steam", null], "chance": 0.3 }
+  ],
+  "scene": [
+    { "material": "stone", "rect": [0, 68, 112, 4] },
+    { "material": "sand", "rect": [0, 65, 112, 3] },
+    { "material": "stone", "rect": [30, 62, 3, 3] },
+    { "material": "stone", "rect": [55, 62, 3, 3] },
+    {
+      "rows": [
+        "....ww...ww....",
+        "..wwwwwwwwwww..",
+        "wwwwwwwwwwwwwww"
+      ],
+      "at": [36, 62],
+      "legend": { "w": "wood" }
+    },
+    { "material": "wood", "rect": [37, 64, 14, 1], "burning": true }
+  ],
+  "inputs": [
+    {
+      "frames": [180, 420],
+      "every": 2,
+      "paint": { "material": "water", "x": 2.5, "x2": 27.5, "y": 1.5, "y2": 1.5, "radius": 0.5, "fill": 0.05 }
+    },
+    {
+      "frames": [180, 420],
+      "every": 2,
+      "paint": { "material": "water", "x": 30.5, "x2": 55.5, "y": 1.5, "y2": 1.5, "radius": 0.5, "fill": 0.05 }
+    },
+    {
+      "frames": [180, 420],
+      "every": 2,
+      "paint": { "material": "water", "x": 58.5, "x2": 83.5, "y": 1.5, "y2": 1.5, "radius": 0.5, "fill": 0.05 }
+    },
+    {
+      "frames": [180, 420],
+      "every": 2,
+      "paint": { "material": "water", "x": 86.5, "x2": 111.5, "y": 1.5, "y2": 1.5, "radius": 0.5, "fill": 0.05 }
+    }
+  ],
+  "clips": { "rain-on-fire": { "frames": 120, "every": 4 } }
+}

@@ -982,6 +982,13 @@ dialog code{
 .motion-tools:not([hidden]) { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; font-size:12px; }
 .motion-tools input { width:72px; color:inherit; background:#18212b; border:1px solid #506473; border-radius:4px; padding:4px; }
 .motion-summary { padding:4px 16px 10px; font-size:12px; color:#c9d8ce; }
+/* The Parts view's key: a swatch and name per part, then the same view from the command line and over MCP. */
+.parts-legend:not([hidden]) { display:flex; flex-direction:column; gap:6px; padding:4px 16px 10px; font-size:12px; color:#c9d8ce; }
+.parts-legend ul { display:flex; flex-wrap:wrap; gap:4px 14px; margin:0; padding:0; list-style:none; }
+.parts-legend li { display:flex; align-items:center; gap:5px; }
+.parts-legend .swatch { width:10px; height:10px; border:1px solid #000; flex:none; }
+.parts-legend summary { cursor:pointer; color:#aaa5b6; }
+.parts-legend code { display:block; margin-top:4px; white-space:pre-wrap; overflow-wrap:anywhere; color:#aaa5b6; }
 /* One screen on a desktop-sized window: the page itself does not scroll. The projects, preview and source columns
    scroll on their own, the artboard takes the height the preview column leaves, and the recipe editor fills its
    column. Narrower or shorter windows keep the stacked layout, which scrolls as a page. */

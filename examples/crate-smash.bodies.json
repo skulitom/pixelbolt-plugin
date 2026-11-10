@@ -1,0 +1,143 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "crate-smash",
+  "width": 112,
+  "height": 64,
+  "palette": {
+    "o": "#3b2414",
+    "h": "#c98c4f",
+    "c": "#a5683a",
+    "d": "#6e4223",
+    "m": "#b4bdd8",
+    "k": "#14141c",
+    "s": "#4a5068",
+    "b": "#1b1d2a",
+    "g": "#2c3047",
+    "w": "#e8f4ff",
+    "p": "#6fc3e6",
+    "q": "#b9e6f7"
+  },
+  "symbols": {
+    "crate": [
+      "oooooooo",
+      "ohhhhhho",
+      "ohcccdho",
+      "ohccdcho",
+      "ohcdccho",
+      "ohdcccho",
+      "ohhhhhho",
+      "oooooooo"
+    ],
+    "pane": [
+      "wwwww",
+      "wpppw",
+      "wpqpw",
+      "wpppw",
+      "wppqw",
+      "wpppw",
+      "wqppw",
+      "wpppw",
+      "wpqpw",
+      "wpppw",
+      "wppqw",
+      "wpppw",
+      "wpppw",
+      "wqppw",
+      "wpppw",
+      "wwwww"
+    ],
+    "ground": [
+      "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"
+    ]
+  },
+  "effects": {
+    "crate-smash": {
+      "frames": 180,
+      "duration": 40,
+      "gravity": [0, 0.2],
+      "background": "b",
+      "walls": ["left", "right"],
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 56 }],
+      "bodies": [
+        {
+          "name": "ball",
+          "shape": "circle",
+          "radius": 4,
+          "at": [6, 46],
+          "velocity": [5.5, -0.8],
+          "density": 20,
+          "bounce": 0.2,
+          "friction": 0.6,
+          "fill": "m",
+          "outline": "k"
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [64, 52],
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate",
+          "breaks": { "at": 1.5, "pieces": 4 },
+          "name": "crate",
+          "grid": { "count": [4, 1], "step": [8, 0] }
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [68, 44],
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate",
+          "breaks": { "at": 1.5, "pieces": 4 },
+          "name": "crate-two",
+          "grid": { "count": [3, 1], "step": [8, 0] }
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [72, 36],
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate",
+          "breaks": { "at": 1.5, "pieces": 4 },
+          "name": "crate-three",
+          "grid": { "count": [2, 1], "step": [8, 0] }
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [76, 28],
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate",
+          "breaks": { "at": 1.5, "pieces": 4 },
+          "name": "crate-top"
+        },
+        {
+          "name": "pane",
+          "shape": "box",
+          "size": [5, 16],
+          "at": [36, 48],
+          "asleep": true,
+          "density": 1.2,
+          "friction": 0.4,
+          "bounce": 0.1,
+          "symbol": "pane",
+          "breaks": { "at": 1.2, "pieces": 8, "speed": 0.8 }
+        }
+      ]
+    }
+  }
+}

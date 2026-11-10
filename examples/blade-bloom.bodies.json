@@ -1,0 +1,87 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "blade-bloom",
+  "width": 80,
+  "height": 80,
+  "palette": {
+    "k": "#07070d",
+    "o": "#d8d8e4",
+    "R": "#a3122a",
+    "y": "#e3b341",
+    "G": "#8d93a8",
+    "W": "#ffffff",
+    "w": "#c9e4ff",
+    "s": "#5d6378",
+    "t": "#2c3040",
+    "a": "#ff3b5c",
+    "b": "#ff7a2f",
+    "c": "#ffc93c",
+    "d": "#b8f040",
+    "e": "#41e07a",
+    "f": "#2fe0c0",
+    "g": "#35c6ff",
+    "h": "#3d7bff",
+    "i": "#7a5cff",
+    "j": "#c04dff",
+    "l": "#ff4fd8",
+    "m": "#ff4f93"
+  },
+  "symbols": {
+    "katana": [
+      "........yy..........................",
+      "RRRRRRRRyyGGGGGGGGGGGGGGGGGGGGGGG...",
+      "RyRyRyRyyyWWWWWWWWWWWWWWWWWWWWWWWWWW",
+      "RRRRRRRRyywwwwwwwwwwwwwwwwwwwwwwwww.",
+      "........yy.........................."
+    ]
+  },
+  "effects": {
+    "blade-bloom": {
+      "frames": 240,
+      "duration": 40,
+      "gravity": [0, 0.3],
+      "background": "k",
+      "most": 900,
+      "bodies": [
+        {
+          "name": "ring",
+          "shape": "hoop",
+          "fixed": true,
+          "radius": 36,
+          "thickness": 2,
+          "sides": 48,
+          "at": [40, 40],
+          "fill": "o"
+        },
+        {
+          "name": "blade",
+          "shape": "box",
+          "size": [36, 3],
+          "pivot": [-16, 0],
+          "at": [40, 40],
+          "angle": 170,
+          "fixed": true,
+          "spin": 12,
+          "symbol": "katana",
+          "bounce": 0.2,
+          "friction": 0.1,
+          "smear": { "colors": ["W", "s", "t"], "frames": 2 }
+        },
+        {
+          "name": "seed",
+          "shape": "circle",
+          "radius": 1,
+          "at": [40, 10],
+          "velocity": [0.5, 0],
+          "bounce": 0.2,
+          "friction": 0.15,
+          "fill": ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "l", "m"],
+          "fillEvery": 30
+        }
+      ],
+      "strikes": [{ "by": "blade", "power": "split", "count": 3, "spread": 60, "rest": 6, "cut": 0.5 }],
+      "events": [{ "frame": 200, "body": "ring", "power": "vanish" }]
+    }
+  }
+}

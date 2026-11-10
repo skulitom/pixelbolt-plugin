@@ -12,10 +12,10 @@ import { fields } from './authoring.js';
 import { cosDeg, sinDeg } from './craft.js';
 import { layoutText, measureText, FONT_CAP_HEIGHT } from './font.js';
 
-export const POWERS = ['split', 'grow', 'speed', 'warp', 'magnet'];
-const LIMITS = { teams: 8, cells: 65536, pickups: 64, events: 64, hud: 16 };
+export const POWERS = ['split', 'grow', 'speed', 'warp', 'magnet', 'vanish', 'break'];
+const LIMITS = { teams: 8, cells: 65536, pickups: 64, events: 64, strikes: 16, hud: 16 };
 // Labels the news line shows for a power that names none.
-const LABELS = { split: 'SPLIT', grow: 'GROW', speed: 'SPEED', warp: 'WARP', magnet: 'MAGNET' };
+const LABELS = { split: 'SPLIT', grow: 'GROW', speed: 'SPEED', warp: 'WARP', magnet: 'MAGNET', vanish: 'GONE', break: 'BREAK' };
 
 const fail = (path, message) => { throw new PixelError(path, message); };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -90,15 +90,15 @@ export function readTerritory(value, path, { width, height, palette }) {
     bounce: number(value.bounce ?? 1, `${path}.bounce`, 0, 1), friction: number(value.friction ?? 0, `${path}.friction`, 0, 2) };
 }
 
-// One power's settings, shared by pickups and events.
+// One power's settings, shared by pickups, events and strikes.
 function readPower(entry, path, context) {
   if (!POWERS.includes(entry.power)) fail(`${path}.power`, `expected ${POWERS.join(', ')}`);
   const power = entry.power, only = (field, powers) => { if (entry[field] !== undefined && !powers.includes(power)) fail(`${path}.${field}`, `${field} goes with ${powers.join(' or ')}`); };
-  only('count', ['split']); only('spread', ['split']); only('scale', ['grow']); only('factor', ['speed']); only('to', ['warp', 'magnet']); only('strength', ['magnet']); only('frames', ['grow', 'speed', 'magnet']);
+  only('count', ['split', 'break']); only('spread', ['split']); only('scale', ['grow']); only('factor', ['speed']); only('to', ['warp', 'magnet']); only('strength', ['magnet']); only('frames', ['grow', 'speed', 'magnet']);
   if (power === 'warp' && entry.to === undefined) fail(`${path}.to`, 'a warp needs a place to move the body to');
   return {
     power, label: entry.label === undefined ? LABELS[power] : label(entry.label, `${path}.label`),
-    count: integer(entry.count ?? 3, `${path}.count`, 2, 8), spread: number(entry.spread ?? 30, `${path}.spread`, 1, 180),
+    count: integer(entry.count ?? (power === 'break' ? 6 : 3), `${path}.count`, 2, 8), spread: number(entry.spread ?? 30, `${path}.spread`, 1, 180),
     scale: number(entry.scale ?? 2, `${path}.scale`, 1.25, 4), factor: number(entry.factor ?? 1.5, `${path}.factor`, 0.25, 4),
     to: entry.to === undefined ? null : target(entry.to, `${path}.to`, context),
     strength: number(entry.strength ?? 0.05, `${path}.strength`, 0.001, 1), frames: integer(entry.frames ?? 120, `${path}.frames`, 1, 18000)
@@ -139,8 +139,27 @@ export function readEvents(list, path, context, bodies) {
     fields(entry, ['frame', 'body', ...POWER_FIELDS], p);
     const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === String(entry.body).toLowerCase());
     if (index < 0) fail(`${p}.body`, `no body is named ${JSON.stringify(entry.body)}`);
-    if (bodies[index].fixed) fail(`${p}.body`, `${entry.body} is fixed; powers go to bodies that move freely`);
+    if (bodies[index].fixed && entry.power !== 'vanish' && entry.power !== 'break') fail(`${p}.body`, `${entry.body} is fixed; powers go to bodies that move freely (a fixed body can only vanish or break)`);
+    if (bodies[index].shape === 'hoop' && entry.power === 'break') fail(`${p}.power`, `${entry.body} is a hoop, a container, and does not break; it can vanish`);
     return { frame: integer(entry.frame, `${p}.frame`, 1, 18000), body: index, path: p, ...readPower(entry, p, context) };
+  });
+}
+
+/** `strikes` → [{ by, rest, from, until, power… }]: a power given at the end of a frame to each body that the body named
+ * `by` pushed in it (a hit, or a push along), at most once every `rest` frames to a body. */
+export function readStrikes(list, path, context, bodies) {
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.length > LIMITS.strikes) fail(path, `expected a list of at most ${LIMITS.strikes} strikes`);
+  return list.map((entry, i) => {
+    const p = `${path}[${i}]`;
+    if (!isObject(entry)) fail(p, 'expected { by, power, … }');
+    fields(entry, ['by', 'rest', 'from', 'until', 'cut', ...POWER_FIELDS], p);
+    const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === String(entry.by).toLowerCase());
+    if (index < 0) fail(`${p}.by`, `no body is named ${JSON.stringify(entry.by)}; a strike names the body whose pushes give the power`);
+    const from = integer(entry.from ?? 0, `${p}.from`, 0, 18000), until = entry.until === undefined ? null : integer(entry.until, `${p}.until`, from + 1, 18001);
+    // A cut: the strike's body passes through what it strikes, which leaves behind it at this speed (pixels a frame).
+    const cut = entry.cut === undefined ? null : number(entry.cut, `${p}.cut`, 0.1, 8);
+    return { by: index, rest: integer(entry.rest ?? 10, `${p}.rest`, 1, 18000), from, until, cut, path: p, ...readPower(entry, p, context) };
   });
 }
 
@@ -176,8 +195,9 @@ export function readHud(list, path, context, teams) {
 
 // ---- The territory in a world -----------------------------------------------------------------------------------------
 /** The territory's state while a world runs. `trace(at, material, columns, rows, scale, x, y)` is bodies.js's face tracer;
- * `scale(b, k)` grows a body's shape by k; `copy(b)` adds a copy of a body to the world and returns it. */
-export function createTerritory(effect, { trace, scale, copy, width, height }) {
+ * `scale(b, k)` grows a body's shape by k; `copy(b)` adds a copy of a body to the world and returns it; `fastest` is the
+ * bodies' speed limit. */
+export function createTerritory(effect, { trace, scale, copy, shatter, width, height, fastest = Infinity }) {
   // Powers work without a territory too: then there are no cells and no teams.
   const t = effect.territory ?? { cell: 1, x: 0, y: 0, columns: 0, rows: 0, teams: [], start: new Int8Array(0), bounce: 1, friction: 0 };
   const { columns, rows, cell, teams } = t, owner = Int8Array.from(t.start);
@@ -187,10 +207,24 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
   const view = viewer => views[viewer] ??= trace((i, j) => i >= 0 && j >= 0 && i < columns && j < rows && owner[j * columns + i] >= 0 && owner[j * columns + i] !== viewer, () => surface, columns, rows, cell, t.x, t.y, width, height);
   const flips = [];
   const counts = () => { const out = new Array(teams.length).fill(0); for (const o of owner) if (o >= 0) out[o]++; return out; };
-  const stats = { counts: [], flips: 0, taken: [] };
+  const stats = { counts: [], flips: 0, taken: [], strikes: 0 };
   const pickups = effect.pickups.map(p => ({ ...p, taken: false })), events = effect.events, magnets = [], timers = [];
   let news = null;
   const viewerOf = b => (b.team >= 0 ? b.team : teams.length);
+  // Whether body b covers some of cell c (a circle exactly, another shape by its bounds), touching not counted.
+  const covers = (b, c) => {
+    const i = c % columns, j = (c - i) / columns, x0 = t.x + i * cell, y0 = t.y + j * cell, x1 = x0 + cell, y1 = y0 + cell;
+    if (b.shape === 'circle') {
+      const r = b.parts[0].r, cx = Math.max(x0, Math.min(x1, b.x)), cy = Math.max(y0, Math.min(y1, b.y));
+      return (cx - b.x) * (cx - b.x) + (cy - b.y) * (cy - b.y) < r * r;
+    }
+    const reach = b.extent * Math.SQRT2;
+    return b.x - reach < x1 && b.x + reach > x0 && b.y - reach < y1 && b.y + reach > y0;
+  };
+  // A cell a body of its own team is in: it holds it.
+  let all = [];
+  const held = (c, bodies = all) => bodies.some(b => !b.gone && b.team === owner[c] && covers(b, c));
+  const changed = () => { views = new Array(teams.length + 1).fill(null); generation++; };
 
   // A hit on a cell: the cell behind the face the contact touches, if it is another team's.
   const cellOf = (s, point) => {
@@ -201,17 +235,27 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
     return i >= 0 && j >= 0 && i < columns && j < rows ? j * columns + i : -1;
   };
   const take = (b, p, f, what) => {
-    stats.taken.push({ frame: f, [what.pickup !== undefined ? 'pickup' : 'event']: what.pickup ?? what.event, body: b.name ?? b.path, power: p.power });
-    news = { label: p.label, frame: f };
+    // A strike's power is counted rather than listed (a crowd that multiplies takes thousands), and makes no news.
+    const entry = what.strike === undefined ? { frame: f, [what.pickup !== undefined ? 'pickup' : 'event']: what.pickup ?? what.event, body: b.name ?? b.path, power: p.power } : null;
+    if (entry) { stats.taken.push(entry); news = { label: p.label, frame: f }; } else stats.strikes++;
+    // What a cut struck leaves behind the cutter at the cut's speed (woken: a sleeper given a speed would hang still).
+    const back = p.cut && what.back ? what.back : null;
+    if (back) { b.asleep = false; b.sleepy = 0; }
     if (p.power === 'split') {
-      // Copies turned evenly about the taker's heading; the taker takes the first heading.
-      const vx = b.vx, vy = b.vy, entry = stats.taken.at(-1);
-      entry.copies = 0;
+      // Copies turned evenly about the taker's heading (a cut's pieces about the way behind the cutter, each at the cut's
+      // speed on top of the taker's own); the taker takes the first heading. A body whose fill list steps with time
+      // (fillEvery) takes the list's fill for this frame, and so do its copies: every split a new generation, so a blade
+      // that cuts paints what it cuts even once the crowd is too full to grow.
+      const tint = b.fillEvery && b.fills && b.fills.length > 1 ? Math.floor(f / b.fillEvery) % b.fills.length : null;
+      const vx = b.vx, vy = b.vy;
+      if (entry) entry.copies = 0;
       for (let k = 0; k < p.count; k++) {
         const a = (k - (p.count - 1) / 2) * p.spread, c = cosDeg(a), s = sinDeg(a), target = k === 0 ? b : copy(b);
         if (!target) break;
-        if (target !== b) entry.copies++;
-        target.vx = vx * c - vy * s; target.vy = vx * s + vy * c;
+        if (target !== b) { if (entry) entry.copies++; if (b.rested) target.rested = { ...b.rested }; }
+        if (tint !== null) target.colour = tint;
+        if (back) { target.vx = vx + p.cut * (back[0] * c - back[1] * s); target.vy = vy + p.cut * (back[0] * s + back[1] * c); }
+        else { target.vx = vx * c - vy * s; target.vy = vx * s + vy * c; }
         // A copy of a grown or hurried body shrinks back or slows down when the taker does.
         if (target !== b) for (const timer of timers.filter(other => other.body === b)) timers.push({ ...timer, body: target, undo: timer.again(target) });
       }
@@ -223,15 +267,36 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
       if (b.speed) {
         const base = b.speed, running = timers.find(timer => timer.body === b && timer.power === 'speed');
         if (running) running.until = Math.max(running.until, f + p.frames);
-        else { b.speed = base * p.factor; const again = body => () => { body.speed = base; }; timers.push({ body: b, power: 'speed', until: f + p.frames, undo: again(b), again }); }
+        else { b.speed = Math.min(fastest, base * p.factor); const again = body => () => { body.speed = base; }; timers.push({ body: b, power: 'speed', until: f + p.frames, undo: again(b), again }); }
       } else { b.vx *= p.factor; b.vy *= p.factor; }
     } else if (p.power === 'warp') {
-      b.x = p.to[0]; b.y = p.to[1];
+      // A warped body leaves no trail across the board, and a team's body lands on its own ground: the cells it lands on
+      // become its team's, the pocket it carves from. (Landed in another team's ground, it flew through it, a wall on
+      // every side, until it met a face from behind and burst out.)
+      b.x = p.to[0]; b.y = p.to[1]; b.history.length = 0;
+      if (b.team >= 0) {
+        let painted = false;
+        for (let c = 0; c < owner.length; c++) if (owner[c] >= 0 && owner[c] !== b.team && covers(b, c) && !held(c)) { owner[c] = b.team; stats.flips++; painted = true; }
+        if (painted) changed();
+      }
     } else if (p.power === 'magnet') {
       const [x, y] = p.to ?? what.at;
       magnets.push({ x, y, strength: p.strength, until: f + p.frames, team: b.team, body: b });
+    } else if (p.power === 'vanish') {
+      // Gone, as a body that leaves the canvas is: what it held falls (bodies.js wakes what rested on it).
+      b.gone = true;
+    } else if (p.power === 'break') {
+      // Broken into `count` pieces about where the power found it (a pickup's place, else its centre); a cut's pieces leave
+      // behind the cutter. A body too small or a crowd too full to break is left whole.
+      if (back) { b.vx += p.cut * back[0]; b.vy += p.cut * back[1]; }
+      const made = shatter(b, what.pickup !== undefined ? what.at : [b.x, b.y], p.count);
+      if (entry) entry.pieces = made;
     }
+    if (back && p.power !== 'split' && p.power !== 'warp' && p.power !== 'vanish' && p.power !== 'break') { b.vx += p.cut * back[0]; b.vy += p.cut * back[1]; }
   };
+  // The bodies each strike's body pushed (or cut) this frame, by index, given its power at the frame's end; a cut body
+  // with the way behind the cutter where it was first touched.
+  const strikes = effect.strikes ?? [], struck = strikes.map(() => new Map());
 
   return {
     teams,
@@ -243,12 +308,29 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
       const c = cellOf(s, contact.points[0]);
       if (c >= 0 && owner[c] >= 0 && owner[c] !== contact.a.team) flips.push([c, contact.a.team]);
     },
-    // The end of a substep: the cells hit change hands (first hit first) and the walls are traced again.
-    settle: () => {
+    // The end of a substep: the cells hit change hands (first hit first) and the walls are traced again. A body of the
+    // cell's own team in it holds it: painted under it, that body would be inside another team's ground, walls all
+    // round it, and fly on through it unmet.
+    settle: bodies => {
       if (!flips.length) return;
-      for (const [c, team] of flips) if (owner[c] !== team) { owner[c] = team; stats.flips++; }
-      flips.length = 0; views = new Array(teams.length + 1).fill(null); generation++;
+      let any = false;
+      for (const [c, team] of flips) {
+        if (owner[c] === team || held(c, bodies)) continue;
+        owner[c] = team; stats.flips++; any = true;
+      }
+      flips.length = 0;
+      if (any) changed();
     },
+    // A contact between two bodies that pushed (a hit or a push along): what a strike's body pushed is struck by it. A
+    // cutter's touch (bodies.js doesn't solve it) gives `back`, the way behind the cutter there.
+    strike: (a, b, back = null) => {
+      strikes.forEach((r, k) => {
+        const other = a.index === r.by ? b : b.index === r.by ? a : null;
+        if (other && !other.fixed && !struck[k].has(other.index)) struck[k].set(other.index, back);
+      });
+    },
+    // The bodies cutting in frame f (a strike's with a cut, in its frames): they pass through the free bodies they meet.
+    cutters: f => strikes.filter(r => r.cut && f >= r.from && (r.until === null || f < r.until)).map(r => r.by),
     // A magnet's pull on a body this substep: toward its point, as steady as gravity, on bodies of other teams.
     pull: (b, dt) => {
       for (const m of magnets) {
@@ -258,8 +340,10 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
       }
     },
     // The end of frame f: powers run out, pickups are taken (first pickup first, by the first body to reach it), events
-    // fire, and the score is counted.
+    // fire, the bodies struck this frame take their strikes' powers (in body order, each at most once every `rest`
+    // frames), and the score is counted.
     frame: (f, bodies) => {
+      all = bodies;
       for (let k = timers.length - 1; k >= 0; k--) if (timers[k].until <= f) { timers[k].undo(); timers.splice(k, 1); }
       for (let k = magnets.length - 1; k >= 0; k--) if (magnets[k].until <= f) magnets.splice(k, 1);
       pickups.forEach((p, index) => {
@@ -274,6 +358,18 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
         if (taker) { p.taken = true; take(taker, p, f, { pickup: index, at: p.at }); }
       });
       events.forEach((e, index) => { const b = bodies[e.body]; if (e.frame === f && !b.gone) take(b, e, f, { event: index, at: [b.x, b.y] }); });
+      strikes.forEach((r, index) => {
+        if (!struck[index].size) return;
+        const hit = [...struck[index]].sort((p, q) => p[0] - q[0]);
+        struck[index].clear();
+        if (f < r.from || (r.until !== null && f >= r.until) || bodies[r.by].gone) return;
+        for (const [i, back] of hit) {
+          const b = bodies[i], rested = b.rested ??= {};
+          if (b.gone || (rested[index] !== undefined && f - rested[index] < r.rest)) continue;
+          rested[index] = f;
+          take(b, r, f, { strike: index, at: [b.x, b.y], back });
+        }
+      });
       stats.counts.push(counts());
     },
     // Cells and waiting pickups, into a grid of character codes (width × n by height × n: the world's pixels n fine
@@ -306,13 +402,15 @@ export function createTerritory(effect, { trace, scale, copy, width, height }) {
       for (const entry of hud) {
         if (f < entry.from || (entry.until !== null && f >= entry.until)) continue;
         if (entry.bar) {
-          const [x, y] = entry.bar.at.map(v => v * n), [w, h] = entry.bar.size.map(v => v * n);
-          if (entry.empty) ops.push({ op: 'rect', x, y, w, h, color: entry.empty });
+          // Shared out in the world's pixels, then drawn n times finer, so each team's part ends on a world pixel as the
+          // texts do.
+          const [x, y] = entry.bar.at, [w, h] = entry.bar.size;
+          if (entry.empty) ops.push({ op: 'rect', x: x * n, y: y * n, w: w * n, h: h * n, color: entry.empty });
           let sum = 0, left = x;
-          score.forEach((n, k) => {
-            sum += n;
+          score.forEach((cells, k) => {
+            sum += cells;
             const right = x + (total ? Math.floor(w * sum / total) : 0);
-            if (right > left) ops.push({ op: 'rect', x: left, y, w: right - left, h, color: teams[k].color });
+            if (right > left) ops.push({ op: 'rect', x: left * n, y: y * n, w: (right - left) * n, h: h * n, color: teams[k].color });
             left = right;
           });
           continue;

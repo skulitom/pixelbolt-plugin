@@ -1461,7 +1461,18 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid."
+                  "description": "Centre [x, y] in canvas pixels; [10.5, 10.5] is the middle of pixel (10, 10). The centre of a ring or the first copy of a grid. With pivot, where the pivot is."
+                },
+                "pivot": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -128,
+                    "maximum": 128
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Fixed body: the point it turns about, [x, y] from its centre before it turns (a blade about its hilt: [-length / 2, 0]); at places it. Default its centre."
                 },
                 "angle": {
                   "type": "number",
@@ -1560,6 +1571,12 @@
                   ],
                   "description": "Palette key, or a list the body steps through at each hit."
                 },
+                "fillEvery": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 18000,
+                  "description": "With a list of fills: the list steps every this many frames instead of at each hit. The body keeps its fill until it splits; then it and its copies take the fill of that frame, so each generation of a crowd that multiplies has its own colour."
+                },
                 "outline": {
                   "type": "string",
                   "minLength": 1,
@@ -1590,6 +1607,34 @@
                     "color"
                   ],
                   "additionalProperties": false
+                },
+                "smear": {
+                  "type": "object",
+                  "properties": {
+                    "colors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key; dot and space are reserved."
+                      },
+                      "maxItems": 8,
+                      "minItems": 1,
+                      "description": "The most recent part of the sweep first."
+                    },
+                    "frames": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 8,
+                      "description": "Frames of sweep. Default 1."
+                    }
+                  },
+                  "required": [
+                    "colors"
+                  ],
+                  "additionalProperties": false,
+                  "description": "The shape swept over its last frames, drawn under it, banded from the first colour behind it to the last: a blade's swish. Not for a hoop."
                 },
                 "ring": {
                   "type": "object",

@@ -59,6 +59,13 @@
       "maximum": 359,
       "description": "Clockwise light direction: 0 right, 225 top left (default)."
     },
+    "innerLines": {
+      "enum": [
+        "shade",
+        "outline"
+      ],
+      "description": "Where a bone or mass outline falls inside the figure (an arm across the chest, the near leg over the far one): shade (default) draws it one ramp step below the part's base colour, so the figure keeps one outline round its silhouette; outline keeps the outline colour."
+    },
     "rig": {
       "type": "object",
       "properties": {
@@ -119,12 +126,74 @@
             "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
           },
           "maxItems": 16
+        },
+        "fore": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "maxItems": 3,
+            "minItems": 2
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "A four-legged rig's front legs, near then far (with hind, instead of legs). The solved joint folds forward as a foot lifts and back under weight."
+        },
+        "hind": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "maxItems": 3,
+            "minItems": 2
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "description": "A four-legged rig's back legs, near then far; the solved joint (the hock) folds back."
+        },
+        "chest": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Four-legged rigs: a bone attached to body that the fore legs hang from; gaits bend the spine by turning it against the body."
+        },
+        "neck": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Four-legged rigs: a bone the head hangs from, turned back by half of the chest's turn so the head stays steadier."
         }
       },
       "required": [
         "ground"
       ],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependentRequired": {
+        "fore": [
+          "hind"
+        ],
+        "hind": [
+          "fore"
+        ],
+        "chest": [
+          "fore"
+        ],
+        "neck": [
+          "fore"
+        ]
+      },
+      "not": {
+        "required": [
+          "legs",
+          "fore"
+        ]
+      }
     },
     "motions": {
       "type": "object",
@@ -152,6 +221,71 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 60000
+              },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
+              "speed": {
+                "type": "number",
+                "minimum": -1024,
+                "maximum": 1024
+              },
+              "stride": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 64
+              },
+              "lift": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 32
+              },
+              "bob": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8
+              },
+              "lean": {
+                "type": "integer",
+                "minimum": -45,
+                "maximum": 45
+              },
+              "swapDepth": {
+                "type": "boolean",
+                "description": "Exchange the draw order of paired limbs in the second half-cycle, for front or back views where the stepping limb comes nearer the camera. Default false: side views keep near limbs in front."
+              }
+            },
+            "required": [
+              "template"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "template": {
+                "const": "trot",
+                "description": "A four-legged trot: diagonal pairs of feet."
+              },
+              "frames": {
+                "type": "integer",
+                "minimum": 4,
+                "maximum": 64,
+                "multipleOf": 2
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60000
+              },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
               "speed": {
                 "type": "number",
@@ -205,6 +339,12 @@
                 "minimum": 1,
                 "maximum": 60000
               },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
               "speed": {
                 "type": "number",
                 "minimum": -1024,
@@ -233,6 +373,12 @@
               "swapDepth": {
                 "type": "boolean",
                 "description": "Exchange the draw order of paired limbs in the second half-cycle, for front or back views where the stepping limb comes nearer the camera. Default false: side views keep near limbs in front."
+              },
+              "flex": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 30,
+                "description": "Four-legged gallop: degrees the spine curls and stretches each way (the body rocks half as far); default 10."
               }
             },
             "required": [
@@ -255,6 +401,12 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 60000
+              },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
               "breath": {
                 "type": "number",
@@ -286,6 +438,12 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 60000
+              },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
               "crouch": {
                 "type": "number",
@@ -321,6 +479,12 @@
                 "type": "integer",
                 "minimum": 1,
                 "maximum": 60000
+              },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
               "arm": {
                 "type": "integer",
@@ -362,6 +526,12 @@
                 "minimum": 1,
                 "maximum": 60000
               },
+              "follow": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 2,
+                "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
               "recoil": {
                 "type": "integer",
                 "minimum": -90,
@@ -394,6 +564,7 @@
           "template": {
             "enum": [
               "walk",
+              "trot",
               "run",
               "idle",
               "jump",

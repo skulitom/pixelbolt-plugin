@@ -1,0 +1,37 @@
+{
+  "format": "pixelforge-powder",
+  "version": 1,
+  "name": "lava-falls",
+  "base": "sandbox",
+  "width": 128,
+  "height": 96,
+  "seed": 7,
+  "materials": {
+    "lava": {
+      "state": "liquid",
+      "density": 30,
+      "spread": 4,
+      "viscosity": 0.2,
+      "drag": 0.85,
+      "conduct": 0.2,
+      "temperature": 1200,
+      "shimmer": 120,
+      "colors": ["#ff7b1c", "#ff6418", "#ff9a30", "#f05514"],
+      "top": "#ffc85a",
+      "below": { "temperature": 550, "into": "stone", "chance": 0.02 }
+    }
+  },
+  "scene": [
+    { "material": "stone", "rect": [0, 92, 128, 4] },
+    { "material": "stone", "rect": [0, 26, 76, 5] },
+    { "material": "stone", "rect": [0, 0, 4, 31] },
+    { "material": "lava", "rect": [4, 12, 66, 14] },
+    { "material": "moss", "rect": [70, 10, 6, 16] },
+    { "material": "stone", "rect": [54, 62, 4, 30] },
+    { "material": "stone", "rect": [124, 62, 4, 30] },
+    { "material": "water", "rect": [58, 64, 66, 28] },
+    { "material": "sand", "rect": [4, 80, 46, 12], "fill": 0.95 }
+  ],
+  "inputs": [{ "frame": 0, "heat": { "x": 72, "y": 18, "radius": 3, "amount": 300 } }],
+  "clips": { "lava-falls": { "frames": 120, "every": 4 } }
+}

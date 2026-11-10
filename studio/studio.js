@@ -1,4 +1,4 @@
-import { renderProject, buildAtlas, parseColor, reviewPixels, onionPixels, animationPosition, animationNeighbors, inlineSharedPalette, MAX_REQUEST_BYTES } from '/core.js';
+import { renderProject, buildAtlas, parseColor, reviewPixels, onionPixels, partColors, animationPosition, animationNeighbors, inlineSharedPalette, MAX_REQUEST_BYTES } from '/core.js';
 import { animationGIF } from '/gif.js';
 import { createDraftStore, claimTab, openTabs } from '/draft.js';
 import { compilePoses } from '/authoring.js';
@@ -11,6 +11,9 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let project, spec, atlas, frameImages = [], selected = 0, playing = !reducedMotion, mode = 'animation';
 let position = 0;
 let poseMetadata = null, motionReview = null;
+// The Parts view: the recipe rendered again with what drew each pixel, only once Parts is picked, and its colours for
+// the current animation, as pixelbolt inspect --view parts --animation gives them.
+let ownedProject = null, partsView = null;
 // The editor holds the recipe as written, and Save JSON writes it, so a palette that links a shared file keeps its
 // `$ref`. Only the drawing puts the file's colours in. The page reads no file: `pixelbolt preview` sends the one file
 // the recipe it opened links, and a recipe that names another file, or any file when there is none, is not drawn.
@@ -50,7 +53,8 @@ const browserStorage = name => { try { return globalThis[name]; } catch { return
 const locks = navigator.locks ?? null, claimed = claimTab(browserStorage('sessionStorage'), locks);
 let drafts = null, offer = null, offers = [], draftTimer, draftWarned = false;
 const ownOffer = () => offer !== null && offer.id === drafts.id;
-const examples = [{ file: 'forest-spirit', title: 'Forest spirit', type: 'Character · 6 frames' }, { file: 'ember', title: 'Campfire', type: 'Effect · 4 frames' }, { file: 'coin', title: 'Golden coin', type: 'Collectible · 6 frames' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light · 2 frames' }, { file: 'caption', title: 'Caption', type: 'Text, for video · 8 frames' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses · 5 frames' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx · 57 frames' }, { file: 'interference.wave', title: 'Interference', type: 'Paired ripples · 40 frames' }, { file: 'portal.wave', title: 'Portal', type: 'Moving waves, steady rim · 40 frames' }];
+// Each example's frame count is added from its render when the list is built, so a changed example can't leave it stale.
+const examples = [{ file: 'forest-spirit', title: 'Forest spirit', type: 'Character' }, { file: 'ember', title: 'Campfire', type: 'Effect' }, { file: 'coin', title: 'Golden coin', type: 'Collectible' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light' }, { file: 'caption', title: 'Caption', type: 'Text, for video' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx' }, { file: 'interference.wave', title: 'Interference', type: 'Paired ripples' }, { file: 'portal.wave', title: 'Portal', type: 'Moving waves, steady rim' }];
 const title = name => name.replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase());
 function imageCanvas(data, width, height) {
   const c = document.createElement('canvas'); c.width = width; c.height = height;
@@ -71,15 +75,33 @@ function reviewMotion() {
   const speed = $('motion-speed').value, ground = $('motion-ground').value;
   motionReview = inspectMotion(project, { animation: $('animation').value, metadata: poseMetadata, scale: 1,
     ...(speed !== '' && { speed: Number(speed) }), ...(ground !== '' && { ground: Number(ground) }) });
-  const names = { slide: 'Foot slide', ground: 'Ground contact', poseSpread: 'Pose changes', loopSeam: 'Loop join' };
+  const names = { slide: 'Foot slide', ground: 'Ground contact', poseSpread: 'Pose changes', loopSeam: 'Loop join', armSwing: 'Arm swing', contactLegs: 'Knees at contact', kneeLift: 'Knee lift' };
   const report = motionReview.motion, details = {
     slide: `${Math.max(0, ...report.slide.map(p => p.pixels ?? 0))} px`,
     ground: `${Math.max(0, ...report.groundErrors.map(p => Math.abs(p.pixels)))} px from ground`,
     poseSpread: `${Math.round(Math.min(1, ...report.poseSpread.map(p => p.share)) * 100)}% minimum`,
-    loopSeam: `${report.loopSeam.maximum}° maximum`
+    loopSeam: `${report.loopSeam.maximum}° maximum`,
+    armSwing: `${report.gait?.arms.degreesFromOpposite}° from opposite`,
+    contactLegs: `${report.gait?.contact.largest?.degrees}° more bent than at rest`,
+    kneeLift: `${report.gait?.lift.largest?.degrees}° from rest`
   };
   $('motion-summary').textContent = Object.entries(report.checks).map(([key, pass]) => `${names[key] ?? key}: ${pass === null ? 'unavailable' : `${pass ? 'pass' : 'check'} (${details[key]})`}`).join(' · ');
   return motionReview;
+}
+function reviewParts() {
+  ownedProject ??= renderProject(spec, { owners: true });
+  if (partsView) return partsView;
+  const name = $('animation').value, animation = ownedProject.animations[name];
+  partsView = partColors(ownedProject, [...new Set(animation.frames)]);
+  $('parts-list').replaceChildren(...partsView.legend.map(part => {
+    const item = document.createElement('li'), swatch = document.createElement('span');
+    swatch.className = 'swatch'; swatch.style.background = `rgb(${part.color.slice(0, 3).join(' ')})`;
+    item.title = `${part.pixels} pixels in ${title(name)}`; item.append(swatch, part.name);
+    return item;
+  }));
+  $('parts-call').textContent = `pixelbolt inspect ${savedName()} --view parts --animation ${name}
+pixel_inspect { "revision": "…", "view": "parts", "animation": ${JSON.stringify(name)} }`;
+  return partsView;
 }
 // The scale "fit" shows: the largest whole number that fits the artboard, or below 1× when even 1× does not fit.
 function fittedScale(width, height) {
@@ -95,9 +117,12 @@ function render() {
   const width = isMotion ? review.nativeSheet.width : isSheet ? atlas.width : project.width, height = isMotion ? review.nativeSheet.height : isSheet ? atlas.height : project.height;
   canvas.width = width; canvas.height = height;
   context.imageSmoothingEnabled = false;
-  const animation = project.animations[$('animation').value];
-  const pixels = isMotion ? review.nativeSheet.data : isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
-  context.putImageData(new ImageData(new Uint8ClampedArray(reviewPixels(pixels, $('review-view').value)), width, height), 0, 0);
+  const animation = project.animations[$('animation').value], view = $('review-view').value;
+  // Parts colours one frame at a time, onion skin or not; the sheet and the motion review stay in colour.
+  const parts = view === 'parts' && !isSheet && !isMotion;
+  $('parts-legend').hidden = !parts;
+  const pixels = parts ? reviewParts().pixels.get(selected) ?? project.frames[selected].data : isMotion ? review.nativeSheet.data : isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
+  context.putImageData(new ImageData(new Uint8ClampedArray(view === 'parts' ? pixels : reviewPixels(pixels, view)), width, height), 0, 0);
   if (!isSheet && !isMotion && poseMetadata && $('contacts').getAttribute('aria-pressed') === 'true') {
     const pose = poseMetadata.poses[project.frames[selected].name], ground = $('motion-ground').value;
     context.fillStyle = '#506473';
@@ -126,7 +151,7 @@ function render() {
 }
 function animationChanged() {
   elapsed = 0;
-  motionReview = null;
+  motionReview = null; partsView = null;
   $('motion-speed').value = poseMetadata?.animations[$('animation').value]?.speed ?? '';
   const animation = project.animations[$('animation').value];
   position = 0;
@@ -160,7 +185,7 @@ function compile() {
     const compiled = compileSource(nextSpec), nextProject = renderProject(compiled.recipe), nextAtlas = buildAtlas(nextProject);
     fitZoom(nextProject);
     spec = compiled.recipe; poseMetadata = compiled.metadata?.format === 'pixelforge-pose-metadata' ? compiled.metadata : null; project = nextProject; atlas = nextAtlas;
-    motionReview = null;
+    motionReview = null; ownedProject = null; partsView = null;
     $('motion-view').disabled = !poseMetadata; $('contacts').disabled = !poseMetadata;
     $('motion-tools').hidden = !poseMetadata;
     $('motion-ground').value = poseMetadata?.rig?.ground ?? '';
@@ -234,7 +259,7 @@ function setMode(next) {
   mode = next;
   for (const [id, value] of [['animation-view', 'animation'], ['sheet-view', 'sheet'], ['motion-view', 'motion']]) { $(id).classList.toggle('active', value === mode); $(id).setAttribute('aria-pressed', String(value === mode)); }
   $('motion-summary').hidden = mode !== 'motion';
-  $('artboard-caption').textContent = mode === 'motion' ? 'Movement at left · poses at right · yellow marks planted feet' : mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
+  $('artboard-caption').textContent = mode === 'motion' ? 'Movement at left · poses at right · limb arcs below them · yellow marks planted feet' : mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
   render();
 }
 source.addEventListener('input', () => { dirty = true; valid = false; $('export').disabled = true; clearTimeout(compileTimer); compileTimer = setTimeout(compile, 20); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
@@ -349,12 +374,17 @@ $('new').addEventListener('click', () => {
   setSource({ version: 1, name: 'new-sprite', width: 16, height: 16, palette: { g: '#72b58d' }, frames: [{ name: 'idle', duration: 150, ops: [] }] });
   source.focus();
 });
+// The file Save JSON gives the editor's text, and the one the Frames dialog's command reads: a pose or wave source keeps
+// its format word, as the name above the editor, the CLI and examples/ give it.
+function savedName() {
+  let format;
+  try { format = JSON.parse(source.value.replace(/^﻿/, ''))?.format; } catch { /* Broken drafts can still be saved. */ }
+  return `${project?.name ?? 'sprite'}.${format === 'pixelforge-poses' ? 'poses' : format === 'pixelforge-wave' ? 'wave' : 'pixel'}.json`;
+}
 // The browser may ask where to save, and the page never learns whether the file was kept, so nothing is settled here:
 // the draft stays until the user edits again (the draft then follows) or confirms replacing or leaving the recipe.
 $('save').addEventListener('click', () => {
-  let extension = 'pixel';
-  try { if (JSON.parse(source.value).format === 'pixelforge-wave') extension = 'wave'; } catch { /* Broken drafts can still be saved. */ }
-  const filename = `${project?.name ?? 'sprite'}.${extension}.json`;
+  const filename = savedName();
   download(source.value, filename, 'application/json'); sent = source.value;
   toast(`Sent ${filename} to your browser to save.${dirty ? ' Until you load another recipe, its draft is kept here too.' : ''}`); keepDraft();
 });
@@ -371,7 +401,7 @@ $('gif').addEventListener('click', () => {
 const framesSettings = () => ({ fps: $('frames-fps').value, animation: $('animation').value, ...($('frames-size').value ? { size: $('frames-size').value } : { scale: exportScale(256) }) });
 function showFramesCall() {
   const settings = framesSettings(), sizing = settings.size ? `--size ${settings.size}` : `--scale ${settings.scale}`;
-  $('frames-call').textContent = `pixelbolt sequence ${project.name}.pixel.json --fps ${settings.fps} ${sizing} --animation ${settings.animation} --out frames\n\npixel_render { "revision": "…", "sequence": ${JSON.stringify(settings)} }`;
+  $('frames-call').textContent = `pixelbolt sequence ${savedName()} --fps ${settings.fps} ${sizing} --animation ${settings.animation} --out frames\n\npixel_render { "revision": "…", "sequence": ${JSON.stringify(settings)} }`;
 }
 $('frames').addEventListener('click', () => { compile(); if (!valid) { toast('Fix the recipe to export frames.'); return; } showFramesCall(); $('frames-dialog').showModal(); });
 for (const id of ['frames-fps', 'frames-size']) $(id).addEventListener('change', showFramesCall);
@@ -432,7 +462,8 @@ async function boot() {
       const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value).recipe);
       const button = document.createElement('button'); button.className = 'example'; button.dataset.file = example.file;
       const label = document.createElement('span'), strong = document.createElement('strong'), small = document.createElement('small');
-      strong.textContent = example.title; small.textContent = example.type; label.append(strong, small);
+      const count = preview.frames.length;
+      strong.textContent = example.title; small.textContent = `${example.type} · ${count} frame${count === 1 ? '' : 's'}`; label.append(strong, small);
       button.append(thumbnail(imageCanvas(preview.frames[0].data, preview.width, preview.height)), label);
       button.addEventListener('click', () => loadExample(example)); $('examples').append(button);
     }

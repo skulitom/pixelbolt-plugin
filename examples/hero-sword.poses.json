@@ -1,0 +1,234 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "hero-sword",
+  "width": 40,
+  "height": 36,
+  "palette": {
+    "k": "#1d1726",
+    "x": "#8a4b3c",
+    "y": "#d38a62",
+    "z": "#f4c59c",
+    "d": "#3b2232",
+    "e": "#6c3d35",
+    "f": "#a0633f",
+    "i": "#1e3d4c",
+    "j": "#2f7173",
+    "l": "#58ab94",
+    "m": "#a6e0bb",
+    "r": "#5a1e30",
+    "s": "#a8323e",
+    "t": "#e2614b",
+    "p": "#1f2236",
+    "q": "#2f3655",
+    "o": "#48547c",
+    "b": "#3a2421",
+    "c": "#6e4430",
+    "w": "#a8774c",
+    "a": "#e8edf5",
+    "n": "#8d9ab3",
+    "g": "#e0b04a"
+  },
+  "ramps": [["x", "y", "z"], ["i", "j", "l", "m"], ["p", "q", "o"], ["r", "s", "t"], ["b", "c", "w"]],
+  "light": 225,
+  "parts": {
+    "hips": {
+      "mass": { "size": [6, 4], "ramp": 2, "base": 1, "outline": "k" },
+      "points": { "hip": [0, 1], "waist": [0, -1] }
+    },
+    "chest": {
+      "bone": { "length": 6, "width": [5, 6], "ramp": 1, "base": 1, "outline": "k", "caps": ["flat", "round"] },
+      "points": { "end": "end", "shoulder": [4, 0], "neck": [6, 0], "nape": [5, -2] }
+    },
+    "head": {
+      "rows": [
+        "..kfek...",
+        ".kdeefkk.",
+        "kddeeeefk",
+        "kdddeffek",
+        "kddyzzzzk",
+        "kdxyzzkzk",
+        ".kdyzzzzk",
+        "..kyyyyk.",
+        "...kkkk.."
+      ],
+      "anchor": [4, 8]
+    },
+    "scarf": {
+      "rows": [
+        ".kkkk.",
+        "ksttsk",
+        "krssrk",
+        ".kkkk."
+      ],
+      "anchor": [2, 1]
+    },
+    "tail": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 3, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "tip": {
+      "bone": { "length": 3, "width": [2, 1], "ramp": 3, "base": 1, "outline": "k", "caps": ["socket", "point"] },
+      "points": { "end": "end" }
+    },
+    "thigh": {
+      "bone": { "length": 5, "width": [3, 3], "ramp": 2, "base": 2, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "shin": {
+      "bone": { "length": 5, "width": [3, 2], "ramp": 2, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farThigh": {
+      "bone": { "length": 5, "width": [3, 3], "ramp": 2, "base": 1, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "farShin": {
+      "bone": { "length": 5, "width": [3, 2], "ramp": 2, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "upper": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 2, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "fore": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farUpper": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 1, "outline": "k", "caps": ["round", "round"] },
+      "points": { "end": "end" }
+    },
+    "farFore": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "hand": {
+      "rows": [
+        ".kk.",
+        "kzzk",
+        "kyyk",
+        ".kk."
+      ],
+      "anchor": [1, 1]
+    },
+    "farHand": {
+      "rows": [
+        ".kk.",
+        "kyyk",
+        "kxxk",
+        ".kk."
+      ],
+      "anchor": [1, 1]
+    },
+    "boot": {
+      "rows": [
+        "kcck..",
+        "kccwck",
+        "kkkkkk"
+      ],
+      "anchor": [1, 1],
+      "views": {
+        "30": {
+          "rows": [
+            "kcck..",
+            "kcck..",
+            "kkkwck",
+            "...kkk"
+          ],
+          "anchor": [1, 1]
+        },
+        "330": {
+          "rows": [
+            "kcckck",
+            "kccwkk",
+            "kkkk.."
+          ],
+          "anchor": [1, 1]
+        }
+      }
+    },
+    "farBoot": {
+      "rows": [
+        "kbbk..",
+        "kbbcbk",
+        "kkkkkk"
+      ],
+      "anchor": [1, 1],
+      "views": {
+        "30": {
+          "rows": [
+            "kbbk..",
+            "kbbk..",
+            "kkkcbk",
+            "...kkk"
+          ],
+          "anchor": [1, 1]
+        },
+        "330": {
+          "rows": [
+            "kbbkbk",
+            "kbbckk",
+            "kkkk.."
+          ],
+          "anchor": [1, 1]
+        }
+      }
+    },
+    "sword": {
+      "rows": [
+        "...k.........",
+        "..kgk........",
+        "..kgkkkkkkkk.",
+        "kbbgaaaaaaank",
+        "..kgkkkkkkkk.",
+        "..kgk........",
+        "...k........."
+      ],
+      "anchor": [1, 3]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand",
+      "duration": 200,
+      "origin": [19, 35],
+      "parts": [
+        { "name": "tail", "part": "tail", "attach": { "part": "chest", "point": "nape" }, "angle": -145 },
+        { "name": "tip", "part": "tip", "attach": { "part": "tail", "point": "end" }, "angle": 15 },
+        { "name": "farUpper", "part": "farUpper", "attach": { "part": "chest", "point": "shoulder" }, "angle": -175 },
+        { "name": "farFore", "part": "farFore", "attach": { "part": "farUpper", "point": "end" }, "angle": -15 },
+        { "name": "farHand", "part": "farHand", "attach": { "part": "farFore", "point": "end" } },
+        { "name": "farThigh", "part": "farThigh", "attach": { "part": "hips", "point": "hip" }, "angle": 90 },
+        { "name": "farShin", "part": "farShin", "attach": { "part": "farThigh", "point": "end" }, "angle": 0 },
+        { "name": "farBoot", "part": "farBoot", "attach": { "part": "farShin", "point": "end" } },
+        { "name": "hips", "part": "hips", "at": [0, -13] },
+        { "name": "chest", "part": "chest", "attach": { "part": "hips", "point": "waist" }, "angle": 270 },
+        { "name": "nearThigh", "part": "thigh", "attach": { "part": "hips", "point": "hip" }, "angle": 90 },
+        { "name": "nearShin", "part": "shin", "attach": { "part": "nearThigh", "point": "end" }, "angle": 0 },
+        { "name": "nearBoot", "part": "boot", "attach": { "part": "nearShin", "point": "end" } },
+        { "name": "head", "part": "head", "attach": { "part": "chest", "point": "neck" } },
+        { "name": "scarf", "part": "scarf", "attach": { "part": "chest", "point": "neck" } },
+        { "name": "nearUpper", "part": "upper", "attach": { "part": "chest", "point": "shoulder" }, "angle": -175 },
+        { "name": "nearFore", "part": "fore", "attach": { "part": "nearUpper", "point": "end" }, "angle": -15 },
+        { "name": "sword", "part": "sword", "attach": { "part": "nearFore", "point": "end" }, "angle": -45 },
+        { "name": "nearHand", "part": "hand", "attach": { "part": "nearFore", "point": "end" } }
+      ]
+    }
+  ],
+  "rig": {
+    "body": "hips",
+    "head": "head",
+    "ground": 33,
+    "rest": "stand",
+    "legs": [["nearThigh", "nearShin"], ["farThigh", "farShin"]],
+    "arms": [["nearUpper", "nearFore"], ["farUpper", "farFore"]],
+    "tail": ["tail", "tip"]
+  },
+  "motions": {
+    "idle": { "template": "idle" },
+    "walk": { "template": "walk", "speed": 24, "stride": 10, "lift": 2, "bob": 1 },
+    "attack": { "template": "attack" }
+  },
+  "sheet": { "columns": 8 }
+}

@@ -147,8 +147,11 @@ function compose(pixels, width, height, place, background) {
 }
 
 // Builds the files of a sequence from `count` frames. `imageAt(frame)` returns { key, pixels } for a video frame;
-// frames with the same key share one encoded PNG.
-function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe) {
+// frames with the same key share one encoded PNG. Every different frame's PNG is kept, up to MAX_UNIQUE_PIXELS of them.
+// With `stream`, for frames whose key never comes back once it changes (a match's), each frame's file is instead made
+// when it is written (writeBundle calls it, in order) and only the last is kept, for the video frames that hold it, so a
+// sequence holds one frame at a time however long it runs; `info.differentFrames` is counted as they are made.
+function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe, stream = false) {
   const fps = options.rate, place = placeSprite(sourceWidth, sourceHeight, options);
   let background = options.background === undefined ? options.matte ?? null : null;
   if (options.background !== undefined && options.background !== 'transparent') {
@@ -156,13 +159,23 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
     if (background[3] !== 255) fail('sequence.background', 'must be an opaque colour; omit it to keep the alpha');
   }
   const digits = Math.max(4, String(count).length), pattern = `${name}_%0${digits}d.png`, files = new Map(), encoded = new Map();
+  const fileOf = frame => `${name}_${String(frame + 1).padStart(digits, '0')}.png`, made = { different: 0, last: null };
+  const encode = pixels => encodePNG(compose(pixels(), sourceWidth, sourceHeight, place, background), place.width, place.height);
   for (let frame = 0; frame < count; frame++) {
+    if (stream) {
+      files.set(fileOf(frame), () => {
+        const { key, pixels } = imageAt(frame);
+        if (!made.last || made.last.key !== key) { made.last = { key, bytes: encode(pixels) }; made.different++; }
+        return made.last.bytes;
+      });
+      continue;
+    }
     const { key, pixels } = imageAt(frame);
     if (!encoded.has(key)) {
       if ((encoded.size + 1) * place.width * place.height > MAX_UNIQUE_PIXELS) fail('sequence', `more than ${Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height))} different ${place.width}×${place.height} frames; lower the size, the frame rate or the length`);
-      encoded.set(key, encodePNG(compose(pixels(), sourceWidth, sourceHeight, place, background), place.width, place.height));
+      encoded.set(key, encode(pixels));
     }
-    files.set(`${name}_${String(frame + 1).padStart(digits, '0')}.png`, encoded.get(key));
+    files.set(fileOf(frame), encoded.get(key));
   }
   const rate = `${fps.numerator}${fps.denominator === 1 ? '' : `/${fps.denominator}`}`, input = `-framerate ${rate} -start_number 1 -i "${pattern}"`, even = place.width % 2 === 0 && place.height % 2 === 0;
   // With cover, the part of the sprite that stays on the canvas, in the sprite's own pixels: [x, y, width, height].
@@ -173,7 +186,7 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
     format: 'pixelforge-sequence', version: 1, name, ...describe,
     fps: { label: fps.label, numerator: fps.numerator, denominator: fps.denominator }, frames: count, seconds: Math.round(count * fps.denominator / fps.numerator * 1e6) / 1e6,
     width: place.width, height: place.height, alpha: background ? 'none: opaque background' : 'straight (unpremultiplied)',
-    pattern, first: 1, digits, differentFrames: encoded.size,
+    pattern, first: 1, digits, differentFrames: stream ? 0 : encoded.size,
     placement: { scale: place.scale, x: place.x, y: place.y, width: place.spriteWidth, height: place.spriteHeight, source: [sourceWidth, sourceHeight], ...(place.fit && { fit: place.fit, cropped: place.cropped, visible }) },
     // Run these in the sequence folder. Nothing in Pixelbolt runs them; ffmpeg is a separate program. H.264 usually
     // stores colour once for each 2 × 2 pixels (4:2:0), which smears every sprite pixel's colour into its neighbours at
@@ -186,7 +199,7 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
       ...(background && even && { h264Compatible: `ffmpeg ${input} -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -vf "scale=out_color_matrix=bt709:flags=neighbor" -colorspace bt709 -color_primaries bt709 -color_trc bt709 "${name}-yuv420.mp4"` })
     }
   };
-  return { info, files, place };
+  return { info, files, place, ...(stream && { counted: () => { info.differentFrames = made.different; } }) };
 }
 // What cover cut away, for the notes.
 const cropNote = (what, { placement, width, height }) => `The ${what} is enlarged ${placement.scale} times to ${placement.width}×${placement.height} and cropped to the ${width}×${height} canvas: columns ${placement.visible[0]} to ${placement.visible[0] + placement.visible[2] - 1} and rows ${placement.visible[1]} to ${placement.visible[1] + placement.visible[3] - 1} of the ${what} stay in view.`;
@@ -211,10 +224,12 @@ In a Windows batch file, write %% for each % in the file pattern.
 ${info.notes.length ? `\nNotes\n${info.notes.map(note => `- ${note}`).join('\n')}\n` : ''}
 sequence.json holds the same facts for programs, with the timing of every pose.
 `;
-function finish(sequence, notes) {
-  sequence.info.notes = notes;
-  sequence.files.set('sequence.json', Buffer.from(JSON.stringify(sequence.info, null, 2) + '\n'));
-  sequence.files.set('README.txt', Buffer.from(readme(sequence.info)));
+// `late` adds what is only known once every frame is made (a match's figures). A streamed sequence writes sequence.json
+// and the README after its frames, so they are made then.
+function finish(sequence, notes, late = () => {}) {
+  const index = () => { sequence.counted?.(); late(); sequence.info.notes = notes; return Buffer.from(JSON.stringify(sequence.info, null, 2) + '\n'); }, about = () => Buffer.from(readme(sequence.info));
+  sequence.files.set('sequence.json', sequence.counted ? index : index());
+  sequence.files.set('README.txt', sequence.counted ? about : about());
   // A forced export over an earlier sequence of the same name removes the frames this one no longer has.
   const name = sequence.info.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return { info: sequence.info, files: sequence.files, owns: { marker: 'sequence.json', folders: ['.'], match: new RegExp(`^${name}_\\d{4,}\\.png$`) } };
@@ -249,14 +264,16 @@ export function createSequence(project, options = {}) {
 // frame and drawn straight to video frames, never kept as a recipe, so it may run past a recipe's 256 frames (up to
 // MATCH_FRAMES). It plays once and holds its last frame. info.figures carries the match's metadata (hits, the score).
 // `budget`, for a caller with a time limit (MCP), is the most pixels of different frames it may write; past it the call
-// is refused before simulating, naming the command line, which has no limit.
-export function createBodiesSequence(source, options = {}, { budget = Infinity } = {}) {
+// is refused before simulating, naming the command line, which has no limit. With `stream` (the command line), each
+// frame is simulated, drawn and encoded as writeBundle writes it, and only one is held at a time, so a match is bounded
+// by its frames alone; without it, every frame's PNG is kept until the call returns, up to MAX_UNIQUE_PIXELS.
+export function createBodiesSequence(source, options = {}, { budget = Infinity, stream = false } = {}) {
   const rate = common(options, KEYS.filter(key => key !== 'loops' && key !== 'step')), match = bodiesFrames(source, options.animation);
   const plan = planSequence(new Array(match.frames).fill(match.duration), { fps: rate, loop: false, seconds: options.seconds });
-  // Every frame of a match differs, and the sequence keeps each different frame's PNG: say so before simulating, not a
-  // minute in.
+  // Every frame of a match differs, and a sequence made in memory keeps each different frame's PNG: say so before
+  // simulating, not a minute in.
   const place = placeSprite(match.width, match.height, options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
-  if (different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second), so use a smaller size, a lower frame rate or fewer frames`);
+  if (!stream && different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). Run it on the command line, which writes each frame as it is made: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
   const most = Math.floor(budget / (place.width * place.height));
   if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
   let shown = -1, picture = null;
@@ -265,13 +282,13 @@ export function createBodiesSequence(source, options = {}, { budget = Infinity }
     if (pose !== shown) { picture = match.image(pose); shown = pose; }
     const data = picture;
     return { key: pose, pixels: () => data };
-  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect });
+  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, stream);
   const notes = [];
   if (built.place.cropped) notes.push(cropNote('match', built.info));
   const steps = plan.timing.filter(entry => entry.frames > 0).length;
   if (steps < match.frames && options.seconds === undefined) notes.push(`${match.frames - steps} of the match's ${match.frames} frames (${match.duration} ms each) fall between video frames at ${rate.label} frames per second and are not shown; give the effect a duration of at least one video frame (${Math.ceil(1000 * rate.denominator / rate.numerator)} ms at this rate).`);
-  Object.assign(built.info, { loop: { loops: 1, plays: 'once', passFrames: Math.round(plan.exactFrames * 1e6) / 1e6, seamless: false }, figures: match.figures() });
-  return finish(built, notes);
+  built.info.loop = { loops: 1, plays: 'once', passFrames: Math.round(plan.exactFrames * 1e6) / 1e6, seamless: false };
+  return finish(built, notes, () => { built.info.figures = match.figures(); });
 }
 
 // A match's figures for a reply: the last frame's cells per team and the leader, totals, and the first powers taken.

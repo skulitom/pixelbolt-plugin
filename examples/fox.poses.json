@@ -1,0 +1,202 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "fox",
+  "width": 48,
+  "height": 32,
+  "palette": {
+    "k": "#24161c",
+    "R": "#5e2414",
+    "r": "#9a3d1c",
+    "o": "#d4652a",
+    "y": "#f09a48",
+    "c": "#1e1418",
+    "d": "#3a2626",
+    "e": "#6b4536",
+    "f": "#8c5d47",
+    "v": "#c8b294",
+    "w": "#f3e7cf"
+  },
+  "ramps": [["R", "r", "o", "y"], ["c", "d", "e", "f"], ["v", "w"]],
+  "light": 225,
+  "parts": {
+    "hips": {
+      "mass": { "size": [9, 8], "ramp": 0, "base": 2, "outline": "k" },
+      "points": { "hip": [-1, 1], "waist": [3, -1], "tail": [-4, -2] }
+    },
+    "chest": {
+      "bone": { "length": 9, "width": [6, 7], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end", "shoulder": [7, 2], "neck": [8, -2], "bib": [10, -1] }
+    },
+    "neck": {
+      "bone": { "length": 4, "width": [4, 3], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "head": {
+      "rows": [
+        "..k.k.......",
+        ".kdkdk......",
+        ".kdooyk.....",
+        "kooyyyyokk..",
+        "kooykyyyoyok",
+        "krooywwwwwkk",
+        ".kkrwwwwkk..",
+        "...kkkk....."
+      ],
+      "anchor": [3, 5]
+    },
+    "bib": {
+      "rows": [
+        "..w",
+        ".ww",
+        "www",
+        "wwv",
+        "wv."
+      ],
+      "anchor": [1, 1]
+    },
+    "foreUpper": {
+      "bone": { "length": 6, "width": [3, 2], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "foreLower": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farForeUpper": {
+      "bone": { "length": 6, "width": [3, 2], "ramp": 0, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farForeLower": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "hindUpper": {
+      "bone": { "length": 6, "width": [5, 2], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "hindLower": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farHindUpper": {
+      "bone": { "length": 6, "width": [5, 2], "ramp": 0, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "farHindLower": {
+      "bone": { "length": 4, "width": [2, 2], "ramp": 1, "base": 1, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "paw": {
+      "rows": [
+        "keek.",
+        ".kkkk"
+      ],
+      "anchor": [1, 0]
+    },
+    "farPaw": {
+      "rows": [
+        "kddk.",
+        ".kkkk"
+      ],
+      "anchor": [1, 0]
+    },
+    "tail": {
+      "bone": { "length": 5, "width": [3, 5], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "brush": {
+      "bone": { "length": 5, "width": [5, 5], "ramp": 0, "base": 2, "outline": "k", "caps": ["socket", "round"] },
+      "points": { "end": "end" }
+    },
+    "tip": {
+      "bone": { "length": 4, "width": [5, 1], "ramp": 2, "base": 1, "outline": "k", "caps": ["socket", "point"] },
+      "points": { "end": "end" }
+    }
+  },
+  "poses": [
+    {
+      "name": "stand",
+      "duration": 200,
+      "origin": [24, 30],
+      "parts": [
+        { "name": "tail", "part": "tail", "attach": { "part": "hips", "point": "tail" }, "angle": 165 },
+        { "name": "brush", "part": "brush", "attach": { "part": "tail", "point": "end" }, "angle": -15 },
+        { "name": "tip", "part": "tip", "attach": { "part": "brush", "point": "end" }, "angle": 20 },
+        { "name": "farHindUpper", "part": "farHindUpper", "attach": { "part": "hips", "point": "hip" }, "angle": 110 },
+        {
+          "name": "farHindLower",
+          "part": "farHindLower",
+          "attach": { "part": "farHindUpper", "point": "end" },
+          "angle": -40
+        },
+        { "name": "farHindPaw", "part": "farPaw", "attach": { "part": "farHindLower", "point": "end" } },
+        {
+          "name": "farForeUpper",
+          "part": "farForeUpper",
+          "attach": { "part": "chest", "point": "shoulder" },
+          "angle": 90
+        },
+        {
+          "name": "farForeLower",
+          "part": "farForeLower",
+          "attach": { "part": "farForeUpper", "point": "end" },
+          "angle": 0
+        },
+        { "name": "farForePaw", "part": "farPaw", "attach": { "part": "farForeLower", "point": "end" } },
+        { "name": "hips", "part": "hips", "at": [-3, -13] },
+        { "name": "chest", "part": "chest", "attach": { "part": "hips", "point": "waist" }, "angle": 0 },
+        { "name": "neck", "part": "neck", "attach": { "part": "chest", "point": "neck" }, "angle": -50 },
+        { "name": "head", "part": "head", "attach": { "part": "neck", "point": "end" } },
+        { "name": "bib", "part": "bib", "attach": { "part": "chest", "point": "bib" } },
+        { "name": "nearHindUpper", "part": "hindUpper", "attach": { "part": "hips", "point": "hip" }, "angle": 110 },
+        {
+          "name": "nearHindLower",
+          "part": "hindLower",
+          "attach": { "part": "nearHindUpper", "point": "end" },
+          "angle": -40
+        },
+        { "name": "nearHindPaw", "part": "paw", "attach": { "part": "nearHindLower", "point": "end" } },
+        {
+          "name": "nearForeUpper",
+          "part": "foreUpper",
+          "attach": { "part": "chest", "point": "shoulder" },
+          "angle": 90
+        },
+        {
+          "name": "nearForeLower",
+          "part": "foreLower",
+          "attach": { "part": "nearForeUpper", "point": "end" },
+          "angle": 0
+        },
+        { "name": "nearForePaw", "part": "paw", "attach": { "part": "nearForeLower", "point": "end" } }
+      ],
+      "markers": [
+        { "name": "nearHindFoot", "part": "nearHindLower", "point": "end" },
+        { "name": "farHindFoot", "part": "farHindLower", "point": "end" },
+        { "name": "nearForeFoot", "part": "nearForeLower", "point": "end" },
+        { "name": "farForeFoot", "part": "farForeLower", "point": "end" }
+      ]
+    }
+  ],
+  "rig": {
+    "body": "hips",
+    "chest": "chest",
+    "neck": "neck",
+    "head": "head",
+    "ground": 28,
+    "rest": "stand",
+    "hind": [["nearHindUpper", "nearHindLower"], ["farHindUpper", "farHindLower"]],
+    "fore": [["nearForeUpper", "nearForeLower"], ["farForeUpper", "farForeLower"]],
+    "tail": ["tail", "brush", "tip"]
+  },
+  "motions": {
+    "idle": { "template": "idle", "frames": 8, "duration": 150 },
+    "walk": { "template": "walk", "frames": 12, "speed": 16, "stride": 10, "lift": 2, "duration": 70 },
+    "trot": { "template": "trot", "speed": 36, "stride": 12, "lift": 3, "duration": 70 },
+    "run": { "template": "run", "frames": 8, "speed": 72, "stride": 14, "lift": 4, "duration": 60 },
+    "jump": { "template": "jump", "apex": 3 },
+    "hurt": { "template": "hurt" }
+  },
+  "sheet": { "columns": 12 }
+}

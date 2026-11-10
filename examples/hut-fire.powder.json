@@ -1,0 +1,48 @@
+{
+  "format": "pixelforge-powder",
+  "version": 1,
+  "name": "hut-fire",
+  "base": "sandbox",
+  "width": 192,
+  "height": 108,
+  "seed": 3,
+  "scene": [
+    { "material": "stone", "rect": [0, 102, 192, 6] },
+    { "material": "stone", "rect": [0, 72, 26, 30] },
+    { "material": "stone", "rect": [70, 72, 4, 30] },
+    { "material": "stone", "rect": [162, 56, 30, 46] },
+    { "material": "water", "rect": [26, 84, 136, 18] },
+    { "material": "oil", "rect": [30, 82, 38, 2] },
+    { "material": "sand", "rect": [2, 58, 22, 14], "fill": 0.97 },
+    { "material": "moss", "rect": [26, 100, 64, 2], "fill": 0.6 },
+    { "material": "wood", "rect": [20, 70, 54, 2] },
+    {
+      "rows": [
+        "............rrrr............",
+        "..........rrrrrrrr..........",
+        "........rrrrrrrrrrrr........",
+        "......rrrrrrrrrrrrrrrr......",
+        "....rrrrrrrrrrrrrrrrrrrr....",
+        "..rrrrrrrrrrrrrrrrrrrrrrrr..",
+        "rrrrrrrrrrrrrrrrrrrrrrrrrrrr",
+        "..ww....................ww..",
+        "..ww....................ww..",
+        "..ww...wwwww............ww..",
+        "..ww...w...w.....wwww...ww..",
+        "..ww...w...w.....w..w...ww..",
+        "..ww...wwwww.....w..w...ww..",
+        "..ww.............w..w...ww..",
+        "..ww.............w..w...ww..",
+        "wwwwwwwwwwwwwwwwwwwwwwwwwwww"
+      ],
+      "at": [44, 54],
+      "legend": { "r": "wood", "w": "wood" }
+    },
+    { "material": "stone", "rect": [162, 54, 30, 2] },
+    { "material": "lava", "rect": [168, 43, 22, 11] },
+    { "material": "moss", "rect": [162, 41, 6, 13] },
+    { "material": "stone", "rect": [190, 40, 2, 14] }
+  ],
+  "inputs": [{ "frame": 20, "heat": { "x": 58, "y": 69, "radius": 2.5, "amount": 900 } }],
+  "clips": { "hut-fire": { "frames": 150, "every": 5 } }
+}

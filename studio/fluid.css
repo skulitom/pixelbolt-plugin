@@ -19,16 +19,19 @@
   background:var(--surface);
   min-width:0
 }
+/* The picture is centred by auto margins, not by justify-content or align-items: those centre a picture larger than
+   the box too, pushing its left and top past where the box can scroll. Auto margins only take up spare room. */
 .fluid-preview{
   display:flex;
-  align-items:center;
-  justify-content:center;
   min-height:420px;
   border:1px solid var(--line);
   border-radius:10px;
   background:var(--surface);
   overflow:auto;
   padding:24px
+}
+.fluid-preview>*{
+  margin:auto
 }
 .fluid-preview canvas{
   image-rendering:pixelated;

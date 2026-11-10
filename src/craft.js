@@ -375,6 +375,237 @@ export function turnRows(rows, degrees) {
   return { rows: out, origin: [(w - ex - fx) / 2 + x0 + left, (h - ey - fy) / 2 + y0 + top] };
 }
 
+// ---- Draft views -------------------------------------------------------------------------------------------------
+// A small grid part turned as a pixel artist sketches it before drawing the view by hand, so an authored view starts
+// from a draft instead of from nothing. Never used as art by itself: the poses compiler draws only authored views.
+// A turn is whole quarter turns, exact, and what is left, at most 45° either way:
+// - A long or thin part (a boot, a blade, a strap) slides its columns along a clean slope (1:6, 1:4, 1:3, 1:2, 2:3 or
+//   1:1, the nearest), each column moved whole, so every pixel keeps its colour and every straight run along the part
+//   becomes an even staircase. Columns identical to a neighbour are dropped first so the part keeps its length along
+//   the slope, and rows slide the other way so a cross piece (a guard) tilts as far as the part. A tall part does the
+//   same with rows. Where a coloured pixel is newly bared, the outline colour closes the gap, and an outline pixel
+//   left sticking out alone goes.
+// - A compact part (a hand, a head) keeps its area: the pixels the turned picture covers most, as many as it had, its
+//   outline ring coloured from the picture's outline ring and its inside from its inside, and every pixel whose colour
+//   none of its neighbours share (an eye, a rivet) drawn once, where it turns to.
+// The anchor and named points move with the pixels under them (a point on a dropped column with the kept column beside
+// it, toward the anchor). Returns { rows, anchor, points, how } with how one of
+// flat, quarter, shear (with slope, and shortened, closed, nubs when they happened) or cover.
+const DRAFT_SLOPES = [[0, 1, 0], [1, 6, 9.462322208025617], [1, 4, 14.036243467926479], [1, 3, 18.43494882292201],
+  [1, 2, 26.56505117707799], [2, 3, 33.690067525979785], [1, 1, 45]];
+const blank = key => key === '.' || key === ' ';
+// Clockwise quarter turns of rows, an anchor and points, exact.
+function quarterRows(rows, quarters, anchor, points) {
+  let out = rows, at = anchor, named = points;
+  for (let k = 0; k < ((quarters % 4) + 4) % 4; k++) {
+    const h = out.length, from = out;
+    out = Array.from({ length: from[0].length }, (_, y) => Array.from({ length: h }, (_, x) => from[h - 1 - x][y]).join(''));
+    const turn = ([x, y]) => [h - 1 - y, x];
+    at = turn(at); named = Object.fromEntries(Object.entries(named).map(([key, p]) => [key, turn(p)]));
+  }
+  return { rows: out, anchor: at, points: named };
+}
+// The colour that outlines a picture: the one most pixels on its edge have, when it holds at least half of them and at
+// most a third of the other pixels touch an empty one. A blade drawn as a bare line has none.
+function outlineKey(rows) {
+  const h = rows.length, w = rows[0].length, drawn = (x, y) => x >= 0 && y >= 0 && x < w && y < h && !blank(rows[y][x]);
+  const counts = new Map();
+  let edge = 0, best = null, others = 0, open = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!drawn(x, y) || (drawn(x - 1, y) && drawn(x + 1, y) && drawn(x, y - 1) && drawn(x, y + 1))) continue;
+    edge++; counts.set(rows[y][x], (counts.get(rows[y][x]) ?? 0) + 1);
+  }
+  for (const [key, n] of counts) if (2 * n >= edge && (best === null || n > counts.get(best))) best = key;
+  if (best === null) return null;
+  const bare = (x, y) => x >= 0 && y >= 0 && x < w && y < h && blank(rows[y][x]);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (drawn(x, y) && rows[y][x] !== best) {
+    others++; if (bare(x - 1, y) || bare(x + 1, y) || bare(x, y - 1) || bare(x, y + 1)) open++;
+  }
+  return others && 3 * open <= others ? best : null;
+}
+// Pixels as { x, y, key, sx, sy }: x and y from the anchor pixel, sx and sy where the pixel was (null for one added).
+function trimDraft(pixels, points) {
+  if (!pixels.length) return { rows: ['.'], anchor: [0, 0], points };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pixels) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+  const grid = Array.from({ length: y1 - y0 + 1 }, () => new Array(x1 - x0 + 1).fill('.'));
+  for (const p of pixels) grid[p.y - y0][p.x - x0] = p.key;
+  return { rows: grid.map(row => row.join('')), anchor: [-x0, -y0], points: Object.fromEntries(Object.entries(points).map(([key, [x, y]]) => [key, [x - x0, y - y0]])) };
+}
+function shearDraft(rows, phi, anchor, points) {
+  // Tall parts are turned as their transpose, the other way round.
+  if (rows.length > rows[0].length) {
+    const swap = ([x, y]) => [y, x], flip = rows[0].split('').map((_, x) => rows.map(row => row[x]).join(''));
+    const done = shearDraft(flip, -phi, swap(anchor), Object.fromEntries(Object.entries(points).map(([key, p]) => [key, swap(p)])));
+    const back = done.rows[0].split('').map((_, x) => done.rows.map(row => row[x]).join(''));
+    return { ...done, rows: back, anchor: swap(done.anchor), points: Object.fromEntries(Object.entries(done.points).map(([key, p]) => [key, swap(p)])) };
+  }
+  const h = rows.length, w = rows[0].length, drawn = (x, y) => x >= 0 && y >= 0 && x < w && y < h && !blank(rows[y][x]);
+  const sign = Math.sign(phi), [p, q] = DRAFT_SLOPES.reduce((best, s) => Math.abs(s[2] - Math.abs(phi)) < Math.abs(best[2] - Math.abs(phi)) ? s : best);
+  const result = { how: 'shear', slope: `${p}:${q}` }, hyp = Math.sqrt(p * p + q * q);
+  // Drop columns identical to their neighbour, from the longest run of them, farthest from the anchor first, until the
+  // part's length along the slope is about its length flat.
+  const column = x => rows.map(row => blank(row[x]) ? '.' : row[x]).join('');
+  let left = w, right = -1;
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (drawn(x, y)) { left = Math.min(left, x); right = Math.max(right, x); }
+  const dropped = new Set();
+  for (let n = Math.round((right - left + 1) * (1 - q / hyp)); n > 0; n--) {
+    const kept = [];
+    for (let x = left; x <= right; x++) if (!dropped.has(x)) kept.push(x);
+    let pick = -1, run = 0;
+    for (let i = 0; i < kept.length;) {
+      let end = i;
+      while (end + 1 < kept.length && column(kept[end + 1]) === column(kept[i])) end++;
+      const live = kept.slice(i, end + 1), far = live.filter(c => c !== anchor[0]).sort((a, b) => Math.abs(b - anchor[0]) - Math.abs(a - anchor[0]) || b - a)[0];
+      if (live.length > 1 && far !== undefined && (live.length > run || (live.length === run && Math.abs(far - anchor[0]) > Math.abs(pick - anchor[0])))) { pick = far; run = live.length; }
+      i = end + 1;
+    }
+    if (pick < 0) break;
+    dropped.add(pick);
+  }
+  // Where a column lands once those before it (counted from the anchor) are gone.
+  const closer = x => { let shift = 0; for (const d of dropped) { if (x > anchor[0] && d > anchor[0] && d < x) shift--; if (x < anchor[0] && d < anchor[0] && d > x) shift++; } return x + shift - anchor[0]; };
+  // Rows slide the other way by sin·cos of the slope's angle, so a cross piece turns as far as the part, then columns
+  // by the slope; halves round down the page.
+  const cross = p * q / (p * p + q * q), place = (x, y) => { const u = closer(x), v = y - anchor[1], s = u + Math.floor(-sign * cross * v + 0.5); return [s, v + Math.floor(sign * p * s / q + 0.5)]; };
+  let pixels = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (drawn(x, y) && !dropped.has(x)) { const [px, py] = place(x, y); pixels.push({ x: px, y: py, key: rows[y][x], sx: x, sy: y }); }
+  if (dropped.size) result.shortened = dropped.size;
+  const outline = outlineKey(rows);
+  if (outline !== null) {
+    const at = new Map(pixels.map(pixel => [`${pixel.x},${pixel.y}`, pixel])), has = (x, y) => at.has(`${x},${y}`);
+    let closed = 0, nubs = 0;
+    for (const pixel of [...pixels]) {
+      if (pixel.key === outline) continue;
+      for (const [dx, dy] of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+        if (has(pixel.x + dx, pixel.y + dy) || !drawn(pixel.sx + dx, pixel.sy + dy)) continue;
+        const added = { x: pixel.x + dx, y: pixel.y + dy, key: outline, sx: null, sy: null };
+        at.set(`${added.x},${added.y}`, added); pixels.push(added); closed++;
+      }
+    }
+    // An outline pixel joined to one other along a side and to nothing else, which was joined to two before.
+    for (let changed = true, pass = 0; changed && pass < 4; pass++) {
+      changed = false;
+      for (const pixel of pixels) {
+        if (pixel.key !== outline || !has(pixel.x, pixel.y)) continue;
+        const sides = [[1, 0], [0, 1], [-1, 0], [0, -1]].filter(([dx, dy]) => has(pixel.x + dx, pixel.y + dy));
+        if (sides.length > 1) continue;
+        if (pixel.sx !== null && [[1, 0], [0, 1], [-1, 0], [0, -1]].filter(([dx, dy]) => drawn(pixel.sx + dx, pixel.sy + dy)).length < 2) continue;
+        if ([[1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => has(pixel.x + dx, pixel.y + dy) && !(sides.length && Math.abs(dx - sides[0][0]) + Math.abs(dy - sides[0][1]) === 1))) continue;
+        if (sides.some(([dx, dy]) => at.get(`${pixel.x + dx},${pixel.y + dy}`).key !== outline)) continue;
+        at.delete(`${pixel.x},${pixel.y}`); nubs++; changed = true;
+      }
+      pixels = pixels.filter(pixel => at.get(`${pixel.x},${pixel.y}`) === pixel);
+    }
+    if (closed) result.closed = closed;
+    if (nubs) result.nubs = nubs;
+  }
+  // A point on a dropped column moves to the kept column beside it on the anchor's side, which held the same pixels.
+  const onKept = x => { while (dropped.has(x)) x += x > anchor[0] ? -1 : 1; return x; };
+  return { ...trimDraft(pixels, Object.fromEntries(Object.entries(points).map(([key, [x, y]]) => [key, place(onKept(x), y)]))), ...result };
+}
+function coverDraft(rows, phi, anchor, points) {
+  const h = rows.length, w = rows[0].length, drawn = (x, y) => x >= 0 && y >= 0 && x < w && y < h && !blank(rows[y][x]);
+  let count = 0, bx0 = w, by0 = h, bx1 = 0, by1 = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (drawn(x, y)) { count++; bx0 = Math.min(bx0, x); by0 = Math.min(by0, y); bx1 = Math.max(bx1, x + 1); by1 = Math.max(by1, y + 1); }
+  // Turned about the middle of what is drawn; the anchor goes where its pixel turns to.
+  const cos = cosDeg(phi), sin = sinDeg(phi), cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2;
+  const back = (x, y) => [cx + (x - cx) * cos + (y - cy) * sin, cy - (x - cx) * sin + (y - cy) * cos];
+  const ahead = ([x, y]) => [Math.floor(cx + (x + 0.5 - cx) * cos - (y + 0.5 - cy) * sin), Math.floor(cy + (x + 0.5 - cx) * sin + (y + 0.5 - cy) * cos)];
+  const reach = Math.ceil(Math.max(bx1 - bx0, by1 - by0) * 0.75) + 2, X0 = Math.floor(cx) - reach, Y0 = Math.floor(cy) - reach, W = 2 * reach + 1, H = 2 * reach + 1;
+  // How much of each pixel the turned picture covers, in 8 × 8 samples.
+  const cover = new Int32Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    let n = 0;
+    for (let b = 0; b < 8; b++) for (let a = 0; a < 8; a++) { const [u, v] = back(X0 + i + (a + 0.5) / 8, Y0 + j + (b + 0.5) / 8); if (drawn(Math.floor(u), Math.floor(v))) n++; }
+    cover[j * W + i] = n;
+  }
+  // The best covered, as many as were drawn; pixels covered alike come in together unless that lands further from the
+  // count than leaving them out.
+  const order = [...cover.keys()].filter(i => cover[i]).sort((a, b) => cover[b] - cover[a] || a - b), mask = new Uint8Array(W * H);
+  for (let k = 0, taken = 0; k < order.length && taken < count;) {
+    let end = k;
+    while (end < order.length && cover[order[end]] === cover[order[k]]) end++;
+    if (taken + end - k - count > count - taken) break;
+    for (let g = k; g < end; g++) mask[order[g]] = 1;
+    taken += end - k; k = end;
+  }
+  const inside = (i, j) => i >= 0 && j >= 0 && i < W && j < H && mask[j * W + i] === 1;
+  // Once over: a notch (empty, held on three sides) fills; then a spike (held on one side or none, with nothing on a
+  // corner but beside what holds it) goes. The end of a diagonal run is held at a corner and stays.
+  const held = (i, j) => [[-1, 0], [1, 0], [0, -1], [0, 1]].filter(([dx, dy]) => inside(i + dx, j + dy));
+  const notches = [];
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (!mask[j * W + i] && held(i, j).length >= 3) notches.push(j * W + i);
+  for (const c of notches) mask[c] = 1;
+  const spikes = [];
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    const sides = mask[j * W + i] ? held(i, j) : [];
+    if (!mask[j * W + i] || sides.length > 1) continue;
+    if (![[1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => inside(i + dx, j + dy) && !(sides.length && Math.abs(dx - sides[0][0]) + Math.abs(dy - sides[0][1]) === 1))) spikes.push(j * W + i);
+  }
+  for (const c of spikes) mask[c] = 0;
+  // Rings: 0 beside an empty pixel, 1 beside that, 2 further in.
+  const rings = (width, height, filled) => {
+    const ring = new Uint8Array(width * height).fill(3);
+    const near = (i, j, k) => i < 0 || j < 0 || i >= width || j >= height || (k < 0 ? !filled(i, j) : ring[j * width + i] === k);
+    for (let k = 0; k < 2; k++) for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) {
+      if (!filled(i, j) || ring[j * width + i] < 3) continue;
+      if (near(i - 1, j, k - 1) || near(i + 1, j, k - 1) || near(i, j - 1, k - 1) || near(i, j + 1, k - 1)) ring[j * width + i] = k;
+    }
+    return ring.map(k => Math.min(k, 2));
+  };
+  const was = rings(w, h, drawn), now = rings(W, H, inside);
+  // Each pixel copies the nearest of the picture's pixels in its own ring (else the next ring in, else any) round the
+  // spot under its centre, leaving out `skip`.
+  const nearest = (i, j, skip = -1) => {
+    const [u, v] = back(X0 + i + 0.5, Y0 + j + 0.5), want = now[j * W + i];
+    for (const ring of [want, want === 2 ? 1 : want === 1 ? 2 : 1, -1]) {
+      let best = -1, least = Infinity;
+      for (let y = Math.floor(v) - 2; y <= Math.floor(v) + 2; y++) for (let x = Math.floor(u) - 2; x <= Math.floor(u) + 2; x++) {
+        if (!drawn(x, y) || y * w + x === skip || (ring >= 0 && was[y * w + x] !== ring)) continue;
+        const d = (x + 0.5 - u) * (x + 0.5 - u) + (y + 0.5 - v) * (y + 0.5 - v);
+        if (d < least) { least = d; best = y * w + x; }
+      }
+      if (best >= 0) return best;
+    }
+    return -1;
+  };
+  const from = new Int32Array(W * H).fill(-1);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (mask[j * W + i]) from[j * W + i] = nearest(i, j);
+  // A pixel whose colour none of its eight neighbours share is drawn once, where it turns to.
+  const key = s => rows[Math.floor(s / w)][s % w], placed = new Set();
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (!drawn(x, y)) continue;
+    let alone = true;
+    for (let dy = -1; dy <= 1 && alone; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && drawn(x + dx, y + dy) && rows[y + dy][x + dx] === rows[y][x]) { alone = false; break; }
+    const s = y * w + x, [ti, tj] = ahead([x, y]), target = (tj - Y0) * W + ti - X0;
+    if (!alone || !inside(ti - X0, tj - Y0) || placed.has(target)) continue;
+    for (let c = 0; c < W * H; c++) if (from[c] === s && c !== target) { const other = nearest(c % W, Math.floor(c / W), s); if (other >= 0) from[c] = other; }
+    from[target] = s; placed.add(target);
+  }
+  const pixels = [], [ax, ay] = ahead(anchor);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) if (mask[j * W + i] && from[j * W + i] >= 0) pixels.push({ x: X0 + i - ax, y: Y0 + j - ay, key: key(from[j * W + i]) });
+  return { ...trimDraft(pixels, Object.fromEntries(Object.entries(points).map(([name, p]) => { const [x, y] = ahead(p); return [name, [x - ax, y - ay]]; }))), how: 'cover' };
+}
+export function draftTurn(rows, degrees, { anchor = [0, 0], points = {} } = {}) {
+  const turn = ((degrees % 360) + 360) % 360, signed = turn > 180 ? turn - 360 : turn;
+  const quarters = Math.abs(signed) <= 45 ? 0 : Math.sign(signed) * Math.ceil((Math.abs(signed) - 45) / 90), phi = signed - 90 * quarters;
+  const turned = quarterRows(rows, quarters, anchor, points);
+  // Under half the gentlest slope (1:6), a turn draws nothing new.
+  if (2 * Math.abs(phi) < DRAFT_SLOPES[1][2]) return { ...turned, how: quarters ? 'quarter' : 'flat' };
+  // Long or thin: the spread of the drawn pixels along their main axis against across it (second moments), or a
+  // quarter of them one pixel thick.
+  const h = turned.rows.length, w = turned.rows[0].length, drawn = (x, y) => x >= 0 && y >= 0 && x < w && y < h && !blank(turned.rows[y][x]);
+  let n = 0, mx = 0, my = 0, thin = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (drawn(x, y)) { n++; mx += x; my += y; if ((!drawn(x - 1, y) && !drawn(x + 1, y)) || (!drawn(x, y - 1) && !drawn(x, y + 1))) thin++; }
+  if (!n) return { ...turned, how: 'flat' };
+  mx /= n; my /= n;
+  let xx = 1 / 12, yy = 1 / 12, xy = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (drawn(x, y)) { xx += (x - mx) * (x - mx) / n; yy += (y - my) * (y - my) / n; xy += (x - mx) * (y - my) / n; }
+  const mean = (xx + yy) / 2, spread = Math.sqrt((xx - yy) * (xx - yy) / 4 + xy * xy), long = (mean + spread) >= 2.56 * (mean - spread);
+  return long || 4 * thin >= n ? shearDraft(turned.rows, phi, turned.anchor, turned.points) : coverDraft(turned.rows, phi, turned.anchor, turned.points);
+}
+
 // ---- Structural parts --------------------------------------------------------------------------------------------
 // A bone is drawn in its posed direction, never resampled from a drawing. The compiler validates inputs and supplies
 // a ramp of one-character palette keys. Returned coordinates are symbol-local; pivot is the start joint.

@@ -44,7 +44,7 @@ const fail = (path, message) => { throw new PixelError(path, message); };
 // refusing the layer at `path` that crosses it.
 const spendWork = (work, n, path) => {
   work.spent += n;
-  if (work.spent > SHAPE_WORK) fail(path, `the shape layers would visit more than ${SHAPE_WORK.toLocaleString('en-US')} pixels to draw; make them smaller (radius, width, the part on the canvas), fewer, or over fewer frames (a loop whose looks hold paints its cycle twice, and takes twice as long; hold: 0 paints it once)`);
+  if (work.spent > SHAPE_WORK) fail(path, `the shape layers would visit more than ${SHAPE_WORK.toLocaleString('en-US')} pixels to draw; make them smaller (radius, width, the part on the canvas), fewer, or over fewer frames`);
 };
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const number = (value, path, min, max) => {
@@ -813,8 +813,10 @@ function holdBand(before, level, zone, loose) {
 function shadingZone(share, level, { thresholds, margins }) {
   return level && share - thresholds[level - 1] < margins[level - 1] ? level - 1 : level < thresholds.length && thresholds[level] - share <= margins[level] ? level : -1;
 }
-/** Memory for renderShapes: what each look's pixels held the frame before. Start one per animation. */
-export function holdBands() { return { held: [], loose: [], trace: null }; }
+/** Memory for renderShapes: what each look's pixels held the frame before. Start one per animation. While `tape` is
+ * set, each look's readings of a frame painted are passed to it; while `replay` holds a frame's (by look), the frame is
+ * drawn from them instead of painted (see replayLook). */
+export function holdBands() { return { held: [], loose: [], trace: null, tape: null, replay: null }; }
 /**
  * A loop's held bands. Each look's pixels go into the first frame holding the band the last frame leaves them, so the
  * loop runs on through its seam. `reads` holds, for each look, every frame's reading in order (recorded by renderShapes
@@ -847,6 +849,38 @@ export function settleHolds(memory, reads, size) {
     memory.held[look] = held; memory.loose[look] = loose;
   });
   memory.trace = null;
+}
+// One look of a loop's frame drawn from `record`, what painting it noted (memory.tape): each pixel's reading as settleHolds
+// takes it (its band, and its shade and lit bands, or UNSEEN), held from the frame before as painting holds it, and the
+// side each pixel came from. Returns whether it drew a pixel. A loop whose looks hold paints its cycle once, to settle
+// them, and is drawn from what that noted: painted a second time to draw it, it took twice as long.
+function replayLook(look, lookIndex, record, memory, N, chars, owner, side) {
+  const { codes, shade, lit, margins } = look, channels = [['band'], ...(shade ? [['shade', shade]] : []), ...(lit ? [['lit', lit]] : [])];
+  const held = margins ? (memory.held[lookIndex] ??= Object.fromEntries(channels.map(([name]) => [name, new Uint8Array(N).fill(UNSEEN)]))) : null, loose = held ? memory.loose[lookIndex] : null;
+  if (!record.any) { if (held) for (const [name] of channels) held[name].fill(UNSEEN); return false; }
+  let drawn = false;
+  for (let c = 0; c < N; c++) {
+    const read = record.band[c];
+    if (read === UNSEEN) { if (held) for (const [name] of channels) held[name][c] = UNSEEN; continue; }
+    // A pixel that doesn't settle round the loop is drawn loose. Below every band (a reading of 0) painting held it
+    // without that, which changes how it is held but never what it shows.
+    const free = !held || (loose !== undefined && loose[c] === 1);
+    let level = read & 15;
+    if (held) { held.band[c] = holdBand(held.band[c], level, (read >> 4) - 1, free); level = held.band[c] & 15; }
+    let code = level ? codes[level - 1] : 0;
+    for (let k = 1; k < channels.length; k++) {
+      const [name, ring] = channels[k];
+      if (!level) { if (held) held[name][c] = UNSEEN; continue; }
+      const noted = record[name][c];
+      let s = noted & 15;
+      if (held) { held[name][c] = holdBand(held[name][c], s, (noted >> 4) - 1, free); s = held[name][c] & 15; }
+      if (s) code = ring.codes[s - 1];
+    }
+    if (!level) continue;
+    chars[c] = code; owner[c] = lookIndex + 1; drawn = true;
+    if (side) side[c] = record.from[c] || 2;
+  }
+  return drawn;
 }
 
 // The look's field at (x, y), between pixels, zero off the canvas.
@@ -881,6 +915,8 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
   let drawn = false;
   shapes.looks.forEach((look, lookIndex) => {
     if (look.front !== front) return;
+    // A held loop's frame drawn from what painting it noted (memory.replay, see holdBands), without painting again.
+    if (memory && memory.replay) { if (replayLook(look, lookIndex, memory.replay[lookIndex], memory, N, chars, owner, side)) drawn = true; return; }
     const field = new Float64Array(N), scratch = new Float64Array(N), best = split ? new Float64Array(N) : null, from = split ? new Uint8Array(N) : null;
     let any = false;
     for (const layer of shapes.layers) {
@@ -938,9 +974,12 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
     const channels = [['band'], ...(shade ? [['shade', shade, -1]] : []), ...(lit ? [['lit', lit, 1]] : [])];
     const held = memory && margins ? (memory.held[lookIndex] ??= Object.fromEntries(channels.map(([name]) => [name, new Uint8Array(N).fill(UNSEEN)]))) : null;
     const reads = held && memory.trace ? Object.fromEntries(channels.map(([name]) => [name, new Uint8Array(N).fill(UNSEEN)])) : null, loose = held ? memory.loose[lookIndex] : null;
+    // While a loop is taped (memory.tape), a look without a hold notes its plain bands too, to be drawn from.
+    const plain = memory && memory.tape && !held ? Object.fromEntries(channels.map(([name]) => [name, new Uint8Array(N)])) : null;
     if (!any) {
       if (held) for (const [name] of channels) held[name].fill(UNSEEN);
       if (reads) memory.trace(lookIndex, reads);
+      if (memory && memory.tape) memory.tape(lookIndex, { any: false });
       return;
     }
     const lowest = thresholds[0] - dither * gaps[0] - (held ? margins[0] : 0);
@@ -962,7 +1001,7 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
         if (reads) reads.band[c] = level | ((zone + 1) << 4);
         held.band[c] = holdBand(held.band[c], level, zone, free);
         level = held.band[c] & 15;
-      }
+      } else if (plain) plain.band[c] = level;
       // Lit and shade bands recolour the look's own pixels by how far its field falls two pixels toward the light
       // (and away from it): a highlight on the rim that faces the light, a shadow side opposite. They hold as the bands
       // do, and while a loop is being settled they are read under every pixel the look might draw.
@@ -977,7 +1016,7 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
           if (reads) reads[name][c] = s | ((zone + 1) << 4);
           held[name][c] = level ? holdBand(held[name][c], s, zone, free) : UNSEEN;
           s = level ? held[name][c] & 15 : 0;
-        }
+        } else if (plain) plain[name][c] = s;
         if (level && s) code = ring.codes[s - 1];
       }
       if (!level) continue;
@@ -985,8 +1024,10 @@ export function renderShapes(shapes, f, width, height, blobs = [], work = { spen
       if (split) side[c] = from[c] || 2;
     }
     if (reads) memory.trace(lookIndex, reads);
+    if (memory && memory.tape) memory.tape(lookIndex, { any: true, ...(reads ?? plain), from });
   });
-  if (!drawn) return null;
+  // A frame painted only to be taped is drawn later, from the tape.
+  if (!drawn || (memory && memory.tape)) return null;
   if (shapes.cleanup.strays || shapes.cleanup.corners) for (const change of cleanupIds(chars, width, height, shapes.cleanup)) chars[change.index] = change.id;
   // A hole cleanup filled takes the side of a drawn pixel beside it.
   if (split) for (let c = 0; c < N; c++) {

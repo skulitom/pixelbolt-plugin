@@ -1,0 +1,41 @@
+{
+  "format": "pixelforge-powder",
+  "version": 1,
+  "name": "stilt-hut",
+  "base": "sandbox",
+  "width": 128,
+  "height": 80,
+  "seed": 5,
+  "pieces": "tumble",
+  "scene": [
+    { "material": "stone", "rect": [0, 76, 128, 4] },
+    { "material": "stone", "rect": [0, 50, 12, 26] },
+    { "material": "sand", "rect": [0, 44, 10, 6], "fill": 0.95 },
+    { "material": "stone", "rect": [114, 46, 14, 30] },
+    { "material": "water", "rect": [12, 56, 102, 20] },
+    { "material": "moss", "rect": [12, 74, 40, 2], "fill": 0.5 },
+    {
+      "rows": [
+        "........rrrrrr........",
+        "......rrrrrrrrrr......",
+        "....rrrrrrrrrrrrrr....",
+        "..rrrrrrrrrrrrrrrrrr..",
+        "rrrrrrrrrrrrrrrrrrrrrr",
+        ".ww................ww.",
+        ".ww....wwww........ww.",
+        ".ww....w..w....www.ww.",
+        ".ww....wwww....w.w.ww.",
+        ".ww............w.w.ww.",
+        "wwwwwwwwwwwwwwwwwwwwww",
+        "wwwwwwwwwwwwwwwwwwwwww"
+      ],
+      "at": [30, 22],
+      "legend": { "r": "wood", "w": "wood" }
+    },
+    { "material": "wood", "rect": [31, 34, 2, 42] },
+    { "material": "wood", "rect": [49, 34, 2, 42] },
+    { "material": "wood", "rect": [49, 53, 2, 3], "burning": true },
+    { "material": "wood", "rect": [84, 54, 14, 2] }
+  ],
+  "clips": { "stilt-hut": { "start": 160, "frames": 90, "every": 4 } }
+}

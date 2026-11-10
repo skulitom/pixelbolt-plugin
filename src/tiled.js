@@ -43,8 +43,10 @@ const number = value => String(Number(value.toFixed(6)));
 const popcount = mask => { let bits = 0; for (let m = mask; m; m &= m - 1) bits++; return bits; };
 
 // A Tiled tileset (.tsx) of one sheet. `source` is a tile source as export.js's tileSource makes it:
-// { atlas, tiles, layered, plain, colors, name, terrain, margin, separation, image }, the atlas untrimmed and image the
-// sheet's path relative to the .tsx (default the atlas's meta.image, beside it). Returns { text, warnings }; text is
+// { atlas, tiles, layered, plain, colors, name, terrain, margin, separation, image, title }, the atlas untrimmed, image
+// the sheet's path relative to the .tsx (default the atlas's meta.image, beside it) and title the tileset's name in
+// Tiled (default name, which also names its terrains: a hazed copy of a sheet keeps its terrains' names under its own
+// title). Returns { text, warnings }; text is
 // null when the sheet is not a grid. `oneShots: false` leaves out the warning for animations that don't loop, which a
 // sprite's tileset expects (an attack plays once).
 export function tiledTileset(source, { oneShots = true } = {}) {
@@ -117,7 +119,7 @@ export function tiledTileset(source, { oneShots = true } = {}) {
   for (const frame of tiled) heaviest.set(kind(frame), Math.max(heaviest.get(kind(frame)) ?? 1, weight(frame)));
 
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-    `<tileset version="${TILED_FORMAT}" name="${xml(source.name)}" tilewidth="${w}" tileheight="${h}"${separation ? ` spacing="${separation}"` : ''}${margin ? ` margin="${margin}"` : ''} tilecount="${columns * rows}" columns="${columns}">`,
+    `<tileset version="${TILED_FORMAT}" name="${xml(source.title ?? source.name)}" tilewidth="${w}" tileheight="${h}"${separation ? ` spacing="${separation}"` : ''}${margin ? ` margin="${margin}"` : ''} tilecount="${columns * rows}" columns="${columns}">`,
     ` <image source="${xml(source.image ?? atlas.meta.image)}" width="${width}" height="${height}"/>`];
   const described = names.map(frame => [id(frame), frame]).sort((a, b) => a[0] - b[0]);
   for (const [tileId, frame] of described) {
@@ -150,8 +152,8 @@ export function tiledTileset(source, { oneShots = true } = {}) {
 
 // ---- Maps ----------------------------------------------------------------------------------------------------------
 // A Tiled map (.tmx) of a scene as it stands at one time, unlit: the frames renderScene drew then ({ draws: true }), in
-// its drawing order, at their scene positions (the camera at its start), so Tiled draws what Pixelbolt's unlit view
-// draws. Consecutive draws become layers:
+// its drawing order, at their scene positions, so Tiled draws what Pixelbolt's unlit view draws with the camera at
+// [0, 0]. Consecutive draws on one plane (the same parallax) become layers:
 // - a tilemap becomes a tile layer, painted with its asset's tileset (and its Wang sets, so the Terrain Brush can go on
 //   with it), when Tiled's grid can hold it: square cells the size of the map's grid (the first such tilemap's cells),
 //   one frame per cell, drawn at 1× from a sheet exported at 1×, and not sorted among other placements. Its offset
@@ -160,15 +162,29 @@ export function tiledTileset(source, { oneShots = true } = {}) {
 // - everything else becomes tile objects in an object layer drawn in list order: placements and each copy of a repeat,
 //   each at its frame at that time, sorted tilemaps (whose cells draw among the placements), iso and scaled maps.
 //   Objects are the drawn size, so Tiled scales a sheet exported larger back down.
-// Shade placements, which darken what is under them, and haze have nothing in Tiled to become: shade placements are
-// left out and hazed ones drawn without it, each with a warning. Lights, the camera's movement and parallax stay in
-// the scene. `tilesets` maps each asset id to { source, tiles }: its .tsx relative to the map, and its tile count.
-// Returns { text, warnings }.
+// Each layer carries its plane's parallax as Tiled's parallaxx and parallaxy, which a game reads as Pixelbolt does:
+// the layer is drawn at its position less parallax × the camera's top-left. The map keeps Tiled's parallax origin,
+// (0, 0): Tiled 1.11 turned round how its editor reads one (from the view's centre plus the origin, where 1.8–1.10
+// took the origin away), so no other origin means the same in both. With a camera, the map is wide and tall enough to
+// hold every tile object right of and below its origin.
+// A hazed placement or tilemap is drawn from a hazed copy of its asset's tileset, whose sheet has the scene's haze
+// baked into its colours. Shade placements, which darken what is under them, have nothing in Tiled to become: they are
+// left out, with a warning. Lights and the camera's movement stay in the scene. `tilesets` maps each asset id to
+// { source, tiles, haze }: its .tsx relative to the map, its tile count, and its hazed copies, [{ amount, source }],
+// which have the same tiles. Returns { text, warnings }.
 export function tiledMap(scene, draws, { tilesets }) {
-  const warnings = [], ids = Object.keys(scene.assets), first = {};
+  const warnings = [], ids = Object.keys(scene.assets), first = {}, hazedFirst = {}, listed = [];
   let next = 1;
-  for (const id of ids) { first[id] = next; next += tilesets[id].tiles; }
+  for (const id of ids) { first[id] = next; listed.push([next, tilesets[id].source]); next += tilesets[id].tiles; }
+  for (const id of ids) for (const { amount, source } of tilesets[id].haze ?? []) {
+    (hazedFirst[id] ??= new Map()).set(amount, next);
+    listed.push([next, source]);
+    next += tilesets[id].tiles;
+  }
   const project = id => scene.assets[id].recipe;
+  const label = i => scene.instances[i].name ?? scene.instances[i].asset;
+  // A placement's plane: its own parallax, or its target's when it is attached.
+  const parallaxOf = i => scene.instances[scene.instances[i].attach?.index ?? i].parallax;
   // Tilemaps a tile layer can hold, on the grid of the first of them.
   const fits = i => {
     const instance = scene.instances[i], map = instance.tilemap;
@@ -184,48 +200,62 @@ export function tiledMap(scene, draws, { tilesets }) {
     const at = map.cells.map(cell => [(cell.x + half[0]) / grid[0], (cell.y + half[1]) / grid[1]]);
     if (at.some(([c, r]) => !Number.isInteger(c) || !Number.isInteger(r)) || new Set(at.map(p => p.join())).size !== at.length) continue;
     // Where its first cell's tile is drawn from, as Tiled draws it: whole cells of that move its cells along the map, and
-    // the rest is the layer's offset (all of it for a map reaching left of or above the scene, whose cells stay).
+    // the rest is the layer's offset (all of it for a map reaching left of or above the scene, whose cells stay). A rule's
+    // `offset` may draw a cell left of or above the map's own first cell; the cells move on until none is before the
+    // map's first row or column, and the offset takes them back (a cell at row -1 threw, one at column -1 was lost).
     const origin = [instance.at[0] - instance.anchor[0] - half[0], instance.at[1] - instance.anchor[1] - half[1] + project(instance.asset).height - grid[1]];
-    const move = origin.map((o, axis) => Math.max(0, Math.ceil(o / grid[axis])));
+    const move = origin.map((o, axis) => Math.max(0, Math.ceil(o / grid[axis]), -Math.min(...at.map(p => p[axis]))));
     placed.set(i, { at: at.map(([c, r]) => [c + move[0], r + move[1]]), offset: origin.map((o, axis) => o - move[axis] * grid[axis]) });
   }
-  const layers = [], shaded = new Set(), hazed = new Set(), label = i => scene.instances[i].name ?? scene.instances[i].asset;
+  // A draw's tile, from its asset's hazed tileset when it is hazed.
+  const unbaked = new Set();
+  const gid = draw => {
+    const hazed = draw.haze ? hazedFirst[draw.asset]?.get(draw.haze) : undefined;
+    if (draw.haze && hazed === undefined) unbaked.add(label(draw.instance));
+    return (hazed ?? first[draw.asset]) + draw.frame;
+  };
+  const layers = [], shaded = new Set();
   let current = null;
   for (const draw of draws) {
     if (draw.shade) { shaded.add(label(draw.instance)); continue; }
-    if (draw.haze) hazed.add(label(draw.instance));
+    const parallax = parallaxOf(draw.instance);
     if (draw.cell !== undefined && placed.has(draw.instance)) {
-      if (current?.tiles !== draw.instance) layers.push(current = { tiles: draw.instance, cells: [] });
+      if (current?.tiles !== draw.instance) layers.push(current = { tiles: draw.instance, cells: [], parallax });
       current.cells.push(draw);
     } else {
-      if (!current?.objects) layers.push(current = { objects: [] });
+      if (!current?.objects || current.parallax[0] !== parallax[0] || current.parallax[1] !== parallax[1]) layers.push(current = { objects: [], parallax });
       current.objects.push(draw);
     }
   }
   if (shaded.size) warnings.push(`${[...shaded].join(', ')}: left out: a shade placement darkens what is drawn under it, which a Tiled map can't`);
-  if (hazed.size) warnings.push(`${[...hazed].join(', ')}: drawn without haze, which a Tiled map has no way to give`);
-  const size = [0, 1].map(axis => Math.max(1, Math.ceil([scene.width, scene.height][axis] / grid[axis]), ...[...placed.values()].flatMap(({ at }) => at.map(p => p[axis] + 1))));
+  // With a camera the scene is larger than its view, and tile objects reach as far right and down as they are drawn;
+  // without one, what is drawn past the scene's edge is clipped, and the map is the scene.
+  const reach = !scene.camera ? [] : layers.flatMap(layer => layer.objects ?? []).map(draw => { const { width, height } = project(draw.asset); return [draw.x + draw.shift[0] + width * draw.scale, draw.y + draw.shift[1] + height * draw.scale]; });
+  const size = [0, 1].map(axis => Math.max(1, Math.ceil([scene.width, scene.height][axis] / grid[axis]), ...[...placed.values()].flatMap(({ at }) => at.map(p => p[axis] + 1)), ...reach.map(r => Math.ceil(r[axis] / grid[axis]))));
   const [r, g, b, a] = scene.background, colour = `#${(a === 255 ? [r, g, b] : [a, r, g, b]).map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+  // Tiled writes each factor that isn't 1.
+  const parallax = ([x, y]) => `${x !== 1 ? ` parallaxx="${number(x)}"` : ''}${y !== 1 ? ` parallaxy="${number(y)}"` : ''}`;
   const body = [];
   let objects = 0;
   layers.forEach((layer, k) => {
     if (layer.tiles !== undefined) {
       const i = layer.tiles, { at, offset } = placed.get(i), cells = Array.from({ length: size[1] }, () => Array(size[0]).fill(0));
-      for (const draw of layer.cells) { const [c, row] = at[draw.cell]; cells[row][c] = first[draw.asset] + draw.frame; }
-      body.push(` <layer id="${k + 1}" name="${xml(label(i))}" width="${size[0]}" height="${size[1]}"${offset[0] || offset[1] ? ` offsetx="${offset[0]}" offsety="${offset[1]}"` : ''}>`,
+      for (const draw of layer.cells) { const [c, row] = at[draw.cell]; cells[row][c] = gid(draw); }
+      body.push(` <layer id="${k + 1}" name="${xml(label(i))}" width="${size[0]}" height="${size[1]}"${offset[0] || offset[1] ? ` offsetx="${offset[0]}" offsety="${offset[1]}"` : ''}${parallax(layer.parallax)}>`,
         '  <data encoding="csv">', cells.map(row => row.join(',')).join(',\n'), '</data>', ' </layer>');
       return;
     }
     const names = [...new Set(layer.objects.map(draw => label(draw.instance)))];
-    body.push(` <objectgroup draworder="index" id="${k + 1}" name="${xml(names.length > 4 ? `${names.slice(0, 4).join(', ')}, …` : names.join(', '))}">`);
+    body.push(` <objectgroup draworder="index" id="${k + 1}" name="${xml(names.length > 4 ? `${names.slice(0, 4).join(', ')}, …` : names.join(', '))}"${parallax(layer.parallax)}>`);
     for (const draw of layer.objects) {
       const { width, height } = project(draw.asset), w = width * draw.scale, h = height * draw.scale, x = draw.x + draw.shift[0], y = draw.y + draw.shift[1];
-      body.push(`  <object id="${++objects}" name="${xml(label(draw.instance))}" gid="${first[draw.asset] + draw.frame}" x="${x}" y="${y + h}" width="${w}" height="${h}"/>`);
+      body.push(`  <object id="${++objects}" name="${xml(label(draw.instance))}" gid="${gid(draw)}" x="${x}" y="${y + h}" width="${w}" height="${h}"/>`);
     }
     body.push(' </objectgroup>');
   });
+  if (unbaked.size) warnings.push(`${[...unbaked].join(', ')}: drawn without haze: no hazed tileset was given for it`);
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>',
     `<map version="${TILED_FORMAT}" orientation="orthogonal" renderorder="right-down" width="${size[0]}" height="${size[1]}" tilewidth="${grid[0]}" tileheight="${grid[1]}" infinite="0" backgroundcolor="${colour}" nextlayerid="${layers.length + 1}" nextobjectid="${objects + 1}">`,
-    ...ids.map(id => ` <tileset firstgid="${first[id]}" source="${xml(tilesets[id].source)}"/>`), ...body, '</map>', ''];
+    ...listed.map(([firstgid, source]) => ` <tileset firstgid="${firstgid}" source="${xml(source)}"/>`), ...body, '</map>', ''];
   return { text: lines.join('\n'), warnings };
 }

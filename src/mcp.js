@@ -14,18 +14,20 @@ import { shareLink } from './share.js';
 import { animationGIF } from './gif.js';
 import { readExpect, checkDelivery } from './check.js';
 import { createSequence, createSceneSequence, createBodiesSequence, figuresSummary, frameGrid } from './sequence.js';
-import { compilePoses, compileAutotile, compileNormals } from './authoring.js';
+import { compilePoses, draftViews, compileAutotile, compileNormals } from './authoring.js';
 import { testMapScale } from './terrain.js';
 import { compileEffects } from './fx.js';
 import { compileFluid } from './fluid.js';
 import { compileWaves } from './wave.js';
+import { compileCrystals } from './crystal.js';
+import { compilePowder } from './powder.js';
 import { compileBodies } from './bodies.js';
 import { prepareScene, renderScene, sceneImage } from './scene.js';
 import { createSceneBundle } from './scene-export.js';
 import { importPNG } from './import.js';
 import { applyOverlay } from './overlays.js';
 import { resolveReferences, assertInside } from './resolve.js';
-import { listPresets, findPreset, loadPreset, compilePreset, presetNext } from './presets.js';
+import { listPresets, briefListing, findPreset, loadPreset, compilePreset, presetNext } from './presets.js';
 import { TOPICS, SECTIONED, helpText, jsonTopic } from './help.js';
 
 const versions = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
@@ -40,8 +42,9 @@ function viewSummary({ sheet: { data, ...sheet }, nativeSheet, grids, legend, ..
 function gridText({ region, legend, grids }) {
   const label = String(region.y + region.h - 1).length, xs = Array.from({ length: region.w }, (_, i) => region.x + i);
   const rulers = [100, 10, 1].filter(p => p === 1 || xs.at(-1) >= p).map(p => ' '.repeat(label + 2) + xs.map(x => (x >= p || p === 1 ? Math.floor(x / p) % 10 : ' ')).join(''));
-  const lines = [`Palette-key grids for x ${region.x}–${region.x + region.w - 1}, y ${region.y}–${region.y + region.h - 1}. "." is transparent.`];
-  for (const [symbol, entry] of Object.entries(legend)) lines.push(symbol === '?' ? `? = ${entry.colors} more colors without a symbol` : `${symbol} = ${entry.palette ? `palette "${entry.palette}" ${entry.color}` : `${entry.color}, not in the palette`}`);
+  const parts = Object.values(legend).some(entry => entry.part !== undefined);
+  const lines = [`${parts ? 'Part' : 'Palette'}-key grids for x ${region.x}–${region.x + region.w - 1}, y ${region.y}–${region.y + region.h - 1}. "." is ${parts ? 'empty' : 'transparent'}.`];
+  for (const [symbol, entry] of Object.entries(legend)) lines.push(entry.part !== undefined ? `${symbol} = ${entry.part} ${entry.color}` : symbol === '?' ? `? = ${entry.colors} more colors without a symbol` : `${symbol} = ${entry.palette ? `palette "${entry.palette}" ${entry.color}` : `${entry.color}, not in the palette`}`);
   for (const { frame, rows } of grids) lines.push('', frame, ...rulers, ...rows.map((row, y) => `${String(region.y + y).padStart(label)}  ${row}`));
   return lines.join('\n');
 }
@@ -82,7 +85,7 @@ export function parseTextArguments(args, properties) {
 }
 // pixel_help returns the short quick start by default; each topic is one longer document, read only when needed
 // (help.js, which `pixelbolt help <topic>` shares).
-const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
+const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
 
 const sequenceSummary = info => ({ directory: 'sequence', pattern: info.pattern, first: info.first, frames: info.frames, fps: info.fps.label, seconds: info.seconds, width: info.width, height: info.height, alpha: info.alpha, placement: info.placement, loop: info.loop, notes: info.notes, ffmpeg: info.commands });
 // An MCP call writes at most this much sequence: the studio's download cap. Longer or larger shots go through
@@ -349,7 +352,12 @@ export function createToolRunner({ directory, root, version }) {
         // Markdown topics come back as written (the guide and workflow with their sections listed first); JSON ones without the files' indentation.
         if (args.topic !== undefined && !TOPICS.includes(args.topic)) throw new PixelError('topic', `expected one of ${TOPICS.join(', ')}`);
         if (args.name !== undefined && args.topic !== 'preset' && !SECTIONED.has(args.topic)) throw new PixelError('name', 'name goes with topic "preset" (the preset whose source to return) or "guide" and "workflow" (the section to return)');
-        if (args.topic === 'presets') return { content: [textContent(await listPresets({ cache: path.join(path.resolve(directory), '.presets') }))] };
+        if (args.full !== undefined && typeof args.full !== 'boolean') throw new PixelError('full', 'expected a boolean');
+        if (args.full !== undefined && args.topic !== 'presets') throw new PixelError('full', 'full goes with topic "presets" (every preset\'s file and animations)');
+        if (args.topic === 'presets') {
+          const listing = await listPresets({ cache: path.join(path.resolve(directory), '.presets') });
+          return { content: [textContent(args.full ? listing : briefListing(listing))] };
+        }
         if (args.topic === 'preset') {
           const entry = await findPreset(args.name, 'name'), { source, inlined } = await loadPreset(entry);
           return { content: [textContent({ name: entry.name, file: `examples/${entry.file}`, ...(inlined.length && { inlined }), next: presetNext(entry), source })] };
@@ -367,7 +375,7 @@ export function createToolRunner({ directory, root, version }) {
           const input = await resolveReferences(poseSource, { baseDir: root, root });
           ({ recipe, metadata, warnings: poseWarnings = [] } = compilePoses(input.document)); resolved = sources = relativeToRoot(input.files);
         } else ({ recipe, resolved, sources } = await recipeFrom(spec, revision));
-        const project = renderProject(recipe, layers === undefined ? {} : { layers });
+        const project = renderProject(recipe, { ...(layers !== undefined && { layers }), ...(inspection.view === 'parts' && { owners: true }) });
         let view;
         if (inspection.view === 'motion') {
           if (layers !== undefined || reference !== undefined) throw new PixelError('arguments', 'motion review uses the complete animation; omit layers and reference');
@@ -445,7 +453,15 @@ export function createToolRunner({ directory, root, version }) {
         const referenced = [], { document, files: sourceFiles } = args.preset !== undefined ? { document: (await loadPreset(await findPreset(args.preset))).source, files: [] }
           : await resolveReferences(args.source, { baseDir: root, root, revisions: id => { referenced.push(id); return read(id); } });
         const format = document?.format;
-        if (args.preset === undefined && !Object.hasOwn(COMPILERS, format ?? '')) throw new PixelError('source.format', 'expected pixelforge-poses, pixelforge-autotile, pixelforge-fx, pixelforge-fluid, pixelforge-wave, pixelforge-bodies or pixelforge-normals');
+        if (args.preset === undefined && !Object.hasOwn(COMPILERS, format ?? '')) throw new PixelError('source.format', 'expected pixelforge-poses, pixelforge-autotile, pixelforge-fx, pixelforge-fluid, pixelforge-wave, pixelforge-crystal, pixelforge-powder, pixelforge-bodies or pixelforge-normals');
+        // Drafts of turned grid parts to correct and paste into the source's views; nothing is compiled or kept.
+        if (args.draftViews !== undefined) {
+          if (format !== 'pixelforge-poses') throw new PixelError('draftViews', 'draft views turn grid parts of a pixelforge-poses source');
+          if (args.metadata !== undefined || args.sequence !== undefined) throw new PixelError('draftViews', 'draftViews replaces compiling; leave out metadata and sequence');
+          // A sheet too large to draw is left out, saying why; the drafts come back either way.
+          const { drafts, sheet, noSheet } = draftViews(document, args.draftViews);
+          return { content: [textContent({ ok: true, drafts, sheet: sheet ? 'one row per draft: the flat drawing, the turn the compiler draws today without a view, the draft, and any drawn view used at that angle; the anchor is outlined in magenta, named points in cyan' : `not drawn: ${noSheet}`, next: 'Drafts, not art: correct the rows of each by eye, then add the view to parts.<name>.views in your source. A view is drawn within 22.5° of its key. Nothing was written.' }), ...(sheet ? [imageContent(sheet)] : [])] };
+        }
         // A bodies match written as numbered video frames, stepped frame after frame, so it may run past 256 frames.
         if (args.sequence !== undefined) {
           if (format !== 'pixelforge-bodies') throw new PixelError('sequence', 'pixel_compile writes video frames for a pixelforge-bodies match; for other sources compile, then pixel_render with sequence');
@@ -470,7 +486,9 @@ export function createToolRunner({ directory, root, version }) {
         if (args.export === true) {
           const bundle = await createSceneBundle(document), out = await newFolder(document.name);
           if (frames) { await writeBundle(frames, path.join(out, 'sequence')); summary.sequence = sequenceSummary(frames.info); }
-          Object.assign(summary, { directory: out, ...outputSummary(out, await writeBundle(bundle, out), false), playback: path.join(out, 'preview.html') });
+          // The export's own warnings too (a shade placement left out of the planes, a tile set Godot or Tiled can't
+          // take), each once.
+          Object.assign(summary, { directory: out, ...outputSummary(out, await writeBundle(bundle, out), false), playback: path.join(out, 'preview.html'), warnings: [...new Set([...frame.warnings, ...bundle.warnings])] });
         }
         return { content: [textContent(summary), imageContent(image)], ...(preview && preview({ width: frame.width, height: frame.height, frames: [{ name: document.name, duration: 100, data: sceneImage(frame, { mode: args.view ?? 'color', guides: args.guides }).data }], animations: {} })) };
       } else if (name === 'pixel_import') {
@@ -578,7 +596,7 @@ export async function startMCP({ directory = 'output', root = process.cwd(), inp
     grid: { type: 'boolean', description: 'Also return palette-key text grids with x/y rulers (at most 16,384 pixels).' },
     scale: { type: 'integer', minimum: 1, maximum: 16, description: 'Contact sheet scale. Default: the largest that fits about 1024 px.' },
     background: { type: 'string', description: 'checker (default), transparent, a palette name or a hex color.' },
-    view: { enum: ['color', 'silhouette', 'grayscale', 'onion', 'tile', 'motion'], description: 'onion and motion need animation; motion reports foot slide, ground error and loop joins (source or metadata adds contacts); tile repeats each frame 3x3.' },
+    view: { enum: ['color', 'silhouette', 'grayscale', 'onion', 'tile', 'parts', 'motion'], description: 'onion and motion need animation; motion reports foot slide, ground error and loop joins and traces limb arcs (source or metadata adds contacts); parts colours each pixel by the layer or pose part that drew it; tile repeats each frame 3x3.' },
     native: { type: 'boolean', description: 'Also return a 1x contact sheet.' },
     diagnostics: { type: 'boolean', description: 'Advisory evidence: duplicate and empty frames, stray pixels, palette, loop joins, timing, cleanup counts.' },
     maxCells: { type: 'integer', minimum: 1, maximum: 256, description: 'Show at most this many evenly spaced cells; step and offset pick positions instead.' },
@@ -602,12 +620,12 @@ export async function startMCP({ directory = 'output', root = process.cwd(), inp
     overlay: { type: 'object', description: 'A saved pixelforge-overlay to apply instead of changes.' }
   } };
   const tools = [
-    { name: 'pixel_help', description: 'Start here before drawing pixel art, sprites, tiles, icons, effects or animations. Returns a short quick start: the recipe format, the operations, the tools and the workflow. Pass a topic only when you need more: presets (ready-made fire, smoke, explosions, spells, characters and more to compile instead of drawing), preset with name (one preset\'s source), guide (the full authoring reference and every tool option), workflow (art workflow: poses, scenes, particles, fluids, lighting; both list their sections, and name returns one), schema (the recipe JSON Schema), example (a complete recipe), or poses, scenes, autotile, fx, fluid, wave, bodies or normals for those source formats\' schemas.', inputSchema: { type: 'object', properties: { topic: { enum: TOPICS }, name: { type: 'string', description: 'With topic preset: which one; with guide or workflow: a section heading.' } }, additionalProperties: false }, annotations: { title: 'Pixelbolt guide and schema', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    { name: 'pixel_help', description: 'Start here before drawing pixel art, sprites, tiles, icons, effects or animations. Returns a short quick start: the recipe format, the operations, the tools and the workflow. Pass a topic only when you need more: presets (ready-made fire, smoke, explosions, spells, characters and more to compile instead of drawing, a line each; full: true adds their animations), preset with name (one preset\'s source), guide (the full authoring reference and every tool option), workflow (art workflow: poses, scenes, particles, fluids, lighting; both list their sections, and name returns one), schema (the recipe JSON Schema), example (a complete recipe), or poses, scenes, autotile, fx, fluid, wave, crystal, bodies or normals for those source formats\' schemas.', inputSchema: { type: 'object', properties: { topic: { enum: TOPICS }, name: { type: 'string', description: 'With topic preset: which one; with guide or workflow: a section heading.' }, full: { type: 'boolean', description: 'With topic presets: each preset\'s file and animations too.' } }, additionalProperties: false }, annotations: { title: 'Pixelbolt guide and schema', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: 'pixel_validate', description: 'Check a pixel art recipe for mistakes before inspecting or exporting it. Returns its revision id, size, frame timing, animations and clipping, without images or files.', inputSchema: validateInput, annotations: { title: 'Validate a pixel art recipe', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: 'pixel_inspect', description: 'Look at pixel art, a sprite or an animation frame by frame to check how it looks, without exporting. Returns a PNG contact sheet of every frame (or the chosen frames, or one animation in playback order) with each cell\'s name and duration. grid: true adds palette-key text grids for exact pixels, region zooms in, and view picks a tile, onion or motion review. Use this while iterating; call pixel_render to export.', inputSchema: inspectInput, annotations: { title: 'Inspect pixel art frames', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: 'pixel_patch', description: 'Fix or tweak pixel art (one pixel, a colour, a frame or its timing) without redrawing it. Pass revision or project plus changes applied in order, such as {"set": "frames[blink].duration", "value": 120} or {"paint": "frames[blink]", "value": [{"x": 9, "y": 7, "color": "k"}]}; other paths look like palette.k or frames[blink].layers[body].ops[2].x2. The patch is atomic and must validate. Returns the new revision, every frame whose pixels changed and a before/after PNG.', inputSchema: patchInput, annotations: { title: 'Patch pixel art', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: 'pixel_render', description: 'Export pixel art as game-ready files: sprite sheet, sprites, animations, GIFs or frames for a video. Writes a PNG sheet, atlas JSON, Godot 4 SpriteFrames (and, for an autotile set, a Godot TileSet and a Tiled tileset), frame PNGs, APNGs, CSS and a Canvas player to a new folder in the export directory, and returns the key files, a check of what was delivered and a contact sheet. Pass expect with what the user asked for, then fix every problem the check lists before handing the files on. Pass saveAs to also write files where the user asked.', inputSchema: renderInput, annotations: { title: 'Export pixel art files', readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false } },
-    { name: 'pixel_compile', description: 'Build a character animation from parts (with idle, walk, run, jump, attack and hurt templates, squash and tweens), a terrain tileset, particle effects (sparks, embers, dust, a sprite dissolving or teleporting away pixel by pixel) and spell shapes (slashes, shockwave rings, beams, lightning, magic circles, impact stars, fireballs, cel water streams and drops, auras hugging a sprite, smears trailing a sword tip), simulated smoke, fire, explosions, steam, magic swirls, water (splashes, waterfalls, drips, bubbling potions) and thick liquids (honey, slime, mud), rigid bodies (balls and blocks that bounce, stack, topple and rest), coherent interference and portal loops, or a lighting normal map. Compiles the source into an ordinary recipe revision and returns a contact sheet; metadata: true adds pose joints, contacts and timing, the autotile mask table, particle counts, fluid figures, wave counts, body paths or normal directions.', inputSchema: { type: 'object', properties: { source: { type: 'object', description: 'A pixelforge-poses, pixelforge-autotile, pixelforge-fx, pixelforge-fluid, pixelforge-wave, pixelforge-bodies or pixelforge-normals document (see pixel_help topics). A normals source\'s recipe, or an fx symbol\'s {recipe, frame}, may be inline, a file under the server root or {"revision": id}.' }, preset: { type: 'string', description: 'Instead of source: a shipped preset by name, such as "smoke-puff" (pixel_help topic presets).' }, metadata: { type: 'boolean' }, sequence: { type: 'object', required: ['fps'], description: 'Bodies only: write numbered PNG video frames (pixel_render\'s sequence options, animation naming the effect) instead of a recipe; a match may run past 256 frames.' } }, additionalProperties: false }, annotations: { title: 'Compile poses, tilesets, effects or fluids', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
+    { name: 'pixel_compile', description: 'Build a character animation from parts (bipeds and four-legged animals, with idle, walk, trot, run, jump, attack and hurt templates, squash and tweens), a terrain tileset, particle effects (sparks, embers, dust, a sprite dissolving or teleporting away pixel by pixel) and spell shapes (slashes, shockwave rings, beams, lightning, magic circles, impact stars, fireballs, cel water streams and drops, auras hugging a sprite, smears trailing a sword tip), simulated smoke, fire, explosions, steam, magic swirls, water (splashes, waterfalls, drips, bubbling potions) and thick liquids (honey, slime, mud), rigid bodies (balls and blocks that bounce, stack, topple and rest), growing crystals (quartz clusters, geodes, cubes, snowflakes), falling-sand sandboxes (burning, collapse, lava meeting water, blasts), coherent interference and portal loops, or a lighting normal map. Compiles the source into an ordinary recipe revision and returns a contact sheet; metadata: true adds pose joints, contacts and timing, the autotile mask table, particle counts, fluid figures, wave counts, crystal counts, body paths or normal directions.', inputSchema: { type: 'object', properties: { source: { type: 'object', description: 'A pixelforge-poses, pixelforge-autotile, pixelforge-fx, pixelforge-fluid, pixelforge-wave, pixelforge-crystal, pixelforge-powder, pixelforge-bodies or pixelforge-normals document (see pixel_help topics). A normals source\'s recipe, or an fx symbol\'s {recipe, frame}, may be inline, a file under the server root or {"revision": id}.' }, preset: { type: 'string', description: 'Instead of source: a shipped preset by name, such as "smoke-puff" (pixel_help topic presets).' }, metadata: { type: 'boolean' }, draftViews: { type: 'object', additionalProperties: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 359 }, maxItems: 16 }, description: 'Poses only, instead of compiling: draft grid parts turned to these angles, {"boot": [30, 330]}, as views to correct and paste into parts.<name>.views, with a comparison sheet.' }, sequence: { type: 'object', required: ['fps'], description: 'Bodies only: write numbered PNG video frames (pixel_render\'s sequence options, animation naming the effect) instead of a recipe; a match may run past 256 frames.' } }, additionalProperties: false }, annotations: { title: 'Compile poses, tilesets, effects or fluids', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } },
     { name: 'pixel_scene', description: 'Compose a pixel art scene or room from sprites, tilemaps and lighting. Renders a pixelforge-scene manifest (placements, autotiled tilemaps, cues, motion, ground sorting, camera and parallax, haze, lights and shadows; pixel_help topic scenes) at a time in milliseconds and returns the image, placements, lights and warnings. Assets may be inline recipes, files under the server root or {"revision": id}. view: depth shows who covers whom; export: true writes a replayable scene bundle.', inputSchema: { type: 'object', properties: { scene: { type: 'object' }, time: { type: 'integer', minimum: 0, maximum: 60000 }, lit: { type: 'boolean' }, density: { type: 'boolean' }, view: { enum: ['color', 'grayscale', 'depth'] }, guides, scale: { type: 'integer', minimum: 1, maximum: 8 }, export: { type: 'boolean' }, sequence: { type: 'object', required: ['fps'], description: 'Also write numbered PNG frames for a video editor: pixel_render\'s sequence options, without animation and step.' } }, required: ['scene'], additionalProperties: false }, annotations: { title: 'Compose a pixel art scene', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } },
     { name: 'pixel_import', description: 'Turn existing pixel art or a sprite sheet PNG into an editable recipe. Import a native-resolution PNG (RGB, RGBA, greyscale or indexed, up to 8 bits per channel; optionally sliced by an unscaled atlas) as an editable recipe without changing any pixel. Pass data (base64 PNG) or path (inside the server root). Saves the recipe as a revision.', inputSchema: { type: 'object', properties: { data: { type: 'string', description: 'Base64 PNG bytes.' }, path: { type: 'string', description: 'PNG file path relative to the server root.' }, name: { type: 'string' }, atlas: { type: 'object' } }, additionalProperties: false }, annotations: { title: 'Import a PNG as a recipe', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false } }
   ];

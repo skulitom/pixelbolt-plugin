@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Pixelbolt · Powder lab</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/studio.css">
+  <link rel="stylesheet" href="/fluid.css">
+  <link rel="stylesheet" href="/powder.css">
+  <script type="module" src="/powder-lab.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/" aria-label="Pixelbolt studio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h12v3h4v12h-4v3H4z" fill="currentColor"/><path d="M8 7h7v3h3v4h-7v4H8z" fill="#eef6e9"/></svg><span>Pixelbolt</span><span class="edition">Powder lab</span></a>
+    <div class="header-actions"><span class="local"><i></i> Simulated in this browser</span><a class="button quiet" href="/fluid.html">Fluid lab</a><a class="button quiet" href="/">Sprite studio</a></div>
+  </header>
+  <div class="fluid-workspace">
+    <aside class="fluid-presets" aria-label="Scenes">
+      <div class="section-heading"><h2>Scenes</h2><span id="scene-count"></span></div>
+      <p class="aside-description">Every pixel is one material. Sand piles, water levels, heat burns, melts and boils, and smoke rides the air.</p>
+      <div id="scenes" class="examples"></div>
+    </aside>
+    <main class="fluid-stage">
+      <div class="project-heading"><div><div class="project-kicker" id="kind">Falling sand · live</div><h1 id="name">Loading</h1></div><span id="size" class="dimension-badge"></span></div>
+      <div class="fluid-preview powder-preview" id="preview">
+        <div class="powder-canvas" id="canvas-wrap"><canvas id="canvas" width="1" height="1" aria-label="Falling-sand grid: drag to paint with the chosen brush"></canvas><canvas id="overlay" width="1" height="1" aria-hidden="true"></canvas></div>
+      </div>
+      <div class="fluid-playback">
+        <button id="play" class="play-button" aria-label="Pause simulation">Ⅱ</button>
+        <button id="step" class="button quiet powder-small" aria-label="Step one frame">Step</button>
+        <button id="stop-replay" class="button quiet powder-small" hidden>Stop replay</button>
+        <span id="frame" class="timing">Frame 0</span>
+        <label>Display <select id="scale"><option value="fit" selected>Fit</option><option>1</option><option>2</option><option>3</option><option>4</option><option>6</option><option>8</option></select></label>
+        <button id="restart" class="text-button">Restart</button>
+      </div>
+      <p id="readout" class="powder-readout">Point at the grid to read a cell.</p>
+      <p id="status" class="fluid-status">Loading…</p>
+      <p id="notice" class="powder-notice" role="status" hidden></p>
+      <p id="error" class="error" role="alert" hidden></p>
+    </main>
+    <aside class="fluid-controls" aria-label="Brush, sharing and downloads">
+      <div class="section-heading"><h2>Brush</h2><span id="brush-name"></span></div>
+      <p class="powder-group-label" id="materials-label">Materials</p>
+      <div id="materials" class="powder-palette" role="group" aria-labelledby="materials-label"></div>
+      <p class="powder-group-label" id="tools-label">Tools</p>
+      <div id="tools" class="powder-palette" role="group" aria-labelledby="tools-label"></div>
+      <div class="fluid-sliders powder-sliders">
+        <label><span>Brush size</span><output id="radius-out" for="radius">4</output><input id="radius" type="range" min="1" max="16" step="1" value="4"></label>
+        <label><span>Spray (powders, liquids and gases)</span><output id="spray-out" for="spray">35%</output><input id="spray" type="range" min="5" max="100" step="5" value="35"></label>
+      </div>
+      <p class="frames-call-label">Your last stroke, as a live call (<code>createLivePowder</code>) and as a scripted input for a source's <code>inputs</code>, on frame 0 of a fresh run:</p>
+      <pre id="stroke">Paint on the grid to see it here.</pre>
+
+      <div class="section-heading powder-section"><h2>Share</h2><span id="recorded"></span></div>
+      <p class="aside-description">A link replays every stroke on the frame it was made, so whoever opens it sees the same pixels.</p>
+      <div class="fluid-downloads powder-share"><button id="link" class="button primary">Copy replay link</button></div>
+      <label class="powder-link-label"><span class="sr-only">Replay link</span><input id="link-text" class="powder-link" type="text" readonly placeholder="The link appears here" aria-label="Replay link"></label>
+
+      <div class="section-heading powder-section"><h2>Bake</h2></div>
+      <p class="aside-description" id="bake-note">The scene's own clip, compiled here exactly as the command line compiles it. Your strokes are not part of it.</p>
+      <div class="fluid-downloads">
+        <button id="gif" class="button primary">Download GIF</button>
+        <button id="recipe" class="button quiet">Recipe JSON</button>
+        <button id="powder-source" class="button quiet">Powder source</button>
+      </div>
+      <p class="frames-call-label">The same from the command line, with the downloaded source:</p>
+      <pre id="cli"></pre>
+      <p class="frames-call-label">Or from an agent through MCP:</p>
+      <pre id="mcp"></pre>
+    </aside>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

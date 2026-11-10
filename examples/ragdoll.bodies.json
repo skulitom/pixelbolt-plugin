@@ -1,0 +1,72 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "ragdoll",
+  "width": 96,
+  "height": 64,
+  "palette": {
+    "k": "#14141c",
+    "s": "#4a5068",
+    "f": "#6f7896",
+    "w": "#e8e4d8",
+    "c": "#3a6ea5",
+    "d": "#27496d",
+    "r": "#c0392b"
+  },
+  "symbols": {
+    "ground": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+    ]
+  },
+  "effects": {
+    "ragdoll": {
+      "frames": 64,
+      "duration": 40,
+      "gravity": [0, 0.18],
+      "walls": ["left", "right"],
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 60 }],
+      "bodies": [
+        { "name": "head", "shape": "box", "size": [8, 8], "at": [44, 14], "density": 1, "fill": "w", "outline": "k" },
+        {
+          "name": "torso",
+          "shape": "box",
+          "size": [10, 14],
+          "at": [44, 26],
+          "density": 1.4,
+          "fill": "c",
+          "outline": "k"
+        },
+        {
+          "name": "arm-L",
+          "shape": "box",
+          "size": [4, 12],
+          "at": [35, 24],
+          "density": 0.8,
+          "fill": "d",
+          "outline": "k"
+        },
+        {
+          "name": "arm-R",
+          "shape": "box",
+          "size": [4, 12],
+          "at": [53, 24],
+          "density": 0.8,
+          "fill": "d",
+          "outline": "k"
+        },
+        { "name": "leg-L", "shape": "box", "size": [5, 14], "at": [40, 43], "density": 1, "fill": "r", "outline": "k" },
+        { "name": "leg-R", "shape": "box", "size": [5, 14], "at": [48, 43], "density": 1, "fill": "r", "outline": "k" }
+      ],
+      "joints": [
+        { "type": "hinge", "a": "head", "b": "torso", "anchorA": [0, 4], "anchorB": [0, -7] },
+        { "type": "hinge", "a": "torso", "b": "arm-L", "anchorA": [-5, -3], "anchorB": [0, -6] },
+        { "type": "hinge", "a": "torso", "b": "arm-R", "anchorA": [5, -3], "anchorB": [0, -6] },
+        { "type": "hinge", "a": "torso", "b": "leg-L", "anchorA": [-2, 7], "anchorB": [0, -7] },
+        { "type": "hinge", "a": "torso", "b": "leg-R", "anchorA": [2, 7], "anchorB": [0, -7] }
+      ]
+    }
+  }
+}

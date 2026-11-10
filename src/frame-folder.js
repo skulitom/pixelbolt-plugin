@@ -3,13 +3,14 @@
 // reported rather than guessed around.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PixelError, parseColor } from './core.js';
+import { PixelError, parseColor, fail } from './core.js';
 import { decodePNG } from './import.js';
 import { framesGIF } from './gif.js';
 import { parseFrameRate } from './sequence.js';
 
-const fail = (where, message) => { throw new PixelError(where, message); };
-const NUMBERED = /^(.*?)(\d{1,9})\.png$/i;
+// A number of up to 15 digits is exact as a JavaScript number. (Up to 9, frames numbered across a thousand million, as
+// millisecond timestamps are, were split into two sequences: the tenth digit was read as the end of the name.)
+const NUMBERED = /^(.*?)(\d{1,15})\.png$/i;
 
 // Picks the numbered frames from a list of file names: name_0001.png, name_0002.png, ... in number order. Names
 // that differ only by their number belong to one sequence; `prefix` chooses one when a folder holds several.

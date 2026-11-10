@@ -1,0 +1,104 @@
+{
+  "format": "pixelforge-scene",
+  "version": 1,
+  "name": "iso-glade",
+  "width": 208,
+  "height": 164,
+  "duration": 1320,
+  "background": "#1e2233",
+  "assets": { "tiles": { "recipe": "iso-tiles.json" }, "coin": { "recipe": "coin.json" } },
+  "instances": [
+    {
+      "name": "ground",
+      "at": [8, 54],
+      "asset": "tiles",
+      "tilemap": {
+        "layout": "iso",
+        "tile": [32, 16],
+        "rows": [
+          "gggggg",
+          "gggwwg",
+          "gggwwg",
+          "ssssgg",
+          "gggsgg",
+          "gggsgg"
+        ],
+        "legend": {
+          "g": { "frames": ["turf", "grass", "grass-tufts", "grass-flowers"], "weights": [5, 3, 1, 1] },
+          "s": { "frames": ["paver", "paver-worn"] },
+          "w": { "animations": ["water", "water-late"] }
+        },
+        "seed": 7
+      }
+    },
+    {
+      "name": "shadows",
+      "at": [8, 44],
+      "shade": -1,
+      "asset": "tiles",
+      "tilemap": {
+        "layout": "iso",
+        "tile": [32, 16],
+        "rows": [
+          "TtT...",
+          "T.r...",
+          "t....b",
+          "......",
+          "....cr",
+          "Tb...."
+        ],
+        "legend": {
+          "T": { "frame": "shadow" },
+          "c": { "frame": "shadow" },
+          "t": { "frame": "shadow-small" },
+          "b": { "frame": "shadow-small" },
+          "r": { "frame": "shadow-small" }
+        }
+      }
+    },
+    {
+      "name": "coin-shadow",
+      "asset": "tiles",
+      "frame": "shadow-small",
+      "at": [56, 76],
+      "anchor": [16, 56],
+      "shade": -1
+    },
+    {
+      "name": "things",
+      "at": [8, 44],
+      "sort": "ground",
+      "asset": "tiles",
+      "tilemap": {
+        "layout": "iso",
+        "tile": [32, 16],
+        "rows": [
+          "TtT.BS",
+          "T.r...",
+          "t....b",
+          "......",
+          "....cr",
+          "Tb...."
+        ],
+        "legend": {
+          "T": { "frame": "pine" },
+          "t": { "frame": "sapling" },
+          "b": { "frame": "bush" },
+          "r": { "frame": "rock" },
+          "c": { "frame": "crate" },
+          "B": { "frame": "block" },
+          "S": { "frame": "step" }
+        }
+      }
+    },
+    {
+      "name": "coin",
+      "asset": "coin",
+      "at": [56, 76],
+      "anchor": [12, 19],
+      "lift": 9,
+      "sort": "ground",
+      "animation": "spin"
+    }
+  ]
+}

@@ -6,8 +6,8 @@ import { createLivePowder, applyStroke, packStrokes, unpackStrokes, compilePowde
 import { renderProject } from '/core.js';
 import { animationGIF } from '/gif.js';
 import { POWDER_SCENES, SANDBOX_SOURCE, POWDER_TOOLS, brushInput, heldTool, callText, inputText, clipSteps, powderCommands, pixelDigest, fitReplayLink, checkReplay, readReplayLink, recordedText, replayLeft, sceneById, BLAST, REPLAY_FRAMES, PowderLinkError } from '/powder-controls.js';
+import { $, toast, download, playButton } from '/page.js';
 
-const $ = id => document.getElementById(id);
 const canvas = $('canvas'), context = canvas.getContext('2d'), overlay = $('overlay'), ink = overlay.getContext('2d');
 const STEP_MS = 1000 / 60, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // While paused, strokes wait for the next step; past this many the brush stops until a step (the grid queues 4,096).
@@ -15,16 +15,10 @@ const MOST_WAITING = 1024;
 const title = name => name.charAt(0).toUpperCase() + name.slice(1);
 let scene = null, source = null, table = {}, live = null, image = null, zoom = 1;
 let playing = !reducedMotion, clock = null, brush = 'sand', pointer = null, last = null, pressedAt = -1, hover = null, waiting = [];
-let stepMs = 0, drawMs = 0, statusAt = -Infinity, baked = null, version = 0, busy = false, stopping = false, toldFull = false, toastTimer;
+let stepMs = 0, drawMs = 0, statusAt = -Infinity, baked = null, version = 0, busy = false, stopping = false, toldFull = false;
 
-function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
 function notice(message) { $('notice').textContent = message ?? ''; $('notice').hidden = !message; }
 function failed(error) { $('error').textContent = error.message; $('error').hidden = false; }
-function download(data, filename, type) {
-  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
-  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
 // The table a source draws from: the starter table under a `base: "sandbox"` source's own materials.
 const materialsOf = value => (value.base === 'sandbox' ? { ...SANDBOX.materials, ...value.materials } : value.materials ?? {});
 const radius = () => Number($('radius').value), spray = () => Number($('spray').value) / 100;
@@ -172,7 +166,7 @@ function choose(id) {
 }
 
 // ---- Scenes and replays ----
-function playState() { $('play').textContent = playing ? 'Ⅱ' : '▶'; $('play').setAttribute('aria-label', playing ? 'Pause simulation' : 'Play simulation'); }
+const playState = () => playButton(playing, 'simulation');
 // While a scene opens, replays or bakes, everything that would change the scene waits; a replay has its own Stop.
 function setBusy(value) {
   busy = value;
@@ -324,11 +318,16 @@ $('scale').addEventListener('change', fit);
 window.addEventListener('resize', () => { if ($('scale').value === 'fit') fit(); });
 $('radius').addEventListener('input', () => { $('radius-out').value = $('radius').value; if (live) drawOverlay(); });
 $('spray').addEventListener('input', () => { $('spray-out').value = `${$('spray').value}%`; });
+// The link is made for the scene as it is at the click: its strokes, frame and pixels are taken before the first wait.
+// The link field and the notice belong to the open scene, which clears them as it opens, so a link that is ready only
+// after a scene has opened (or restarted) is not written there. It is still copied, since the clipboard is the
+// person's and the link is the one they asked for, and a toast says which it was.
 $('link').addEventListener('click', async () => {
   if (!live || busy) return;
+  const entry = scene, mine = version;
   try {
-    const made = await fitReplayLink(`${location.origin}${location.pathname}`, { scene: scene.id, strokes: live.strokes.slice(), frames: live.frame, digest: pixelDigest(live.render().rgba), recordedUntil: recordedUntil() }, packStrokes);
-    $('link-text').value = made.link;
+    const made = await fitReplayLink(`${location.origin}${location.pathname}`, { scene: entry.id, strokes: live.strokes.slice(), frames: live.frame, digest: pixelDigest(live.render().rgba), recordedUntil: recordedUntil() }, packStrokes);
+    if (mine === version) $('link-text').value = made.link;
     const copied = await navigator.clipboard.writeText(made.link).then(() => true, () => false);
     const what = `${made.kept.toLocaleString('en')} ${made.kept === 1 ? 'stroke' : 'strokes'} over ${made.frames.toLocaleString('en')} frames, ${made.link.length.toLocaleString('en')} characters`, end = made.frames.toLocaleString('en');
     const why = {
@@ -336,7 +335,10 @@ $('link').addEventListener('click', async () => {
       long: `: a link replays at most ${REPLAY_FRAMES.toLocaleString('en')} frames (two hours), so it stops at frame ${end}`,
       length: `: cut at a stroke to fit, so it stops at frame ${end}`
     }[made.cut] ?? '';
-    notice(`${copied ? 'Copied a link' : 'Made a link (select it to copy it)'} replaying ${what}${why}.`);
+    if (mine === version) notice(`${copied ? 'Copied a link' : 'Made a link (select it to copy it)'} replaying ${what}${why}.`);
+    else toast(copied
+      ? `Copied the ${entry.title} link you asked for, replaying ${what}${why}. A scene has opened since, so the link is not shown here.`
+      : `The ${entry.title} link you asked for could not be copied, and a scene has opened since, so it is not shown here.`);
   } catch (error) { toast(error.message); }
 });
 $('gif').addEventListener('click', async () => {

@@ -1,6 +1,6 @@
 # Pixelbolt quick start
 
-Pixelbolt turns a small JSON recipe into exact pixels: sprites, sprite sheets, tiles, icons, effects and short animations, exported as PNG, atlas JSON, APNG, GIF or numbered frames for video. It is local and deterministic, and no image model is involved. You write the recipe, look at what it draws, fix it with small patches, then export. This page covers most tasks. Call `pixel_help` with a `topic` only when you need more (see the last section).
+Pixelbolt turns a small JSON recipe into exact pixels: sprites, sprite sheets, tiles, icons, effects and short animations, exported as PNG, atlas JSON, APNG, GIF or numbered frames for video. It is local and deterministic, and no image model is involved. You write the recipe, look at what it draws, fix it with small patches, then export. This page covers most tasks; the last section lists the longer references for when you need more.
 
 ## A complete recipe
 
@@ -30,7 +30,7 @@ Pixelbolt turns a small JSON recipe into exact pixels: sprites, sprite sheets, t
 
 - Required: `version: 1`, `name`, `width` and `height` (1–256; a single-frame still may be up to 4096 a side and 4,194,304 pixels), and `frames` (1–256). Names start with a letter, then letters, digits, `-` or `_`; frame and animation names are unique ignoring case.
 - `palette` maps keys to `#RGB`, `#RGBA`, `#RRGGBB`, `#RRGGBBAA` or `transparent`. Single-character keys draw in grid rows, where `.` and space leave pixels alone. A shared palette file is `{"$ref": "palette.json"}` (CLI, or MCP inside its root).
-- `symbols` are reusable grids that `stamp` draws. A frame is `{name, duration?, from?, translate?, flipX?, palette?, anchor?, points?, ops?, layers?, pixels?}`: `duration` in ms (default 100), `from` copies an earlier frame, a frame `palette` recolours keys for palette cycling, `layers` are `{name?, opacity?, x?, y?, palette?, sort?, ops}` (`sort: "ground"` draws them far to near by the row each operation stands on), and `pixels` are final `{x, y, color}` corrections.
+- `symbols` are reusable grids that `stamp` draws. A frame is `{name, duration?, from?, translate?, flipX?, palette?, anchor?, points?, ops?, layers?, pixels?}`: `duration` in ms (default 100), `from` copies an earlier frame as it was finally drawn (its `pixels` corrections too), a frame `palette` recolours keys for palette cycling, `layers` are `{name?, opacity?, x?, y?, palette?, sort?, ops}` (`sort: "ground"` draws them far to near by the row each operation stands on), and `pixels` are final `{x, y, color}` corrections.
 - `animations` map names to `{frames, direction?: forward | reverse | pingpong, loop?}`. Without them, one animation plays every frame.
 - `ramps` (optional) list palette keys from dark to light, one list per material, so `shade` and scene lighting move colours along them without leaving the palette.
 - Unknown fields are errors, and every error names its path, such as `project.frames[1].ops[0].rows[2]`. Broken operations are reported together, up to ten, in the reply's `errors`, so fix them all before validating again.
@@ -43,18 +43,37 @@ Coordinates are whole pixels from the top-left, and y points down. Shapes are ne
 
 ## The tools
 
-1. **`pixel_validate`** `{project}` checks a recipe without images and returns a `revision` id. Every tool that takes `project` also takes `revision`, so send the full recipe once and use the id afterwards. Revisions persist in the server's output folder.
-2. **`pixel_inspect`** returns a PNG contact sheet of every frame. Options: `animation` (playback order), `frames`, `region: {x, y, w, h}` to zoom, `grid: true` for exact palette-key rows with rulers, `view: silhouette | grayscale | onion | tile | parts` (parts colours each pixel by the part that drew it), `native: true`, `diagnostics: true` and `guides` (a horizon, vanishing points or an isometric grid drawn over the image).
-3. **`pixel_patch`** `{revision, changes}` edits in order and returns a before/after image listing every pixel that changed:
-   - `{"paint": "frames[blink]", "value": [{"x": 4, "y": 5, "color": "k"}]}` sets exact pixels after all layers (`transparent` erases).
-   - `{"grid": "frames[rest]", "value": {"x": 3, "y": 4, "rows": ["kk.", ".k."]}}` paints a small region; dots keep pixels.
-   - `{"set": "frames[up].duration", "value": 250}`, `{"insert": "frames[-]", "value": {...}}` and `{"remove": "animations.blink"}` edit the source by path.
-   - `recolor`, `move` and `cleanup` (proposed fixes for doubled corners and stray pixels) work on regions.
-4. **`pixel_render`** `{revision}` exports a new folder: sprite sheet, atlas, Godot 4 SpriteFrames (`.tres`), frames, APNG animations, CSS and a preview page. Add `gif: {}` for GIFs at the frames' own size (`gif: {scale: 8}` only to enlarge one for posting), or `sequence: {fps: 30, size: "1080p"}` for PNG frames for a video editor. Pass `expect` with what the user asked for (`{width, height, frames, colors, transparent, loop, gifScale}`; `frames` is what each animation plays, or per animation such as `{"idle": 4, "walk": 8}`): the reply's `check` lists every file that misses it and the call that fixes it. When the user named files, add `saveAs: {sheet: "assets/hero.png", gif: "assets/hero.gif"}` to write them there too (`godot: "assets/hero.tres"` for Godot, beside the sheet; an autotile set also has `tileset`).
-5. **`pixel_compile`** `{source}` builds an ordinary recipe from a source format: `pixelforge-fluid` (simulated fire, smoke, explosions, steam, magic, water, honey, slime), `pixelforge-wave` (looping interference and portals), `pixelforge-bodies` (balls and blocks that bounce, stack, topple and rest), `pixelforge-crystal` (crystals, geodes and snowflakes that grow and rest), `pixelforge-powder` (falling-sand sandboxes: burning, collapse, lava meeting water, blasts), `pixelforge-fx` (particles such as sparks and debris, and spell shapes: slashes, shockwave rings, beams, lightning, magic circles, impact stars, fireballs, cel water streams and drops; reviewed sources in `examples/*.fx.json`), `pixelforge-poses` (characters from parts and bones, with walk, run and attack templates), `pixelforge-autotile` (47- or 16-tile terrain sets, drawn from a `terrain` description; a second image shows every tile over a test map) or `pixelforge-normals` (a lighting normal pass). The matching topic has the format. `{preset: "smoke-puff"}` compiles a shipped preset instead (below).
-6. **`pixel_scene`** composes assets into a room with tilemaps, cues and lighting (`view: "depth"` shows what is drawn in front of what); **`pixel_import`** turns a native PNG into an editable recipe.
+The tool list you loaded says what each tool takes. This is the order to use them in, and what the list leaves out.
 
-From a shell, the same commands are `node bin/pixelbolt.js validate | inspect | patch | render | compile | scene | import`, with `--help` for options; `autotile <source> --out <new.json> --preview <new.png>` also writes a tileset's test map.
+1. **`pixel_validate`** `{project}` checks a recipe and returns a `revision` id. Send the full recipe once and the id afterwards: every tool that takes `project` takes `revision`, and revisions persist in the server's output folder.
+2. **`pixel_inspect`** `{revision}` returns a contact sheet of every frame to look at; `grid: true` with a `region` reads exact palette-key rows before you change pixels.
+3. **`pixel_patch`** `{revision, changes}` applies the changes below in order and returns a before/after image: check it changed only what you meant.
+4. **`pixel_render`** `{revision, expect}` exports the files. `expect` holds what the user asked for (`{width, height, frames, colors, transparent, loop, gifScale}`; `frames` is what each animation plays, or per animation such as `{"idle": 4, "walk": 8}`), and the reply's `check` lists every file that misses it with the call that fixes it. `gif: {}` adds GIFs at the frames' own size (`gif: {scale: 8}` only to enlarge them for posting, with `gifScale: 8` in `expect`); `saveAs` writes files where the user named them.
+5. **`pixel_compile`** `{source}` builds an ordinary recipe from one of the source formats below, and `{preset: "smoke-puff"}` compiles a shipped preset; `size` and `frames` fit either to the canvas and frame count asked for.
+6. **`pixel_scene`** composes assets into a room with tilemaps, cues and lighting; **`pixel_import`** turns a native PNG into an editable recipe.
+
+## The commands
+
+Run each as `node bin/pixelbolt.js <command>`; `<command> --help` lists that command's options. Replies are JSON, a recipe is a file, and no command writes over an existing file without `--force`: save each edit and each export under a new name.
+
+1. **`validate <recipe.json>`** checks a recipe without images: its size, frames and animations, or every error with its path.
+2. **`inspect <recipe.json> --out <sheet.png>`** writes a PNG contact sheet of every frame to look at. Options: `--animation <name>` (playback order), `--frames a,b`, `--region x,y,w,h` to zoom, `--grid` for exact palette-key rows with rulers, `--view silhouette|grayscale|onion|tile|parts` (parts colours each pixel by the part that drew it), `--native` (a 1× sheet beside it), `--diagnostics` and `--guides` (a horizon, vanishing points or an isometric grid drawn over the image).
+3. **`patch <recipe.json> --changes <changes.json> --out <new.json> --image <diff.png>`** applies the changes below in order, saves the new recipe and a before/after image, and lists every pixel that changed.
+4. **`render <recipe.json> --out <new folder> --look`** exports a sprite sheet, atlas, Godot 4 SpriteFrames (`.tres`), frames, APNG animations, CSS and a preview page, and with `--look` writes `look.png` there: the frames enlarged, to look at (the sheet itself is at game size). Pass `--expect '{"width":32,"height":32,"frames":8}'` with what the user asked for (`width, height, frames, colors, transparent, loop, gifScale`; `frames` is what each animation plays, or per animation such as `{"idle": 4, "walk": 8}`): the reply's `check` lists every file that misses it and how to fix it. `--gif` also writes a GIF of each animation into `gifs/`, at the frames' own size (`--gif-scale 8` only to enlarge them for posting); `gif <recipe.json> --out <new.gif>` makes one on its own, and `sequence <recipe.json> --out <new folder> --fps 30 --size 1080p` PNG frames for a video editor.
+5. **`compile <source.json> --out <recipe.json>`** builds an ordinary recipe from one of the source formats below; `compile --preset smoke-puff --out <recipe.json>` compiles a shipped preset instead. `--size 32x32` and `--frames 8` fit either to the canvas and frame count asked for. `autotile <source.json> --out <recipe.json> --preview <map.png>` also draws a tile set over a test map.
+6. **`scene <scene.json> --image <view.png>`** composes assets into a room with tilemaps, cues and lighting (`--view depth` shows what is drawn in front of what; `--out <new folder>` exports it); **`import <image.png> --out <recipe.json>`** turns a native PNG into an editable recipe.
+
+## Changes and sources
+
+A patch's changes are a list, applied in order:
+
+- `{"paint": "frames[blink]", "value": [{"x": 4, "y": 5, "color": "k"}]}` sets exact pixels after all layers (`transparent` erases).
+- `{"grid": "frames[rest]", "value": {"x": 3, "y": 4, "rows": ["kk.", ".k."]}}` paints a small region; dots keep pixels.
+- `{"set": "frames[up].duration", "value": 250}`, `{"insert": "frames[-]", "value": {...}}` and `{"remove": "animations.blink"}` edit the source by path. A frame added to a recipe that names its animations plays only once its name is in one: `{"insert": "animations.spin.frames[-]", "value": "sparkle"}`.
+- `{"set": "palette.c", "value": "#8a5a2c"}` recolours everything drawn with that key, in every frame, without redrawing; `{"set": "frames[*].layers[plume].palette", "value": {"s": "#6a2c91"}}` recolours one layer alone (`[*]` is every item of a list).
+- `recolor`, `move` and `cleanup` (proposed fixes for doubled corners and stray pixels) work on regions.
+
+A source is a document whose `format` names what compiles it: `pixelforge-fluid` (simulated fire, smoke, explosions, steam, magic, water, honey, slime), `pixelforge-wave` (looping interference and portals), `pixelforge-bodies` (balls and blocks that bounce, stack, topple and rest, with joints, ropes and cloth), `pixelforge-crystal` (crystals, geodes and snowflakes that grow and rest), `pixelforge-powder` (falling-sand sandboxes: burning, collapse, lava meeting water, blasts), `pixelforge-fx` (particles such as sparks and debris, and spell shapes: slashes, shockwave rings, beams, lightning, magic circles, impact stars, fireballs, cel water streams and drops; reviewed sources in `examples/*.fx.json`), `pixelforge-poses` (characters from parts and bones, with walk, run and attack templates), `pixelforge-autotile` (47- or 16-tile terrain sets, drawn from a `terrain` description, shown over a test map) or `pixelforge-normals` (a lighting normal pass). The matching help topic has each format.
 
 ## Working well
 
@@ -64,20 +83,21 @@ From a shell, the same commands are `node bin/pixelbolt.js validate | inspect | 
 - Inspect every frame, including at native size (`native: true`), and read a `grid` of a region before changing exact pixels. Check that each patch changed only what you meant.
 - A valid recipe can still look bad. Judge the image and the playback, not the absence of errors.
 - Work in a loop: inspect, patch, render with `expect`, then read the reply's `check` and fix every problem it lists before you hand the files on; its `notes` also point out loops that lift off the ground, jump unevenly or repeat a frame.
-- For a character that walks, runs, jumps or attacks, start from Pixelbolt's `examples/hero.poses.json`: a rigged figure whose motion templates generate the poses when compiled. A part without `attach` stands at the pose `origin` plus its `at`. For a sword or tool in hand, start from `examples/hero-sword.poses.json`: the prop's relative `angle` turns it with the arm, where `rotate` keeps one angle. For a four-legged animal, start from `examples/fox.poses.json` (walk, trot, run).
-- For fire, smoke, explosions, splashes, spells and other effects, start from a preset rather than drawing them: `pixel_help {"topic": "presets"}` lists every one with its size, frames, loop and colours, `pixel_compile {"preset": "smoke-puff"}` compiles one as it ships, and `pixel_help {"topic": "preset", "name": "smoke-puff"}` returns its source to edit. From a shell: `pixelbolt presets` and `pixelbolt compile --preset smoke-puff --out smoke.json`. Fluid presets are effects, not characters: `slime` is a drop of liquid.
+## Starting points
+
+- For a character that walks, runs, jumps or attacks, redraw the nearest rig, whose motion templates make the poses when compiled (`help craft "Characters"`): `examples/hero.poses.json` (slim), `examples/knight.poses.json` (stocky, shield), `examples/fox.poses.json` (four legs). A part without `attach` stands at the pose `origin` plus its `at`. For a sword or tool in hand, see `examples/hero-sword.poses.json`: the prop's relative `angle` turns it with the arm, where `rotate` keeps one angle.
+- For fire, smoke, explosions, splashes, spells and other effects, start from a preset rather than drawing them: `pixel_help {"topic": "presets"}` lists every one with its size and frames, `pixel_compile {"preset": "smoke-puff"}` compiles one as it ships (`"size": "32x32"`, `--size` in a shell, cuts or pads it to the canvas asked for), and `pixel_help {"topic": "preset", "name": "smoke-puff"}` returns its source to edit. From a shell: `pixelbolt presets` and `pixelbolt compile --preset smoke-puff --out smoke.json`. Fluid presets are effects, not characters: `slime` is a drop of liquid.
 - For squash, stretch, a bounce or a breathing idle (a slime, a blob), compile a poses source with one mass body and `motions.idle` (example: the `slime-idle` preset, a flat-based body whose `squash` keeps it on the ground); don't draw the frames.
-- For fewer frames than a preset has, never lower `frames` in its source: that stops the effect before it ends. Compile it, then, per animation, keep N evenly spaced frames with one `pixel_patch` call: of the animation's F frames keep frame floor(i × F / N) for i = 0 to N − 1 (for a one-shot that must end on its last frame, round(i × (F − 1) / (N − 1))), remove the others and list the kept ones in the animation. For 8 of smoke-puff's 19 frames:
-  `{"revision": "<id from pixel_compile>", "changes": [{"remove": "frames[smoke-puff-1]"}, {"remove": "frames[smoke-puff-3]"}, {"remove": "frames[smoke-puff-5]"}, {"remove": "frames[smoke-puff-6]"}, {"remove": "frames[smoke-puff-8]"}, {"remove": "frames[smoke-puff-10]"}, {"remove": "frames[smoke-puff-12]"}, {"remove": "frames[smoke-puff-13]"}, {"remove": "frames[smoke-puff-15]"}, {"remove": "frames[smoke-puff-17]"}, {"remove": "frames[smoke-puff-18]"}, {"set": "animations.smoke-puff.frames", "value": ["smoke-puff-0", "smoke-puff-2", "smoke-puff-4", "smoke-puff-7", "smoke-puff-9", "smoke-puff-11", "smoke-puff-14", "smoke-puff-16"]}]}`
-  To keep its length, also set each kept frame's `duration` to the sum of the durations of the frames it stands for.
+- For fewer frames than a preset or source makes, compile it with `frames` (`"frames": 8`, `--frames 8` in a shell): each animation keeps that many evenly spaced frames and plays as long as before. Never lower `frames` in the source, which stops the effect before it ends.
 
 ## More help
 
 `pixel_help` with `topic` (from a shell, `pixelbolt help <topic> [section]`):
 
-- `presets`: the ready-made effects, characters and loops to compile instead of drawing; `preset` with a `name` returns one preset's source.
-- `guide`: the full authoring reference (every field and operation, inspection, patch paths, exports).
-- `workflow`: the art workflow for advanced formats: poses and motion review, scenes and tilemaps, particle effects, fluids, lighting and normal passes, PNG import. With `name` (such as `"Fluid effects"`), one section.
-- `schema`: the recipe's complete JSON Schema.
+- `presets`: the ready-made effects, characters and loops to compile instead of drawing (with `find`, such as `"fire"`, only the matching ones); `preset` with a `name` returns one preset's source.
+- `craft`: short checklists (characters, effects, tiles and scenes, delivery, limits); `name` picks one.
+- `guide`: the full authoring reference (every field and operation, inspection, patch paths, exports), read by `name` as the workflow is.
+- `workflow`: the art workflow for advanced formats: poses and motion review, scenes and tilemaps, particle effects, fluids, lighting and normal passes, PNG import. With `name`, one section (`"Depth and perspective"`), a part of a long one (`"Whitewater"`), or the paragraphs that mention a word (`"apex"`).
+- `schema`: the recipe's JSON Schema, as an outline of its properties; `name` is a path for one part as JSON (`frames`), and `all` the whole schema.
 - `example`: a complete multi-frame recipe with layers.
-- `poses`, `scenes`, `autotile`, `fx`, `fluid`, `wave`, `crystal`, `powder`, `bodies`, `normals`: the JSON Schema of each source format.
+- `poses`, `scenes`, `autotile`, `fx`, `fluid`, `wave`, `crystal`, `powder`, `bodies`, `normals`: the JSON Schema of each source format, read the same way (`bodies` with `name: "effects.bodies"` is every field a body takes).

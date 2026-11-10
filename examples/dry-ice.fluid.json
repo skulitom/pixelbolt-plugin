@@ -50,7 +50,7 @@
       "frames": 64,
       "duration": 70,
       "seed": 3,
-      "walls": ["left", "right", "bottom"],
+      "walls": ["bottom"],
       "gravity": [0, 0.3],
       "heat": {
         "freeze": -1,
@@ -70,10 +70,7 @@
         "cooling": 0.01,
         "dissipation": 0.008,
         "spread": 0.03,
-        "look": [
-          { "field": "density", "colors": ["f"], "thresholds": [0.15], "dither": 0.6 },
-          { "field": "density", "colors": ["F", "V"], "thresholds": [0.55, 1.1], "dither": 0.5 }
-        ]
+        "look": [{ "field": "density", "colors": ["f", "F", "V"], "thresholds": [0.05, 0.3, 0.8], "dither": 0 }]
       },
       "ice": {
         "look": [

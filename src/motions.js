@@ -1,8 +1,7 @@
 // Motion templates lower to editable poses. Kept separate from rasterization and file I/O.
-import { PixelError } from './core.js';
+import { PixelError, fail } from './core.js';
 import { sinDeg, cosDeg, rasterizeMass } from './craft.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
 const id = (value, path) => { if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of at most 64 characters'); return value; };
 const object = (value, keys, path) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'expected an object');
@@ -79,12 +78,15 @@ export function expandMotions(input, compileRest, probeJoints) {
   if (!rest?.parts || rest.mirror || rest.tween) fail('poses.rig.rest', 'must name an authored pose with parts and an origin');
   if (source.poses.filter(p => p.name === rest.name).length !== 1) fail('poses.rig.rest', 'rest pose must have a unique name');
   if (!source.motions || typeof source.motions !== 'object' || Array.isArray(source.motions) || Object.keys(source.motions).length > 16) fail('poses.motions', 'expected up to sixteen named motions');
+  if (source.animations !== undefined && (!source.animations || typeof source.animations !== 'object' || Array.isArray(source.animations))) fail('poses.animations', 'expected an object of named animations');
   const restSource = { ...source, poses: [rest], animations: { rest: { frames: [rest.name], loop: false } } };
   delete restSource.motions;
   // Generated poses are checked one at a time for planted-foot reach; that needs joints, not the rig.
   const checkSource = { ...restSource }; delete checkSource.rig;
   const restData = compileRest(restSource).metadata.poses[rest.name], instances = new Map(rest.parts.map(p => [p.name, p])), rig = source.rig;
-  const restAngle = name => (restData.parts[name].rotate ?? 0) - (restData.parts[instances.get(name).attach?.part]?.rotate ?? 0);
+  // What an instance hangs from, turned at rest; a root instance hangs from nothing (never looked up under "undefined").
+  const parentAngle = name => instances.get(name).attach ? restData.parts[instances.get(name).attach.part]?.rotate ?? 0 : 0;
+  const restAngle = name => (restData.parts[name].rotate ?? 0) - parentAngle(name);
   const requireInstance = (name, path) => { if (!instances.has(name)) fail(path, `unknown rest-pose instance ${name}`); return instances.get(name); };
   const body = requireInstance(rig.body, 'poses.rig.body');
   if (!source.parts[body.part]?.mass) fail('poses.rig.body', 'motion templates need a mass body');
@@ -250,7 +252,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     if (grounded && rig.head === rig.body) fail('poses.rig.head', `the grounded idle "${name}" keeps the body on rig.ground, so the body can't also be the head, whose bob would lift it; name another instance or leave head out`);
     if (grounded) (rig.tail ?? []).forEach((tail, i) => { if (tail === rig.body) fail(`poses.rig.tail[${i}]`, `the grounded idle "${name}" keeps the body on rig.ground, so the body can't also be part of the tail, whose swing would turn it off the ground`); });
     const crouch = template === 'jump' ? p('crouch', .8, .5, 1) : 1, stretch = template === 'jump' ? p('stretch', 1.15, 1, 2) : 1, apex = template === 'jump' ? p('apex', 4, 1, 32, true) : 0;
-    const arm = template === 'attack' ? p('arm', 0, 0, (rig.arms?.length ?? 0) - 1, true) : 0;
+    const arm = template === 'attack' ? p('arm', 0, 0, rig.arms.length - 1, true) : 0;
     const windup = template === 'attack' ? p('windup', -130, -360, 360, true) : 0, strike = template === 'attack' ? p('strike', 50, -360, 360, true) : 0;
     const hold = template === 'attack' ? p('hold', 2, 1, 16, true) : 1;
     const recoil = template === 'hurt' ? p('recoil', -20, -90, 90, true) : 0, hurtSquash = template === 'hurt' ? p('squash', .85, .5, 2) : 1;
@@ -365,14 +367,14 @@ export function expandMotions(input, compileRest, probeJoints) {
         setAngle(torso, restAngle(rig.body) + [8, 4, 0, 0, 0, 8, 0][i]);
         for (const [j, chain] of (rig.arms ?? []).entries()) {
           setAngle(parts.get(chain[0]), restAngle(chain[0]) + Math.round([35, -70, -55, -25, -10, -35, 0][i] * (j % 2 ? .85 : 1)));
-          if (chain.length > 1) setAngle(parts.get(chain[1]), restAngle(chain[1]) - [10, 30, 35, 45, 50, 20, 0][i]);
+          setAngle(parts.get(chain[1]), restAngle(chain[1]) - [10, 30, 35, 45, 50, 20, 0][i]);
         }
       }
       // Follow-through carries the swing well past the strike and settles the body, so it reads as its own key pose.
       // windup and strike are angles in the body's frame. An arm that hangs from another part (a chest standing up from
       // the hips) takes them less that part's turn from the body at rest, so the blow goes the same way on either rig.
       if (template === 'attack') {
-        const shoulder = rig.arms[arm][0], frame = (restData.parts[instances.get(shoulder).attach?.part]?.rotate ?? 0) - (restData.parts[rig.body].rotate ?? 0);
+        const shoulder = rig.arms[arm][0], frame = parentAngle(shoulder) - (restData.parts[rig.body].rotate ?? 0);
         setAngle(parts.get(shoulder), i < 3 ? [windup, strike, strike + 45][i] - frame : restAngle(shoulder)); bodySquash = [.9, 1.05, .95, 1][i]; setAngle(torso, restAngle(rig.body) + [-8, 8, 14, 0][i]);
       }
       // A four-legged body flinches back with its back curled and its head pulled up, rather than tipping over.
@@ -394,7 +396,7 @@ export function expandMotions(input, compileRest, probeJoints) {
       if (locomotion) for (const [j, chain] of (rig.arms ?? []).entries()) {
         const swing = legCycle[0] * cosDeg(angle + j % 2 * 180) + legCycle[1] * sinDeg(angle + j % 2 * 180);
         setAngle(parts.get(chain[0]), restAngle(chain[0]) + direction * (template === 'run' ? 35 : 25) * swing);
-        if (chain.length > 1) setAngle(parts.get(chain[1]), restAngle(chain[1]) - direction * ((template === 'run' ? 40 : 0) + 20 * Math.max(0, -swing)));
+        setAngle(parts.get(chain[1]), restAngle(chain[1]) - direction * ((template === 'run' ? 40 : 0) + 20 * Math.max(0, -swing)));
       }
       for (const [j, leg] of legs.entries()) {
         const last = parts.get(leg.last);
@@ -433,12 +435,7 @@ export function expandMotions(input, compileRest, probeJoints) {
         // too would put a darker far arm or leg in front of the body for half of every cycle.
         // Swap whole limb subtrees in their original paint slots; the attachment graph is unchanged.
         for (const chains of [rig.legs ?? [], rig.hind ?? [], rig.fore ?? [], rig.arms ?? []]) for (let j = 0; j + 1 < chains.length; j += 2) {
-          const subtree = root => {
-            const found = new Set([root]); let changed = true;
-            while (changed) { changed = false; for (const p of pose.parts) if (p.attach && found.has(p.attach.part) && !found.has(p.name)) { found.add(p.name); changed = true; } }
-            return found;
-          };
-          const a = subtree(chains[j][0]), b = subtree(chains[j + 1][0]);
+          const a = subtree([chains[j][0]]), b = subtree([chains[j + 1][0]]);
           const aParts = pose.parts.filter(p => a.has(p.name)), bParts = pose.parts.filter(p => b.has(p.name));
           pose.parts = pose.parts.flatMap(p => a.has(p.name) ? p === aParts[0] ? bParts : [] : b.has(p.name) ? p === bParts[0] ? aParts : [] : [p]);
         }
@@ -598,7 +595,7 @@ function tailRig(rig, { instances, restData, restAngle, source, owners, rest, ta
     const instance = instances.get(name), placed = restData.parts[name], host = instance.attach?.part ?? null, parent = set.has(host) ? host : null;
     return { name, host, parent: parent ? order.indexOf(parent) : -1, rel: restAngle(name), world: placed.rotate ?? 0, length: Math.max(1, reach(source.parts[instance.part])),
       offset: parent && [placed.anchor[0] - restData.parts[parent].anchor[0], placed.anchor[1] - restData.parts[parent].anchor[1]],
-      restAnchor: placed.anchor, restHost: restData.parts[host]?.rotate ?? 0 };
+      restAnchor: placed.anchor, restHost: host === null ? 0 : restData.parts[host]?.rotate ?? 0 };
   });
   // Which way each link hung from the figure turns toward it: the way that lays more of the tail on it.
   for (const link of links.filter(l => l.parent < 0)) {
@@ -634,7 +631,7 @@ function followTails({ links, gravity, cover, restCover }, poses, { playback, lo
   if (!follow) { for (const pose of poses) setAngles(pose, links.map(l => wrapDegrees(Math.round(l.rel)))); return; }
   const keyOf = new Map(poses.map(pose => {
     const placed = probeParts(pose, roots.map(l => l.name));
-    return [pose.name, roots.map(l => ({ at: placed[l.name].anchor, host: placed[l.host]?.rotate ?? 0 }))];
+    return [pose.name, roots.map(l => ({ at: placed[l.name].anchor, host: l.host === null ? 0 : placed[l.host]?.rotate ?? 0 }))];
   }));
   const restKey = roots.map(l => ({ at: [l.restAnchor[0], l.restAnchor[1] + lowered], host: l.restHost }));
   // What a root link hangs from turns from key to key the short way, never round past 0°.

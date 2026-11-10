@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt rigid bodies",
-  "description": "Rigid bodies (balls, boxes, convex polygons, fixed or spinning hoops) with gravity, walls and pixel obstacles, simulated and baked into editable palette grids: they bounce, slide, roll, stack, knock each other about and come to rest. Units: pixels and frames. One-shot; deterministic.",
+  "description": "Rigid bodies (balls, boxes, convex polygons, fixed or spinning hoops) with gravity, walls, pixel obstacles, joints, ropes and cloth, simulated and baked into editable palette grids: they bounce, slide, roll, stack, knock each other about, swing, sag, drape and tear, then come to rest. Units: pixels and frames. One-shot; deterministic.",
   "type": "object",
   "properties": {
     "format": {
@@ -76,7 +76,7 @@
         },
         "trim": {
           "type": "boolean",
-          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns. Frames whose visible pictures are the same (a hold, a frame moved whole) share one rectangle."
         }
       },
       "required": [],
@@ -168,7 +168,7 @@
               ]
             },
             "maxItems": 4,
-            "description": "Canvas edges that hold bodies in; a body far past an open edge leaves for good."
+            "description": "Canvas edges that hold bodies in; a body far past an open edge leaves for good, but one thrown past the edge gravity pulls it back from (over the top) comes back."
           },
           "obstacles": {
             "type": "array",
@@ -369,7 +369,7 @@
                   },
                   "maxItems": 8,
                   "minItems": 3,
-                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid."
+                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid (at places the centroid). A symbol stays where the points were written: its middle on the point they are written around."
                 },
                 "sides": {
                   "type": "integer",
@@ -681,12 +681,497 @@
               "additionalProperties": false
             },
             "maxItems": 64,
-            "minItems": 1,
-            "description": "At most 256 bodies with their copies."
+            "minItems": 0,
+            "description": "At most 256 bodies with their copies. May be empty when the effect has cloths or ropes."
+          },
+          "joints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Optional name, reported when the joint breaks."
+                },
+                "a": {
+                  "type": "string",
+                  "description": "A named body, or \"world\" for a fixed point in the canvas."
+                },
+                "b": {
+                  "type": "string",
+                  "description": "A named body, or \"world\" for a fixed point in the canvas."
+                },
+                "type": {
+                  "enum": [
+                    "distance",
+                    "rope",
+                    "spring",
+                    "hinge",
+                    "weld"
+                  ],
+                  "description": "distance: both ends stay a length apart. rope: only pulls when farther than max. spring: a soft distance. hinge: the two anchors stay together and the bodies turn freely (with an optional angle limit). weld: the anchors and the relative angle stay fixed."
+                },
+                "anchorA": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Point on a in its own pixels. With a: \"world\", the world point."
+                },
+                "anchorB": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Point on b in its own pixels. With b: \"world\", the world point."
+                },
+                "length": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4096,
+                  "description": "Distance (or spring rest length) in pixels; default the distance the bodies start at. A rope uses it as max when max is omitted."
+                },
+                "max": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4096,
+                  "description": "Rope: longest length it allows. Default length, or the distance the bodies start at."
+                },
+                "stiffness": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 1,
+                  "description": "How hard a spring pulls (0.4) or the fraction of the position error a distance joint corrects; default 1."
+                },
+                "damping": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Velocity lost along the joint. Default 0."
+                },
+                "break": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 1000000,
+                  "description": "Impulse that breaks it; omitted, it never breaks."
+                },
+                "collide": {
+                  "type": "boolean",
+                  "description": "Whether the two bodies still collide. Default false, so a ragdoll's neighbours or a rope's links pass through each other."
+                },
+                "limit": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -3600,
+                    "maximum": 3600
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Hinge: the allowed relative angle [smallest, largest] in degrees."
+                }
+              },
+              "required": [
+                "a",
+                "b",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 256,
+            "description": "Constraints between named bodies, or between a body and the world."
+          },
+          "ropes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "A named body to hang this end from."
+                    },
+                    "point": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Point on the body, in its own pixels. Default [0, 0]."
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Or a fixed world point [x, y]."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "to": {
+                  "type": "object",
+                  "properties": {
+                    "body": {
+                      "type": "string",
+                      "description": "A named body to hang this end from."
+                    },
+                    "point": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Point on the body, in its own pixels. Default [0, 0]."
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "maxItems": 2,
+                      "minItems": 2,
+                      "description": "Or a fixed world point [x, y]."
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                "links": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 64,
+                  "description": "Cargo links in the chain. Default 12."
+                },
+                "slack": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2,
+                  "description": "Extra length as a share of the span, so it sags. Default 0.15."
+                },
+                "thickness": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 4,
+                  "description": "Pixels. Default 1."
+                },
+                "look": {
+                  "enum": [
+                    "rope",
+                    "chain"
+                  ],
+                  "description": "rope: a line. chain: a link at each body. Default rope."
+                },
+                "fill": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "A one-character palette key; dot and space are reserved."
+                },
+                "outline": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Optional outline key for a rope line."
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 10,
+                  "description": "Mass per square pixel. Default 0.6."
+                },
+                "break": {
+                  "type": "number",
+                  "minimum": 0.01,
+                  "maximum": 1000000,
+                  "description": "Joint impulse that splits the rope; omitted, it never breaks."
+                },
+                "draw": {
+                  "enum": [
+                    "under",
+                    "over"
+                  ],
+                  "description": "Under the bodies (default) or over them."
+                }
+              },
+              "required": [
+                "from",
+                "to",
+                "fill"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "description": "Chains of link bodies drawn as a rope or a chain, with optional break thresholds."
+          },
+          "cloths": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Optional name."
+                },
+                "at": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4096,
+                    "maximum": 4096
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Top-left particle [x, y] in canvas pixels."
+                },
+                "size": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 2,
+                    "maximum": 128
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "[columns, rows] of particles; cells are drawn between them."
+                },
+                "cell": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 8,
+                  "description": "Pixels between particles. Default 1."
+                },
+                "mask": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 128
+                  },
+                  "maxItems": 128,
+                  "minItems": 2,
+                  "description": "Rows of # for cloth and . for a hole; the size must match."
+                },
+                "fill": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1,
+                      "description": "A one-character palette key; dot and space are reserved."
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 1,
+                        "description": "A one-character palette key; dot and space are reserved."
+                      },
+                      "maxItems": 8,
+                      "minItems": 1
+                    }
+                  ],
+                  "description": "A key, or 1–8 keys from dark to light used as the fold ramp."
+                },
+                "outline": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Key for the cloth's silhouette."
+                },
+                "back": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "Key for the back of a folded cell; default the ramp follows its light."
+                },
+                "light": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -1,
+                    "maximum": 1
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Direction toward the light for fold shading. Default [0, -1]."
+                },
+                "wind": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "minimum": -4,
+                    "maximum": 4
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "description": "Wind acceleration [x, y] in pixels a frame². Default [0, 0]."
+                },
+                "gust": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "How much the wind varies in time and across the cloth, flapping across it. Default 0."
+                },
+                "stiffness": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 1,
+                  "description": "Structural constraint strength. Default 0.6."
+                },
+                "slack": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Extra rest length as a share, so the cloth can billow. Default 0.05."
+                },
+                "shear": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Diagonal constraint strength relative to structural. Default 0.4."
+                },
+                "bend": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Skip-one constraint strength relative to structural. Default 0.2."
+                },
+                "damping": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.8,
+                  "description": "Velocity lost each substep. Default 0.02."
+                },
+                "tear": {
+                  "type": "number",
+                  "minimum": 1.01,
+                  "maximum": 16,
+                  "description": "A constraint breaks when stretched past this multiple of its rest length; omitted, the cloth never tears."
+                },
+                "seed": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Orders gust variation. Default 0."
+                },
+                "draw": {
+                  "enum": [
+                    "under",
+                    "over"
+                  ],
+                  "description": "Over the bodies (default) or under them."
+                },
+                "collide": {
+                  "type": "boolean",
+                  "description": "Collide with obstacles and bodies. Default true."
+                },
+                "pins": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 127
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "description": "Particle [column, row]."
+                      },
+                      "to": {
+                        "type": "string",
+                        "description": "A named body: the pin follows its local point."
+                      },
+                      "point": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "description": "Point on that body. Default [0, 0]."
+                      },
+                      "keys": {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -4096,
+                            "maximum": 4096
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        },
+                        "maxItems": 64,
+                        "minItems": 1,
+                        "description": "Or [frame, x, y] keys the pin follows, held before the first and after the last."
+                      },
+                      "x": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      },
+                      "y": {
+                        "type": "number",
+                        "minimum": -4096,
+                        "maximum": 4096
+                      }
+                    },
+                    "required": [
+                      "at"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 64,
+                  "description": "Hold particles to fixed points, keyed points or named bodies."
+                }
+              },
+              "required": [
+                "at",
+                "size",
+                "fill"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 16,
+            "description": "Cloth grids pinned to points, keys or bodies, with wind, collisions and tearing."
           },
           "most": {
             "type": "integer",
-            "minimum": 1,
+            "minimum": 0,
             "maximum": 4096,
             "description": "The most bodies split powers and breaks may make in all, copies and pieces included: at least the bodies listed. Default 256, or room for every body with breaks to break into all its pieces (up to 4096)."
           },
@@ -1142,8 +1627,7 @@
           }
         },
         "required": [
-          "frames",
-          "bodies"
+          "frames"
         ],
         "additionalProperties": false
       }

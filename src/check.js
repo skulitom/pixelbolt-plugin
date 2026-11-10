@@ -174,7 +174,7 @@ function framesFix(key, want, named, direction, project, recipe, total) {
     ? `one animation lists at most ${NAMES} names: set animations.${key}.direction to "pingpong" and list ${pingpong} names, which play ${want}`
     : want > count
       ? `make "${key}" play ${want} frames: draw the ${want - count} more poses it needs (pixel_patch insert under frames, or more frames in the source it was compiled from) and list all ${want} names in animations.${key}.frames; repeat a name only for a deliberate hold, then render again`
-      : `make "${key}" play ${want} frames: list ${want} names in animations.${key}.frames, keeping evenly spaced poses, then render again`;
+      : `make "${key}" play ${want} frames: compile its preset or source again with frames: ${want} (--frames ${want}), or list ${want} names in animations.${key}.frames, keeping evenly spaced poses, then render again`;
 }
 
 // Motion: the silhouettes of loops that look wrong in play: a body that leaves its ground row, frames that hop
@@ -338,8 +338,18 @@ function reviewMotion(project, names, boxes, drawn, recipe) {
 }
 
 // project: the rendered project; recipe: its source (for animation directions and whether it names animations);
-// gifs: the animationGIF results written beside it, or undefined when the command writes no GIFs (the CLI's render);
+// gifs: the animationGIF results written beside it, or undefined when the command writes no GIFs (a render without gif);
 // animation: check only that animation and its frames.
+// A check as a reply carries it: the silhouette boxes only of the animations a note is about. The boxes are a note's
+// evidence, and beside an animation with nothing to say they are rows of numbers to read past.
+export function briefCheck(check) {
+  if (!check.motion) return check;
+  const cited = Object.entries(check.motion).filter(([key]) => check.notes?.some(note => note.includes(JSON.stringify(key))));
+  if (cited.length) return { ...check, motion: Object.fromEntries(cited) };
+  const { motion, ...rest } = check;
+  return rest;
+}
+
 export function checkDelivery(project, { recipe, gifs, expect, animation } = {}) {
   const { name, width, height, sheet, animations } = project, scale = sheet.scale;
   if (animation !== undefined && !Object.hasOwn(animations, animation)) throw new PixelError('animation', `no animation named "${animation}"; choose one of: ${Object.keys(animations).join(', ')}`);
@@ -434,11 +444,12 @@ export function checkDelivery(project, { recipe, gifs, expect, animation } = {})
           : `render again with "gif": { "scale": ${k} }${k === 1 ? ' or "gif": {}' : ''}`;
     if (expect.gifScale !== undefined && !scoped.length) problems.push({ file: 'gifs/', asked: { width: wantW, height: wantH }, got: 'no GIF', fix: gifFix });
     const wrong = sized ? scoped.filter(gif => gif.width !== wantW || gif.height !== wantH) : [];
-    // GIFs a whole number of times the asked size were most likely enlarged on purpose, for posting: offer the
-    // gifScale that says so beside the fix that makes them the asked size.
-    const times = wrong.length && expect.gifScale === undefined && wrong[0].width % wantW === 0 && wrong[0].width / wantW === wrong[0].height / wantH ? wrong[0].width / wantW : 1;
-    const enlarged = times > 1 ? `; or, if the user asked for GIFs ${times} times the frame size, add "gifScale": ${times} to expect` : '';
-    if (wrong.length) problems.push({ file: gifFiles(wrong), asked: { width: wantW, height: wantH }, got: { width: wrong[0].width, height: wrong[0].height }, fix: gifFix + enlarged });
+    // GIFs a whole number of times the asked size were enlarged on purpose, by a scale the call itself gave, most
+    // often because the user asked for a larger one to post. That is not a mismatch, so it is a note: it says the size
+    // and how to have it checked, and how to get GIFs of the frames' own size if that was wanted.
+    const times = wrong.length && expect.gifScale === undefined && wantW === width * scale && wantH === height * scale && wrong.every(gif => gif.width === wrong[0].width && gif.height === wrong[0].height) && wrong[0].width % wantW === 0 && wrong[0].width / wantW === wrong[0].height / wantH ? wrong[0].width / wantW : 1;
+    if (times > 1) notes.push(`The GIFs are ${times} times the frame size (${wrong[0].width}×${wrong[0].height}), as the scale asked for makes them. If the user asked for GIFs that size, "gifScale": ${times} in expect checks it; if they asked for GIFs at the frames' own size, ${gifFix}.`);
+    else if (wrong.length) problems.push({ file: gifFiles(wrong), asked: { width: wantW, height: wantH }, got: { width: wrong[0].width, height: wrong[0].height }, fix: gifFix });
     // A GIF background blends every pixel onto one colour, so GIFs can miss a request the frames meet. (Opaque frames
     // always make an opaque GIF, so only the transparent side needs a GIF check.)
     const opaque = expect.transparent === true && clearOpen.length === open.length ? scoped.filter(gif => !gif.transparent) : [];
@@ -476,9 +487,9 @@ export function checkDelivery(project, { recipe, gifs, expect, animation } = {})
       problems.push({ file: 'animations/', asked: want, got: counts,
         fix: `expect.frames counts the frames each animation plays, and none plays ${want}, but the ${names.length} animations ${distinct === want ? `hold ${want} different frames` : `play ${want} frames between them`}. If the user asked for ${want} frames in all, check each animation instead${names.length <= 16 ? `: "expect": { "frames": ${JSON.stringify(counts)} }` : ' with frames per animation name'}. If they asked for one animation of ${want} frames, give that animation more poses (pixel_patch insert under frames, or more frames in its source) and list them in it, then render again` });
     } else {
-      // Animations that already play the count suggest the request was about them alone.
+      // Animations that already play the count suggest the request was about them alone: said once, with the first.
       const only = matching.length ? `; or, if the request was ${want} frames for ${list(matching)} only, check per animation: "frames": ${JSON.stringify(Object.fromEntries(matching.slice(0, 8).map(key => [key, want])))}` : '';
-      for (const key of misses) { const problem = framesProblem(key, want); problems.push(only ? { ...problem, fix: problem.fix + only } : problem); }
+      misses.forEach((key, index) => { const problem = framesProblem(key, want); problems.push(only && !index ? { ...problem, fix: problem.fix + only } : problem); });
     }
   }
   if (expect.colors !== undefined && colors.size > expect.colors) problems.push({ file: frameFiles, asked: `at most ${expect.colors} colours`, got: colors.size, fix: 'merge similar colours with pixel_patch recolor (or fewer palette entries), check with pixel_inspect diagnostics, then render again' });

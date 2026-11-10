@@ -1,0 +1,385 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "hermit-chest",
+  "width": 40,
+  "height": 32,
+  "palette": {
+    "k": "#2a1a24",
+    "i": "#140c14",
+    "d": "#6b3f2a",
+    "w": "#9a5f38",
+    "l": "#c58a4e",
+    "o": "#a8741f",
+    "y": "#e2b23c",
+    "Y": "#fbe58a",
+    "W": "#ffffff",
+    "m": "#8f2f24",
+    "r": "#d9532b",
+    "R": "#f58a55",
+    "e": "#f4f0e0"
+  },
+  "parts": {
+    "lid": {
+      "rows": [
+        "...kkkkkkkkkkkkkkkk...",
+        ".kkllYYllllllllYYllkk.",
+        "kllllyYllllllllyYlllwk",
+        "kwwwwyYwwwwwwwwyYwwwwk",
+        "kwwwwyYwwwwwwwwyYwwwdk",
+        "kwdwwyowwwdwwwwyowwddk",
+        "kddddyoddddddddyoddddk",
+        "kYyyyyyyyyyyyyyyyyyook"
+      ]
+    },
+    "base": {
+      "rows": [
+        "kwwwwyYwwoYyowwyYwwwdk",
+        "kwwwwyYwwykkywwyYwwwdk",
+        "kwdwwyYwwoyyowwyYwwddk",
+        "kwwwwyowwwwwwwwyowwwdk",
+        "kwwdwyowwwwwdwwyowwddk",
+        "kddddyoddddddddyoddddk",
+        "kddddyoddddddddyoddddk",
+        "kyyyyyyyyyyyyyyyyyyook",
+        "kkkkkkkkkkkkkkkkkkkkkk"
+      ]
+    },
+    "gap": {
+      "rows": [
+        "kiiiiiiiiiiiiiiiiiiiik",
+        "kiiiiiiiiiiiiiiiiiiiik",
+        "kiiiiiiiiiiiiiiiiiiiik"
+      ]
+    },
+    "eye-left": {
+      "rows": [
+        "ee",
+        "ke",
+        "ke"
+      ]
+    },
+    "eye-right": {
+      "rows": [
+        "ee",
+        "ek",
+        "ek"
+      ]
+    },
+    "glimmer": { "rows": ["e"] },
+    "glint": { "rows": ["W"] },
+    "legs-a": {
+      "rows": [
+        ".RR........................RR.",
+        "Rr.r......................r.Rr",
+        "Rr...RrRr............RrRr...Rr",
+        "Rr..Rr.Rr............Rr.Rr..Rr",
+        "rm..rm.rm............rm.rm..rm",
+        "m...m..m..............m..m...m"
+      ]
+    },
+    "legs-b": {
+      "rows": [
+        "RR..........................RR",
+        "Rr..........................Rr",
+        ".Rr..Rr.Rr..........Rr.Rr..Rr.",
+        ".rm.Rr..Rr..........Rr..Rr.rm.",
+        "....rm..rm..........rm..rm....",
+        "....m....m..........m....m...."
+      ]
+    },
+    "legs-stub": {
+      "rows": [
+        "..............................",
+        ".RR........................RR.",
+        "Rr...Rr.Rr..........Rr.Rr...Rr",
+        "rm...m..m............m..m...rm"
+      ]
+    },
+    "claw-l-open": {
+      "rows": [
+        "R..r..",
+        "R..r..",
+        "Rrrm..",
+        ".rmrrr"
+      ]
+    },
+    "claw-l-shut": {
+      "rows": [
+        ".Rr...",
+        ".Rr...",
+        "Rrrm..",
+        ".rmrrr"
+      ]
+    },
+    "claw-r-open": {
+      "rows": [
+        "..R..r",
+        "..R..r",
+        "..Rrrm",
+        "rrrrm."
+      ]
+    },
+    "claw-r-shut": {
+      "rows": [
+        "...Rr.",
+        "...Rr.",
+        "..Rrrm",
+        "rrrrm."
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "idle-0",
+      "duration": 1400,
+      "origin": [20, 30],
+      "parts": [{ "name": "lid", "part": "lid", "at": [-11, -17] }, { "name": "base", "part": "base", "at": [-11, -9] }]
+    },
+    {
+      "name": "idle-1",
+      "duration": 90,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "lid", "part": "lid", "at": [-11, -17] },
+        { "name": "base", "part": "base", "at": [-11, -9] },
+        { "name": "lock-glint", "part": "glint", "at": [-1, -9] },
+        { "name": "lid-glint", "part": "glint", "at": [-6, -16] }
+      ]
+    },
+    {
+      "name": "idle-2",
+      "duration": 900,
+      "origin": [20, 30],
+      "parts": [{ "name": "lid", "part": "lid", "at": [-11, -17] }, { "name": "base", "part": "base", "at": [-11, -9] }]
+    },
+    {
+      "name": "idle-3",
+      "duration": 450,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "glimmer", "at": [-4, -10] },
+        { "name": "eye-r", "part": "glimmer", "at": [3, -10] },
+        { "name": "lid", "part": "lid", "at": [-11, -18] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "idle-4",
+      "duration": 700,
+      "origin": [20, 30],
+      "parts": [{ "name": "lid", "part": "lid", "at": [-11, -17] }, { "name": "base", "part": "base", "at": [-11, -9] }]
+    },
+    {
+      "name": "peek-0",
+      "duration": 120,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "glimmer", "at": [-4, -10] },
+        { "name": "eye-r", "part": "glimmer", "at": [3, -10] },
+        { "name": "lid", "part": "lid", "at": [-11, -18] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "peek-1",
+      "duration": 160,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "peek-2",
+      "duration": 420,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-left", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "peek-3",
+      "duration": 120,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "peek-4",
+      "duration": 420,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-right", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "peek-5",
+      "duration": 200,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "rise-0",
+      "duration": 80,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -12] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -20] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "rise-1",
+      "duration": 90,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-stub", "at": [-15, -4] },
+        { "name": "gap", "part": "gap", "at": [-11, -14] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -14] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -14] },
+        { "name": "lid", "part": "lid", "at": [-11, -21] },
+        { "name": "base", "part": "base", "at": [-11, -11] }
+      ]
+    },
+    {
+      "name": "rise-2",
+      "duration": 120,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-a", "at": [-15, -6] },
+        { "name": "gap", "part": "gap", "at": [-11, -16] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -16] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -16] },
+        { "name": "lid", "part": "lid", "at": [-11, -24] },
+        { "name": "base", "part": "base", "at": [-11, -13] },
+        { "name": "claw-l", "part": "claw-l-open", "at": [-17, -18] },
+        { "name": "claw-r", "part": "claw-r-open", "at": [11, -18] }
+      ]
+    },
+    {
+      "name": "walk-right-0",
+      "duration": 100,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-a", "at": [-15, -6] },
+        { "name": "gap", "part": "gap", "at": [-11, -16] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -16] },
+        { "name": "eye-r", "part": "eye-right", "at": [3, -16] },
+        { "name": "lid", "part": "lid", "at": [-11, -24] },
+        { "name": "base", "part": "base", "at": [-11, -13] },
+        { "name": "claw-l", "part": "claw-l-open", "at": [-17, -18] },
+        { "name": "claw-r", "part": "claw-r-open", "at": [11, -18] }
+      ]
+    },
+    {
+      "name": "walk-right-1",
+      "duration": 100,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-b", "at": [-15, -6] },
+        { "name": "gap", "part": "gap", "at": [-11, -16] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -16] },
+        { "name": "eye-r", "part": "eye-right", "at": [3, -16] },
+        { "name": "lid", "part": "lid", "at": [-11, -23] },
+        { "name": "base", "part": "base", "at": [-11, -13] },
+        { "name": "claw-l", "part": "claw-l-shut", "at": [-17, -18] },
+        { "name": "claw-r", "part": "claw-r-shut", "at": [11, -18] }
+      ]
+    },
+    {
+      "name": "walk-left-0",
+      "duration": 100,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-a", "at": [-15, -6] },
+        { "name": "gap", "part": "gap", "at": [-11, -16] },
+        { "name": "eye-l", "part": "eye-left", "at": [-5, -16] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -16] },
+        { "name": "lid", "part": "lid", "at": [-11, -24] },
+        { "name": "base", "part": "base", "at": [-11, -13] },
+        { "name": "claw-l", "part": "claw-l-open", "at": [-17, -18] },
+        { "name": "claw-r", "part": "claw-r-open", "at": [11, -18] }
+      ]
+    },
+    {
+      "name": "walk-left-1",
+      "duration": 100,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-b", "at": [-15, -6] },
+        { "name": "gap", "part": "gap", "at": [-11, -16] },
+        { "name": "eye-l", "part": "eye-left", "at": [-5, -16] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -16] },
+        { "name": "lid", "part": "lid", "at": [-11, -23] },
+        { "name": "base", "part": "base", "at": [-11, -13] },
+        { "name": "claw-l", "part": "claw-l-shut", "at": [-17, -18] },
+        { "name": "claw-r", "part": "claw-r-shut", "at": [11, -18] }
+      ]
+    },
+    {
+      "name": "hide-0",
+      "duration": 70,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "legs", "part": "legs-stub", "at": [-15, -4] },
+        { "name": "gap", "part": "gap", "at": [-11, -14] },
+        { "name": "eye-l", "part": "eye-right", "at": [-5, -14] },
+        { "name": "eye-r", "part": "eye-left", "at": [3, -14] },
+        { "name": "lid", "part": "lid", "at": [-11, -21] },
+        { "name": "base", "part": "base", "at": [-11, -11] }
+      ]
+    },
+    {
+      "name": "hide-1",
+      "duration": 60,
+      "origin": [20, 30],
+      "parts": [
+        { "name": "gap", "part": "gap", "at": [-11, -12] },
+        { "name": "lid", "part": "lid", "at": [-11, -18] },
+        { "name": "base", "part": "base", "at": [-11, -9] }
+      ]
+    },
+    {
+      "name": "hide-2",
+      "duration": 300,
+      "origin": [20, 30],
+      "parts": [{ "name": "lid", "part": "lid", "at": [-11, -17] }, { "name": "base", "part": "base", "at": [-11, -9] }]
+    }
+  ],
+  "animations": {
+    "idle": { "frames": ["idle-0", "idle-1", "idle-2", "idle-3", "idle-4"] },
+    "peek": { "frames": ["peek-0", "peek-1", "peek-2", "peek-3", "peek-4", "peek-5"], "loop": false },
+    "rise": { "frames": ["rise-0", "rise-1", "rise-2"], "loop": false },
+    "walk-right": { "frames": ["walk-right-0", "walk-right-1"] },
+    "walk-left": { "frames": ["walk-left-0", "walk-left-1"] },
+    "hide": { "frames": ["hide-0", "hide-1", "hide-2"], "loop": false }
+  },
+  "sheet": { "trim": true, "padding": 1 }
+}

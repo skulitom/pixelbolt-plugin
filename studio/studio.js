@@ -4,8 +4,8 @@ import { createDraftStore, claimTab, openTabs } from '/draft.js';
 import { compilePoses } from '/authoring.js';
 import { compileWaves } from '/wave.js';
 import { inspectMotion } from '/motion.js';
+import { $, toast, download, playButton } from '/page.js';
 
-const $ = id => document.getElementById(id);
 const source = $('source'), canvas = $('canvas'), context = canvas.getContext('2d');
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 let project, spec, atlas, frameImages = [], selected = 0, playing = !reducedMotion, mode = 'animation';
@@ -27,7 +27,17 @@ function withSharedPalette(value) {
   return inlineSharedPalette(value, sharedPalette);
 }
 const compileSource = value => { const drawn = withSharedPalette(value); return drawn?.format === 'pixelforge-poses' ? compilePoses(drawn) : drawn?.format === 'pixelforge-wave' ? compileWaves(drawn) : { recipe: drawn, metadata: null }; };
-let elapsed = 0, lastTime = 0, zoom = 12, dirty = false, valid = false, compileTimer, toastTimer, loadVersion = 0;
+let elapsed = 0, lastTime = 0, zoom = 12, dirty = false, valid = false, compileTimer, loadVersion = 0;
+// Whether an Export assets request is on its way: the one thing the button's packing label and its being off while it
+// packs are drawn from. Otherwise the button is on exactly when the recipe is valid. Whatever compiles meanwhile
+// (typing, a sample, GIF, Frames) calls showExport, so it can neither turn the button on nor lose its label mid-export.
+let exporting = false;
+const exportLabel = [...$('export').childNodes];
+function showExport() {
+  const button = $('export');
+  button.disabled = exporting || !valid;
+  button.replaceChildren(...(exporting ? ['Packing assets…'] : exportLabel));
+}
 // Zoom is a whole number, or "fit": the whole picture in the artboard, at the largest whole number that fits or, for a
 // still larger than the artboard, scaled down smoothly so a dither reads as the tone it makes rather than as noise.
 // A still larger than 256 px a side opens fitted; the zoom chosen for sprites comes back when a sprite is shown again.
@@ -51,6 +61,8 @@ let sent = null;
 // closed tab left. `offers` are the closed tabs' drafts still to show after it.
 const browserStorage = name => { try { return globalThis[name]; } catch { return null; } };
 const locks = navigator.locks ?? null, claimed = claimTab(browserStorage('sessionStorage'), locks);
+// Start-up reads the claim later and reports a failed one then; until it does, a failure is not an unhandled one.
+claimed.catch(() => {});
 let drafts = null, offer = null, offers = [], draftTimer, draftWarned = false;
 const ownOffer = () => offer !== null && offer.id === drafts.id;
 // Each example's frame count is added from its render when the list is built, so a changed example can't leave it stale.
@@ -63,13 +75,7 @@ function imageCanvas(data, width, height) {
 function thumbnail(c) {
   const image = document.createElement('img'); image.src = c.toDataURL('image/png'); image.alt = ''; return image;
 }
-function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
-function download(data, filename, type) {
-  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
-  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
-function playState() { $('play').textContent = playing ? 'Ⅱ' : '▶'; $('play').setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation'); }
+const playState = () => playButton(playing);
 function reviewMotion() {
   if (motionReview) return motionReview;
   const speed = $('motion-speed').value, ground = $('motion-ground').value;
@@ -81,9 +87,9 @@ function reviewMotion() {
     ground: `${Math.max(0, ...report.groundErrors.map(p => Math.abs(p.pixels)))} px from ground`,
     poseSpread: `${Math.round(Math.min(1, ...report.poseSpread.map(p => p.share)) * 100)}% minimum`,
     loopSeam: `${report.loopSeam.maximum}° maximum`,
-    armSwing: `${report.gait?.arms.degreesFromOpposite}° from opposite`,
-    contactLegs: `${report.gait?.contact.largest?.degrees}° more bent than at rest`,
-    kneeLift: `${report.gait?.lift.largest?.degrees}° from rest`
+    armSwing: `${report.gait.arms.degreesFromOpposite}° from opposite`,
+    contactLegs: `${report.gait.contact.largest?.degrees}° more bent than at rest`,
+    kneeLift: `${report.gait.lift.largest?.degrees}° from rest`
   };
   $('motion-summary').textContent = Object.entries(report.checks).map(([key, pass]) => `${names[key] ?? key}: ${pass === null ? 'unavailable' : `${pass ? 'pass' : 'check'} (${details[key]})`}`).join(' · ');
   return motionReview;
@@ -212,17 +218,21 @@ function compile() {
     $('error').hidden = true;
     const warnings = [...(compiled.warnings ?? []), ...project.warnings];
     $('compile-status').textContent = warnings.length ? warnings.join(' ') : '● All pixels accounted for';
-    $('export').disabled = false; valid = true; animationChanged(); setMode(mode);
+    valid = true; showExport(); animationChanged(); setMode(mode);
     source.dispatchEvent(new CustomEvent('pixelbolt:rendered'));
   } catch (error) {
     valid = false; $('error').textContent = error.message; $('error').hidden = false;
-    $('compile-status').textContent = 'Fix the recipe to update the preview'; $('export').disabled = true;
+    $('compile-status').textContent = 'Fix the recipe to update the preview'; showExport();
   }
 }
+// Keeps the edited recipe as this tab's draft. When it cannot, the user is told once: the browser refused it, or
+// start-up ended without a draft store (while the studio starts there is none yet, and nothing can be typed).
 function keepDraft() {
   clearTimeout(draftTimer);
-  if (!drafts || !dirty || ownOffer()) return;
-  if (!drafts.save(source.value, $('source-filename').textContent) && !draftWarned) { draftWarned = true; toast('This browser is not keeping drafts (storage is off or full). Use Save JSON.'); }
+  if (!dirty || source.readOnly || (drafts && ownOffer())) return;
+  if (drafts?.save(source.value, $('source-filename').textContent) || draftWarned) return;
+  draftWarned = true;
+  toast(drafts ? 'This browser is not keeping drafts (storage is off or full). Use Save JSON.' : 'The studio did not finish starting, so it is not keeping drafts. Use Save JSON.');
 }
 // The recipe on screen was replaced on purpose, so this tab's draft is no longer needed. Other tabs' drafts are never
 // touched here.
@@ -247,12 +257,13 @@ function setSource(value, exampleFile) {
 }
 async function loadExample(example) {
   if (!mayReplace()) return;
-  const version = ++loadVersion;
+  const version = ++loadVersion, asked = source.value;
   try {
     const response = await fetch(`/examples/${example.file}.json`);
     if (!response.ok) throw new Error(`Could not load example: HTTP ${response.status}`);
     const value = await response.json();
-    if (version === loadVersion) setSource(value, example.file);
+    // The answer above was for the recipe as it was then: what was typed while the example loaded is asked about too.
+    if (version === loadVersion && (source.value === asked || mayReplace())) setSource(value, example.file);
   } catch (error) { toast(error.message); }
 }
 function setMode(next) {
@@ -262,11 +273,13 @@ function setMode(next) {
   $('artboard-caption').textContent = mode === 'motion' ? 'Movement at left · poses at right · limb arcs below them · yellow marks planted feet' : mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
   render();
 }
-source.addEventListener('input', () => { dirty = true; valid = false; $('export').disabled = true; clearTimeout(compileTimer); compileTimer = setTimeout(compile, 20); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
+source.addEventListener('input', () => { dirty = true; valid = false; showExport(); clearTimeout(compileTimer); compileTimer = setTimeout(compile, 20); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
 // Tab indents, as in any code editor, but must not trap the keyboard: Shift+Tab always moves back, and Escape lets
 // the next Tab move on.
 let leavingEditor = false;
 source.addEventListener('keydown', event => {
+  // While the studio starts the editor is read-only, and Tab moves on as it does from any other control.
+  if (source.readOnly) return;
   if (event.key === 'Escape') { leavingEditor = true; return; }
   if (event.key === 'Tab' && !event.shiftKey && !leavingEditor) { event.preventDefault(); const start = source.selectionStart; source.setRangeText('  ', start, source.selectionEnd, 'end'); source.dispatchEvent(new Event('input')); }
   if (!['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) leavingEditor = false;
@@ -407,12 +420,14 @@ $('frames').addEventListener('click', () => { compile(); if (!valid) { toast('Fi
 for (const id of ['frames-fps', 'frames-size']) $(id).addEventListener('change', showFramesCall);
 $('frames-close').addEventListener('click', () => $('frames-dialog').close());
 $('frames-export').addEventListener('click', async () => {
-  const button = $('frames-export'); button.disabled = true; button.textContent = 'Making frames…';
+  // Nothing else writes this button, so its own off state is the whole of "frames are being made": a second request
+  // cannot start, and no compile turns it back on. The ZIP is named for the recipe and animation that were sent.
+  const button = $('frames-export'), filename = `${project.name}-${$('animation').value}-frames.zip`; button.disabled = true; button.textContent = 'Making frames…';
   try {
     const response = await fetch('/api/sequence', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: spec, sequence: framesSettings() }) });
     if (!response.ok) { const body = await response.text(); try { throw new Error(JSON.parse(body).error); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; } }
     const summary = JSON.parse(response.headers.get('X-PixelForge-Sequence') ?? '{}');
-    download(await response.blob(), `${project.name}-${$('animation').value}-frames.zip`);
+    download(await response.blob(), filename);
     $('frames-dialog').close();
     toast(`Frames saved: ${summary.frames} PNGs, ${summary.width} × ${summary.height}, ${summary.fps} fps.${summary.notes ? ' The README in the ZIP explains how the timing was fitted.' : ''}`);
   } catch (error) { toast(error.message); }
@@ -433,14 +448,17 @@ $('draft-discard').addEventListener('click', () => {
   offerDraft(offers.shift()); keepDraft();
 });
 $('export').addEventListener('click', async () => {
+  if (exporting) return;
   compile(); if (!valid) return;
-  const button = $('export'), original = button.textContent; button.disabled = true; button.textContent = 'Packing assets…';
+  // The recipe and its name as they are now: the ZIP is named for what it holds, whatever is loaded while it is packed.
+  const packed = JSON.stringify(spec), filename = `${project.name}.zip`;
+  exporting = true; showExport();
   try {
-    const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) });
+    const response = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: packed });
     if (!response.ok) { const body = await response.text(); try { throw new Error(JSON.parse(body).error); } catch (error) { if (error instanceof SyntaxError) throw new Error(body); throw error; } }
-    download(await response.blob(), `${project.name}.zip`); toast('Your sprite bundle is ready');
+    download(await response.blob(), filename); toast('Your sprite bundle is ready');
   } catch (error) { toast(error.message); }
-  finally { button.textContent = original; button.disabled = !valid; }
+  finally { exporting = false; showExport(); }
 });
 addEventListener('resize', render);
 addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
@@ -456,31 +474,43 @@ function tick(time) {
   }
   requestAnimationFrame(tick);
 }
+// Start-up. Until it has put its recipe in the editor, the editor is read-only (index.html starts it so, marked busy),
+// so nothing can be typed that start-up would then replace unasked, or that no draft store is there yet to keep. Each
+// part runs whatever became of the one before, so a failure costs only its own part, and whatever fails, start-up ends
+// with the editor open and the frames playing; the first failure is shown, and keepDraft says so if no store came up.
 async function boot() {
-  try {
-    for (const example of examples) {
-      const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value).recipe);
-      const button = document.createElement('button'); button.className = 'example'; button.dataset.file = example.file;
-      const label = document.createElement('span'), strong = document.createElement('strong'), small = document.createElement('small');
-      const count = preview.frames.length;
-      strong.textContent = example.title; small.textContent = `${example.type} · ${count} frame${count === 1 ? '' : 's'}`; label.append(strong, small);
-      button.append(thumbnail(imageCanvas(preview.frames[0].data, preview.width, preview.height)), label);
-      button.addEventListener('click', () => loadExample(example)); $('examples').append(button);
-    }
-    $('example-count').textContent = String($('examples').children.length).padStart(2, '0');
-    // This tab's own draft comes first (a reload); then those of tabs that are closed now, newest first. Drafts of
-    // tabs that are still open stay theirs.
+  const asked = loadVersion;
+  let failure = null;
+  const part = async run => { try { return await run(); } catch (error) { failure ??= error; return null; } };
+  for (const example of examples) await part(async () => {
+    const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value).recipe);
+    const button = document.createElement('button'); button.className = 'example'; button.dataset.file = example.file;
+    const label = document.createElement('span'), strong = document.createElement('strong'), small = document.createElement('small');
+    const count = preview.frames.length;
+    strong.textContent = example.title; small.textContent = `${example.type} · ${count} frame${count === 1 ? '' : 's'}`; label.append(strong, small);
+    button.append(thumbnail(imageCanvas(preview.frames[0].data, preview.width, preview.height)), label);
+    button.addEventListener('click', () => loadExample(example)); $('examples').append(button);
+  });
+  $('example-count').textContent = String($('examples').children.length).padStart(2, '0');
+  // The recipe as written, and the palette file it links, before any draft is offered: a restored draft that links
+  // the file is drawn with it.
+  const initial = await part(async () => {
+    const [recipe, linked] = await Promise.all([fetch('/project.json'), fetch('/shared-palette.json')].map(async response => (await response).json()));
+    sharedPalette = linked; return recipe;
+  });
+  // This tab's own draft comes first (a reload); then those of tabs that are closed now, newest first. Drafts of
+  // tabs that are still open stay theirs.
+  await part(async () => {
     const id = await claimed, open = await openTabs(locks);
-    // The recipe as written, and the palette file it links, before any draft is offered: a restored draft that links
-    // the file is drawn with it.
-    const [initial, linked] = await Promise.all([fetch('/project.json'), fetch('/shared-palette.json')].map(async response => (await response).json()));
-    sharedPalette = linked;
     drafts = createDraftStore(browserStorage('localStorage'), { id });
     const own = drafts.load();
     offers = [...(own ? [{ ...own, id }] : []), ...drafts.others(open)];
     offerDraft(offers.shift());
-    if (initial) setSource(initial); else await loadExample(examples[0]);
-    playState(); requestAnimationFrame(tick);
-  } catch (error) { $('error').hidden = false; $('error').textContent = error.message; $('export').disabled = true; }
+  });
+  // A sample, a file or a blank canvas chosen while the studio started is what was asked for last, so it stays.
+  await part(async () => { if (loadVersion !== asked) return; if (initial) setSource(initial); else await loadExample(examples[0]); });
+  source.readOnly = false; source.removeAttribute('aria-busy'); source.removeAttribute('placeholder');
+  if (failure) { $('error').textContent = `The studio did not finish starting (${failure.message}). Reload the page to try again.`; $('error').hidden = false; }
+  playState(); requestAnimationFrame(tick);
 }
 boot();

@@ -14,7 +14,7 @@ export const FLUID_PRESETS = [
   { file: 'honey-dipper', title: 'Honey dipper', note: 'Sticky moving obstacle · one-shot' },
   { file: 'glug', title: 'Glugging bottle', note: 'Air pockets · one-shot' },
   { file: 'jacobs-ladder', title: "Jacob's ladder", note: 'Electric arc · loop' }, { file: 'lightning', title: 'Lightning', note: 'Electric gas · one-shot' },
-  { file: 'tesla-coil', title: 'Tesla coil', note: 'Electric gas · loop' }, { file: 'plasma-globe', title: 'Plasma globe', note: 'Electric gas · loop' },
+  { file: 'plasma-globe', title: 'Plasma globe', note: 'Electric gas · loop' },
   { file: 'ice-melt', title: 'Ice cube melting', note: 'Heat · one-shot' }, { file: 'pond-freeze', title: 'Pond freezing', note: 'Heat · one-shot' },
   { file: 'boiling-pot', title: 'Boiling pot', note: 'Heat, vapour · loop' }, { file: 'frost-window', title: 'Frosted window', note: 'Frost · one-shot' },
   { file: 'dry-ice', title: 'Dry-ice fog', note: 'Sublimation · one-shot' },

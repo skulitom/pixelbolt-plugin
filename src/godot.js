@@ -1,9 +1,10 @@
 // Godot 4 SpriteFrames and TileSet resources in Godot's text format (.tres), made from a Pixelbolt atlas.
-// Browser-compatible: no imports, and the same atlas always gives the same bytes.
+// Browser-compatible (its one import is tiled.js, which has none), and the same atlas always gives the same bytes.
 //
 // One AtlasTexture per frame cuts the frame's rectangle out of the sheet. A trimmed frame also gets a margin that puts
 // its visible pixels back where they sat on the canvas, so every frame keeps the canvas size and the same origin.
 // The sheet is named by a path relative to the .tres, which Godot resolves from the .tres's own folder.
+import { tileAnimations } from './tiled.js';
 
 // The SpriteFrames editor shows speeds from 0 to 120 FPS (it would show a faster animation as 120).
 export const GODOT_MAX_FPS = 120;
@@ -213,17 +214,11 @@ export function tileSets(sources) {
     const coords = frame => { const { x, y } = atlas.frames[frame].frame; return [(x - margin) / (w + separation), (y - margin) / (h + separation)]; };
     // What a frame is as a tile: its terrain and mask, its corners' terrains, '' for a plain tile, or null for no tile.
     const kind = frame => (byFrame.has(frame) ? `${byFrame.get(frame).terrain} ${byFrame.get(frame).mask}` : cornered.has(frame) ? `corners ${cornered.get(frame).join()}` : plain.has(frame) ? '' : null);
-    // Animated tiles: Godot plays a tile's frames from its own cell rightwards along the row, always looping.
-    const animated = new Map(), covered = new Set(), starts = new Set(), wrapped = [], unplayable = [];
-    for (const [key, animation] of Object.entries(atlas.animations)) {
-      const frames = animation.frames, first = kind(frames[0]);
-      // A frame that starts an earlier animation stays a tile, so an animation that would hide it is left out.
-      if (frames.length < 2 || first === null || frames.some(frame => covered.has(frame) || kind(frame) !== first || (frame !== frames[0] && starts.has(frame)))) continue;
-      // Its later frames are never tiles of their own, so a set whose animation can't play doesn't flicker between them.
-      // Its first frame is its tile, even where the animation comes back to it (a hold, or a loop that ends on it).
-      starts.add(frames[0]);
-      for (const frame of frames.slice(1)) if (frame !== frames[0]) covered.add(frame);
-      const cells = frames.map(coords), [col, row] = cells[0];
+    // Animated tiles: Godot plays a tile's frames from its own cell rightwards along the row, always looping. Which
+    // frames an animation takes, playing or not, is tileAnimations' rule, shared with the Tiled tileset.
+    const { claims, covered } = tileAnimations(atlas.animations, kind), animated = new Map(), wrapped = [], unplayable = [];
+    for (const { key, animation } of claims) {
+      const frames = animation.frames, cells = frames.map(coords), [col, row] = cells[0];
       if (animation.loop && cells.every(([c, r], i) => c === col + i && r === row)) animated.set(frames[0], frames.map(frame => atlas.frames[frame].duration));
       // In sheet order but running onto the next row: more columns fix it.
       else if (animation.loop && cells.every(([c, r], i) => i === 0 || (c === cells[i - 1][0] + 1 && r === cells[i - 1][1]) || (c === 0 && r === cells[i - 1][1] + 1))) wrapped.push(key);

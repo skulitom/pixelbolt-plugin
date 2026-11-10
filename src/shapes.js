@@ -5,8 +5,8 @@
 // follow, and the fx compiler bakes each frame into one grid operation under its particles, so the result stays an
 // ordinary recipe. Browser-compatible and deterministic: + − × ÷ and sqrt, craft's polynomial trigonometry and seeded
 // hashing, so every engine draws the same pixels.
-import { PixelError } from './core.js';
-import { fields } from './authoring.js';
+import { fail, isObject } from './core.js';
+import { fields, number, integer, pair } from './authoring.js';
 import { patternProblem, ditherThreshold, cleanupIds, traceLine, hash, random, sinDeg, cosDeg, ease, EASINGS } from './craft.js';
 
 export const SHAPE_KINDS = ['ring', 'slash', 'beam', 'bolt', 'glyph', 'star', 'burst', 'stream', 'aura', 'trail'];
@@ -39,25 +39,11 @@ export const LAYER_DEPTHS = ['front', 'back', 'split'];
 // well under it. The shipped effects use under 0.1%; reaching it takes a few seconds.
 export const SHAPE_WORK = 400_000_000;
 
-const fail = (path, message) => { throw new PixelError(path, message); };
 // Counts `n` pixels visited against the compile's shared budget (painting, and measuring an aura's distance field),
 // refusing the layer at `path` that crosses it.
 const spendWork = (work, n, path) => {
   work.spent += n;
   if (work.spent > SHAPE_WORK) fail(path, `the shape layers would visit more than ${SHAPE_WORK.toLocaleString('en-US')} pixels to draw; make them smaller (radius, width, the part on the canvas), fewer, or over fewer frames`);
-};
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
-const pair = (value, path, min, max) => {
-  if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
-  return [number(value[0], `${path}[0]`, min, max), number(value[1], `${path}[1]`, min, max)];
 };
 const clamp01 = x => (x < 0 ? 0 : x > 1 ? 1 : x);
 function squashOf(value, path) {

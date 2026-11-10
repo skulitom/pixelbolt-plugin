@@ -12,8 +12,8 @@
 // ramps and ordered dither. Browser-compatible and deterministic: only + − × ÷ and sqrt, craft.js's polynomial
 // trigonometry and seeded hash, a fixed timestep and fixed iteration counts.
 // createLiveFluid runs the same simulation a frame at a time for interactive pages, with pushes, puffs and boosts.
-import { PixelError, renderProject, parseColor } from './core.js';
-import { fields } from './authoring.js';
+import { renderProject, parseColor, fail, isObject, sameWidth } from './core.js';
+import { fields, number, integer, pair, pick, pickWhole } from './authoring.js';
 import { patternProblem, ditherThreshold, cleanupIds, traceLine, random, sinDeg, cosDeg } from './craft.js';
 import { atan2Deg } from './shapes.js';
 import { readElectric, readElectrode, createElectric, stepElectric, electricFields, electricWork, ELECTRODE_FIELDS, MATTER } from './electric.js';
@@ -52,25 +52,11 @@ const WAKE = 24;
 // How far (pixels) liquid a body moves onto may go back into a cell the body has just left.
 const REFILL = 3;
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value, path) => {
   if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of letters, digits, hyphens or underscores, starting with a letter');
   return value;
 };
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
 const boolean = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected true or false'); return value; };
-const pair = (value, path, min, max) => {
-  if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
-  return [number(value[0], `${path}[0]`, min, max), number(value[1], `${path}[1]`, min, max)];
-};
 // A number, or [min, max] sampled per spark.
 const range = (value, path, min, max, whole = false) => {
   const check = whole ? integer : number;
@@ -83,8 +69,6 @@ const range = (value, path, min, max, whole = false) => {
   const v = check(value, path, min, max);
   return [v, v];
 };
-const pick = ([a, b], r) => a + (b - a) * r;
-const pickWhole = ([a, b], r) => a + Math.min(b - a, Math.floor(r * (b - a + 1)));
 // Grid rows name colours by character, so every colour a fluid draws is a one-character palette key.
 const paletteKey = (value, path, palette) => {
   if (typeof value !== 'string' || value.length !== 1 || value === '.' || value === ' ' || !Object.hasOwn(palette, value)) fail(path, 'expected a one-character palette key; grid rows name colours by character');
@@ -160,9 +144,26 @@ function readWhitewater(layer, path, context, gravity) {
   };
 }
 
-function readEmitter(emitter, path, context) {
+// `follow` ties an emitter to an obstacle: an index into the effect's obstacles, or the symbol one of them stamps. The
+// emitter keeps its place beside the obstacle as the obstacle's keys move it, so a nozzle's flame leaves with its rocket
+// and a spout pours from a moving kettle. Returns how far the obstacle is from its own x and y on every frame of the
+// cycle, in the whole pixels it is drawn at, and whether it got there by a cut (no path to lay the emitter along), or
+// null for an obstacle without keys, which never moves.
+function readFollow(value, path, listed) {
+  if (!listed.length) fail(path, 'this effect has no obstacles to follow');
+  let index;
+  if (typeof value === 'string') {
+    const found = listed.flatMap((o, i) => (o.symbol === value ? [i] : []));
+    if (!found.length) fail(path, `no obstacle stamps the symbol ${JSON.stringify(value)}; follow one of ${[...new Set(listed.map(o => o.symbol))].join(', ')}, or an obstacle's index`);
+    if (found.length > 1) fail(path, `${found.map(i => `obstacles[${i}]`).join(' and ')} all stamp ${JSON.stringify(value)}; follow one by its index, such as ${found[0]}`);
+    index = found[0];
+  } else index = integer(value, path, 0, listed.length - 1);
+  const o = listed[index];
+  return { index, path: o.track ? o.track.map((place, f) => ({ x: place.x - o.x, y: place.y - o.y, cut: !f || place.jump })) : null };
+}
+function readEmitter(emitter, path, context, listed = []) {
   const { frames, loop, liquid } = context;
-  fields(emitter, ['name', 'at', 'radius', 'area', 'burst', 'rate', 'start', 'end', 'density', 'temperature', 'falloff', 'velocity', 'expand', 'vortex', 'noise', 'flicker', 'pulse', 'orbit', 'sparks', 'carry'], path);
+  fields(emitter, ['name', 'at', 'radius', 'area', 'burst', 'rate', 'start', 'end', 'density', 'temperature', 'falloff', 'velocity', 'expand', 'vortex', 'noise', 'flicker', 'pulse', 'orbit', 'follow', 'sparks', 'carry'], path);
   if (emitter.name !== undefined) identifier(emitter.name, `${path}.name`);
   if ((emitter.burst === undefined) === (emitter.rate === undefined)) fail(path, 'use exactly one of burst (added once, at start) or rate (added every frame from start until end)');
   const start = integer(emitter.start ?? 0, `${path}.start`, 0, frames - 1);
@@ -192,6 +193,7 @@ function readEmitter(emitter, path, context) {
     noise: number(emitter.noise ?? 0, `${path}.noise`, 0, 8), flicker: number(emitter.flicker ?? 0, `${path}.flicker`, 0, 1),
     pulse: emitter.pulse === undefined ? null : readCycle(emitter.pulse, `${path}.pulse`, frames, loop, false),
     orbit: emitter.orbit === undefined ? null : readCycle(emitter.orbit, `${path}.orbit`, frames, loop, true),
+    ...(emitter.follow !== undefined && { follow: readFollow(emitter.follow, `${path}.follow`, listed) }),
     sparks: emitter.sparks === undefined ? null : readSparks(emitter.sparks, `${path}.sparks`, context, burst),
     // A liquid emitter's water starts at its temperature (the air's when unset).
     ...(liquid && context.heat && { warmth: emitter.temperature ?? null })
@@ -312,7 +314,7 @@ const layoutKey = places => places.map(p => (p.show ? `${p.x},${p.y}${p.shape ??
 // A body's turning is given to a liquid (a paddle stirs water) but not to sand: dragged round with it, sand turned at the
 // body's own rate, nothing damped the turning, and a crate rolled down a heap.
 // `mass` is a free, awake body's inverse mass and inertia, for a liquid's pressure solve to move it (see couplingOf).
-function bodyPlace(cells, b, turns = true) {
+function bodyPlace(cells, b, turns) {
   if (!cells.length) return { rows: ['.'], live: { x: 0, y: 0, show: false, jump: false, vx: 0, vy: 0, w: 0, dx: 0, dy: 0, shape: '', cx: b.x, cy: b.y, mass: null } };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of cells) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
@@ -583,7 +585,8 @@ function readEffect(effect, path, source) {
   // A gas with electrodes needs no emitter: its arcs are its source.
   const listedEmitters = effect.emitters ?? (electric ? [] : undefined);
   if (!Array.isArray(listedEmitters) || listedEmitters.length > LIMITS.emitters || (!listedEmitters.length && !fills.length && !electric)) fail(`${path}.emitters`, `expected 1–${LIMITS.emitters} emitters${liquid ? ' (or none, with a fill)' : ' (or none, with electrodes)'}`);
-  const emitters = listedEmitters.map((emitter, i) => readEmitter(emitter, `${path}.emitters[${i}]`, context));
+  const followable = obstacles.slice(0, Array.isArray(effect.obstacles) ? effect.obstacles.length : 0);
+  const emitters = listedEmitters.map((emitter, i) => readEmitter(emitter, `${path}.emitters[${i}]`, context, followable));
   if (!Array.isArray(effect.look) || !effect.look.length || effect.look.length > LIMITS.looks) fail(`${path}.look`, `expected 1–${LIMITS.looks} layers that map a field to palette colours`);
   const look = effect.look.map((layer, i) => readLook(layer, `${path}.look[${i}]`, context));
   const gravity = effect.gravity === undefined ? [0, 0.3] : pair(effect.gravity, `${path}.gravity`, -2, 2);
@@ -680,10 +683,10 @@ function sourceWarnings({ path, width, height, frames, liquid, seed, emitters, f
   emitters.forEach((e, index) => {
     if (!(e.density > 0 || (!liquid && (e.temperature > 0 || e.expand > 0)))) return;
     let open = false, buried = -1, seen = false;
-    // An orbiting rate emitter also works along the path between frames, as emitFrame lays it.
-    const steps = e.orbit && !e.burst && !e.carry ? Math.max(1, Math.ceil(2 * Math.PI * Math.max(e.orbit.radius[0], e.orbit.radius[1]) / Math.abs(e.orbit.period))) : 1;
     for (let cycle = 0; cycle < frames && !open; cycle++) {
       if (!active(e, cycle)) continue;
+      // A rate emitter that orbits or follows an obstacle also works along the path between frames, as emitFrame lays it.
+      const steps = e.burst || e.carry ? 1 : laidSteps(e, cycle);
       // Obstacles that move are where they are on that frame.
       const here = layoutAt ? layoutAt(cycle) : null, solid = here ? here.solid : solidBase, owner = here ? here.owner : ownerBase;
       for (let k = 1; k <= steps && !open; k++) {
@@ -1110,7 +1113,7 @@ function sealedBodies(g, solve, diag, ax, ay, div) {
     for (let at = 0; at < end; at++) div[order[at]] -= mean;
   }
 }
-function projectLiquid(g, active, iterations, target, coupling = null) {
+function projectLiquid(g, active, iterations, target, coupling) {
   const { W, H, N, u, v, p, div, geo, uFixed, vFixed, airP, pockets } = g, X = W + 1, steps = Math.ceil(iterations / 3), m = pockets ? pockets.Pn.length : 0;
   if (!g.cg) g.cg = { diag: new Float64Array(N), ax: new Float64Array(N), ay: new Float64Array(N), solve: new Uint8Array(N), prec: new Float64Array(N), r: new Float64Array(N), z: new Float64Array(N), s: new Float64Array(N), q: new Float64Array(N) };
   const { diag, ax, ay, solve, prec, r, z, s, q } = g.cg;
@@ -1780,17 +1783,33 @@ function valueNoise(seed, emitter, frame, salt, x, y) {
 }
 // Where an emitter is this frame, and how strongly it emits: rate or burst, times its pulse. Flicker varies the
 // strength from cell to cell and frame to frame (seeded value noise), so a flame's base breaks into tongues.
-// `along` places an orbiting emitter between frames (it defaults to the frame itself); pulse and flicker keep the frame's.
+// `along` places an emitter that orbits or follows an obstacle between frames (it defaults to the frame itself); pulse
+// and flicker keep the frame's.
 // `factor` scales the strength, as a live runner's boost does.
 function emitterState(e, index, cycle, seed, along = cycle, factor = 1) {
   let [x, y] = e.at;
   if (e.orbit) { const angle = 360 * along / e.orbit.period + e.orbit.phase; x += e.orbit.radius[0] * cosDeg(angle); y += e.orbit.radius[1] * sinDeg(angle); }
+  // Beside the obstacle it follows: where the obstacle is drawn on this frame, and on the way there from the frame before.
+  if (e.follow && e.follow.path) {
+    const now = e.follow.path[cycle], back = now.cut ? 0 : cycle - along, was = back ? e.follow.path[cycle - 1] : now;
+    x += now.x + (was.x - now.x) * back; y += now.y + (was.y - now.y) * back;
+  }
   let strength = e.strength * factor;
   if (e.pulse) strength *= 1 + e.pulse.amplitude * sinDeg(360 * cycle / e.pulse.period + e.pulse.phase);
   const flicker = (px, py) => (e.flicker ? strength * (1 + e.flicker * (2 * valueNoise(seed, index, cycle, SALT.flicker, px, py) - 1)) : strength);
   return { x, y, flicker };
 }
 const active = (e, cycle) => e.burst ? cycle === e.start : cycle >= e.start && cycle < e.end;
+// How many places, about a pixel apart, a moving rate emitter is laid at over the frame that ends on `cycle`: along its
+// orbit, and along the way of the obstacle it follows (none across a cut).
+function laidSteps(e, cycle) {
+  let steps = e.orbit ? Math.max(1, Math.ceil(2 * Math.PI * Math.max(e.orbit.radius[0], e.orbit.radius[1]) / Math.abs(e.orbit.period))) : 1;
+  if (e.follow && e.follow.path && !e.follow.path[cycle].cut) {
+    const now = e.follow.path[cycle], was = e.follow.path[cycle - 1];
+    steps = Math.max(steps, Math.abs(now.x - was.x), Math.abs(now.y - was.y));
+  }
+  return steps;
+}
 // Coverage of a point by the emitter's disc or box, with a soft one-cell rim.
 function coverage(e, dx, dy) {
   if (e.radius !== null) { const d = Math.sqrt(dx * dx + dy * dy), w = e.radius + 0.5 - d; return w <= 0 ? 0 : w >= 1 ? 1 : w; }
@@ -3851,6 +3870,10 @@ function renderFields(effect, base, width, height, drawn = null, hold = null, ro
   // A liquid against an obstacle is lit (or shaded) in full where it touches it on the side toward the light (or away
   // from it), and obstacles further off take no part in the sample: a pool in a stepped bowl gets an even rim along the
   // bowl instead of light and dark pixels by turns as the sample lands on the bowl or on liquid.
+  // A gas cut by an open canvas edge goes on past it: a sample that lands outside reads the edge instead of nothing, so
+  // smoke leaving the picture gets no bright line along the edge. A closed edge is a wall, and lights as an obstacle does.
+  const walls = effect.walls, inside = (fx, fy) => bilinearZero(density, width, height,
+    fx < 0 && !walls.left ? 0 : fx > width - 1 && !walls.right ? width - 1 : fx, fy < 0 && !walls.top ? 0 : fy > height - 1 && !walls.bottom ? height - 1 : fy);
   const lit = new Float64Array(N), shade = new Float64Array(N), [lx, ly] = effect.light;
   const sx = lx >= 0.38 ? 1 : lx <= -0.38 ? -1 : 0, sy = ly >= 0.38 ? 1 : ly <= -0.38 ? -1 : 0;
   if (effect.look.some(layer => layer.field === LIGHT || layer.field === SHADOW)) for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) {
@@ -3862,8 +3885,8 @@ function renderFields(effect, base, width, height, drawn = null, hold = null, ro
       shade[c] = touches(-sx, -sy) ? 1 : Math.max(0, 1 - openSample(density, solid, width, height, x - 2 * lx - 0.5, y - 2 * ly - 0.5, here) / here);
       continue;
     }
-    lit[c] = Math.max(0, 1 - bilinearZero(density, width, height, x + 2 * lx - 0.5, y + 2 * ly - 0.5) / here);
-    shade[c] = Math.max(0, 1 - bilinearZero(density, width, height, x - 2 * lx - 0.5, y - 2 * ly - 0.5) / here);
+    lit[c] = Math.max(0, 1 - inside(x + 2 * lx - 0.5, y + 2 * ly - 0.5) / here);
+    shade[c] = Math.max(0, 1 - inside(x - 2 * lx - 0.5, y - 2 * ly - 0.5) / here);
   }
   const sources = [density, base[1], base[2], depth, lit, shade, base[3], base[4], base[5]];
   // A filled gap that no layer coloured (a look whose first colour starts above the surface level) takes the colour of
@@ -4049,7 +4072,6 @@ function moveObstacles(run, cycle) {
     for (const c of wake.cells) if (wake.left[c] && (g.solid[c] || !--wake.left[c])) wake.left[c] = 0;
     wake.cells = wake.cells.filter(c => wake.left[c]);
   }
-  if (effect.liquid && solids.moving) state.wake ??= { cells: [], left: new Uint8Array(g.N), mark: new Uint8Array(g.N) };
   const of = c => (c >= 0 ? solids.velocity(c) : null);
   if (!P && (solids.moving || g.moved || changed)) {
     if (!g.uWall) { g.uWall = new Float64Array(g.u.length); g.vWall = new Float64Array(g.v.length); } else { g.uWall.fill(0); g.vWall.fill(0); }
@@ -4066,8 +4088,11 @@ function moveObstacles(run, cycle) {
   if (effect.liquid) {
     // A body leaves a wake as it turns, too, not only as it moves a whole pixel.
     for (let c = 0; c < g.N; c++) if (before.solid[c] && !layout.solid[c] && before.owner[c] >= 0 && (shift[before.owner[c]] || (cycle > 0 && effect.obstacles[before.owner[c]].body !== undefined))) {
-      if (!state.wake.left[c]) state.wake.cells.push(c);
-      state.wake.left[c] = WAKE;
+      // Made when the first cell is left, not when an obstacle first has a velocity: a fixed body turning on the spot in
+      // sand has none (its turning is not the sand's), and its cells come and go all the same.
+      const wake = state.wake ??= { cells: [], left: new Uint8Array(g.N), mark: new Uint8Array(g.N) };
+      if (!wake.left[c]) wake.cells.push(c);
+      wake.left[c] = WAKE;
     }
   }
   // The cells each moving obstacle passed over on its way, from every cell it held to where that cell is now. An
@@ -4232,12 +4257,12 @@ function emitFrame(run, t, cycle, factors = null) {
     if (!active(e, cycle)) return null;
     const factor = factors ? factors[index] : 1;
     const emit = (along, share) => (liquid ? emitLiquid(state, e, index, cycle, seed, along, factor) : emitGas(state.g, state, e, index, cycle, seed, along, share, factor));
-    // An orbiting rate emitter is laid along the path it covered since the last frame, about a pixel apart, so a fast
-    // orbit leaves a smooth trail instead of a string of beads; its expansion is shared out along the way.
-    // A carrying emitter throws once a frame: carriers already fly, and laying it along its path would throw one per
-    // covered cell at every point.
-    if (!e.orbit || e.burst || e.carry || !t || !active(e, loop ? (cycle + frames - 1) % frames : cycle - 1)) return emit(cycle, 1);
-    const steps = Math.max(1, Math.ceil(2 * Math.PI * Math.max(e.orbit.radius[0], e.orbit.radius[1]) / Math.abs(e.orbit.period)));
+    // A rate emitter that orbits, or follows a moving obstacle, is laid along the path it covered since the last frame,
+    // about a pixel apart, so a fast one leaves a smooth trail instead of a string of beads; its expansion is shared
+    // out along the way. A carrying emitter throws once a frame: carriers already fly, and laying it along its path
+    // would throw one per covered cell at every point.
+    if (!(e.orbit || e.follow) || e.burst || e.carry || !t || !active(e, loop ? (cycle + frames - 1) % frames : cycle - 1)) return emit(cycle, 1);
+    const steps = laidSteps(e, cycle);
     for (let k = 1; k < steps; k++) emit(cycle - 1 + k / steps, 1 / steps);
     return emit(cycle, 1 / steps);
   });
@@ -4472,7 +4497,6 @@ function measureFrame(chars, base, solid, width, height, particles) {
 // The per-frame figures as one list per figure, which keeps the metadata compact.
 const columns = list => Object.fromEntries(Object.keys(list[0]).map(key => [key, list.map(figure => figure[key])]));
 
-// Runs one effect and returns its frames' operations plus figures for the metadata.
 // ---- Bodies in a liquid ----------------------------------------------------------------------------------------------
 // A free body in a liquid is three more unknowns of the liquid's pressure solve, its velocity and its turning
 // (docs/physics-model.md, section 13): the pressure on its faces moves it as its faces move the liquid, so the two share
@@ -4621,7 +4645,13 @@ function fluidForces(run, crowd) {
       const rx = i + 0.5 - b.x - (across ? 0 : sign * 0.5), ry = j + 0.5 - b.y - (across ? sign * 0.5 : 0);
       load += column; loadX += column * rx; loadY += column * ry;
     }
-    if (!Kx && !Ky && !sub && !load && !px && !py) { b.push = null; b.float = null; return; }
+    if (!Kx && !Ky && !sub && !load && !px && !py) {
+      // A body that slept held up by the fluid, or under a load of it, wakes when none of it is left: asleep, a crate
+      // afloat on a pool that drained away stayed where the water had held it.
+      if (b.asleep && (b.restSub > 0 || b.restLoad > 0)) { b.asleep = false; b.sleepy = 0; }
+      b.restSub = undefined; b.restLoad = undefined; b.restLevel = undefined; b.push = null; b.float = null;
+      return;
+    }
     const m = 1 / b.invMass, added = ADDED_MASS * heavy * sub, fall = b.weightless ? 0 : 1, lift = heavy * sub;
     const tau = (sub ? (sx - b.x) * -lift * gy - (sy - b.y) * -lift * gx : 0) + loadX * gy - loadY * gx, inertia = b.invInertia ? 1 / b.invInertia : 0;
     // In a gas, the body's own motion sets much of the pressure on its faces that pushes it back: met a frame at a time, a
@@ -4649,13 +4679,16 @@ function fluidForces(run, crowd) {
     }
     // A sleeping body stays asleep in still fluid: what holds it (its buoyancy, the ground or the bottom under it) holds
     // it as before. Fluid flowing past it faster than BODY_WAKE, or rising, falling or piling a row against it, wakes it.
+    // So does the level it floats at moving a pixel: a light body has less of itself under the liquid than a row of its
+    // cells, and all of that could drain away without the row's worth of change that wakes a heavier one.
     if (b.asleep) {
       const flow = K ? Math.sqrt(Ku * Ku + Kv * Kv) / K : 0, row = Math.max(2, inside.size / 6);
-      b.restSub ??= sub; b.restLoad ??= load;
-      if (flow < BODY_WAKE && Math.abs(sub - b.restSub) < row && Math.abs(load - b.restLoad) < row) return;
+      b.restSub ??= sub; b.restLoad ??= load; b.restLevel ??= float ? level : null;
+      const shifted = b.restLevel !== null && !(float && Math.abs(level - b.restLevel) < 1);
+      if (flow < BODY_WAKE && Math.abs(sub - b.restSub) < row && Math.abs(load - b.restLoad) < row && !shifted) return;
       b.asleep = false; b.sleepy = 0;
     }
-    b.restSub = undefined; b.restLoad = undefined;
+    b.restSub = undefined; b.restLoad = undefined; b.restLevel = undefined;
     // Never hand the bodies a number that isn't one: a body keeps its own motion rather than vanish.
     if (![vx, vy, w, ...push].every(Number.isFinite)) { b.push = null; b.float = null; return; }
     b.vx = vx; b.vy = vy; b.w = w; b.push = push; b.float = float;
@@ -4804,6 +4837,7 @@ function bodiesFigures(crowd, hitsAt, effect, begin) {
     ...(notes.length && { notes })
   };
 }
+// Runs one effect and returns its frames' operations plus figures for the metadata.
 function simulate(effect, context) {
   // Bodies move their obstacles each frame, so a run works on its own copies of them.
   if (effect.bodies) effect = { ...effect, obstacles: effect.obstacles.map(o => (o.body === undefined ? o : { ...o })) };
@@ -4950,7 +4984,8 @@ function buildRecipe(source, each) {
   if (!isObject(symbols)) fail('fluid.symbols', 'expected named symbols for obstacles');
   for (const [name, rows] of Object.entries(symbols)) {
     identifier(name, `fluid.symbols.${name}`);
-    if (!Array.isArray(rows) || !rows.length || rows.length > 128 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string' || row.length !== rows[0].length)) fail(`fluid.symbols.${name}`, 'expected 1–128 equal-width text rows');
+    if (!Array.isArray(rows) || !rows.length || rows.length > 128 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string')) fail(`fluid.symbols.${name}`, 'expected 1–128 equal-width text rows');
+    sameWidth(rows, `fluid.symbols.${name}`);
   }
   if (!isObject(source.effects) || !Object.keys(source.effects).length || Object.keys(source.effects).length > LIMITS.effects) fail('fluid.effects', `expected 1–${LIMITS.effects} named effects`);
   const frames = [], animations = {}, seen = new Set();

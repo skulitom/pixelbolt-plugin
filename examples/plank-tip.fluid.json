@@ -31,7 +31,7 @@
   "effects": {
     "plank-tip": {
       "kind": "liquid",
-      "frames": 110,
+      "frames": 80,
       "duration": 50,
       "seed": 4,
       "walls": ["left", "right", "bottom"],

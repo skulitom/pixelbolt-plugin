@@ -1,0 +1,228 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "rope-bridge",
+  "width": 128,
+  "height": 64,
+  "palette": {
+    "k": "#14141c",
+    "s": "#4a5068",
+    "f": "#6f7896",
+    "b": "#8a5a36",
+    "h": "#c98c4f",
+    "r": "#d7b56d",
+    "R": "#8a5a36",
+    "g": "#2ee68f",
+    "w": "#e8f4ff"
+  },
+  "symbols": {
+    "ground": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+    ],
+    "crate": [
+      "kkkkkkkk",
+      "khhhhhhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khhhhhhk",
+      "kkkkkkkk"
+    ]
+  },
+  "effects": {
+    "rope-bridge": {
+      "frames": 140,
+      "duration": 40,
+      "gravity": [0, 0.18],
+      "walls": ["left", "right"],
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 60 }],
+      "bodies": [
+        {
+          "name": "post-L",
+          "shape": "box",
+          "size": [4, 42],
+          "at": [12, 39],
+          "fixed": true,
+          "fill": "s",
+          "outline": "k"
+        },
+        {
+          "name": "post-R",
+          "shape": "box",
+          "size": [4, 42],
+          "at": [116, 39],
+          "fixed": true,
+          "fill": "s",
+          "outline": "k"
+        },
+        {
+          "name": "plank-0",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [26.5, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-1",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [39, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-2",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [51.5, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-3",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [64, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-4",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [76.5, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-5",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [89, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "plank-6",
+          "shape": "box",
+          "size": [12, 3],
+          "at": [101.5, 30],
+          "density": 0.7,
+          "friction": 0.7,
+          "bounce": 0.1,
+          "fill": "b",
+          "outline": "k"
+        },
+        {
+          "name": "crate",
+          "shape": "box",
+          "size": [8, 8],
+          "at": [64, 8],
+          "density": 2.2,
+          "friction": 0.5,
+          "bounce": 0.1,
+          "symbol": "crate"
+        }
+      ],
+      "joints": [
+        {
+          "type": "distance",
+          "a": "plank-0",
+          "b": "plank-1",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        },
+        {
+          "type": "distance",
+          "a": "plank-1",
+          "b": "plank-2",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        },
+        {
+          "type": "distance",
+          "a": "plank-2",
+          "b": "plank-3",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        },
+        {
+          "type": "distance",
+          "a": "plank-3",
+          "b": "plank-4",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        },
+        {
+          "type": "distance",
+          "a": "plank-4",
+          "b": "plank-5",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        },
+        {
+          "type": "distance",
+          "a": "plank-5",
+          "b": "plank-6",
+          "anchorA": [6, 0],
+          "anchorB": [-6, 0],
+          "length": 0.5,
+          "collide": false
+        }
+      ],
+      "ropes": [
+        {
+          "from": { "body": "post-L", "point": [2, -18] },
+          "to": { "body": "plank-0", "point": [-6, 0] },
+          "links": 5,
+          "slack": 0,
+          "fill": "r",
+          "outline": "k",
+          "break": 40
+        },
+        {
+          "from": { "body": "post-R", "point": [-2, -18] },
+          "to": { "body": "plank-6", "point": [6, 0] },
+          "links": 5,
+          "slack": 0,
+          "fill": "r",
+          "outline": "k",
+          "break": 40
+        }
+      ]
+    }
+  }
+}

@@ -79,7 +79,7 @@
       },
       "maxItems": 2,
       "minItems": 2,
-      "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+      "description": "Default pivot for every frame, exported to the atlas as anchorPx (exported pixels) and as anchor and pivot (anchor / source size, the 0-1 origin Phaser and PixiJS read)."
     },
     "frames": {
       "type": "array",
@@ -149,7 +149,7 @@
         },
         "trim": {
           "type": "boolean",
-          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns. Frames whose visible pictures are the same (a hold, a frame moved whole) share one rectangle."
         }
       },
       "required": [],

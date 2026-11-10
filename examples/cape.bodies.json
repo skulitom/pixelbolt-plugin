@@ -1,0 +1,87 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "cape",
+  "width": 80,
+  "height": 64,
+  "palette": {
+    "k": "#14141c",
+    "s": "#4a5068",
+    "f": "#6f7896",
+    "w": "#e8d8c0",
+    "c": "#3a6ea5",
+    "d": "#27496d",
+    "r": "#c0392b",
+    "R": "#e06c5a",
+    "g": "#7fb3d5"
+  },
+  "symbols": {
+    "ground": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+    ],
+    "hero": [
+      "...kkkk...",
+      "..kwwwwk..",
+      "..kwwwwk..",
+      "...kkkk...",
+      "..kcccck..",
+      ".kcccccck.",
+      ".kcccccck.",
+      ".kcccccck.",
+      "..kcccck..",
+      "..kcccck..",
+      "...kkkk...",
+      "..kk..kk..",
+      "..kk..kk..",
+      "..kk..kk..",
+      "..kk..kk..",
+      "..kk..kk..",
+      "..kk..kk..",
+      "..kk..kk.."
+    ]
+  },
+  "effects": {
+    "cape": {
+      "frames": 120,
+      "duration": 40,
+      "gravity": [0, 0.16],
+      "walls": ["left", "right"],
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 60 }],
+      "bodies": [
+        {
+          "name": "hero",
+          "shape": "box",
+          "size": [10, 18],
+          "at": [30, 51],
+          "fixed": true,
+          "velocity": [0.3, 0],
+          "symbol": "hero"
+        }
+      ],
+      "cloths": [
+        {
+          "name": "cape",
+          "at": [17, 46],
+          "size": [9, 13],
+          "cell": 1,
+          "fill": ["R", "r", "r"],
+          "outline": "k",
+          "light": [0, -1],
+          "wind": [-0.1, 0],
+          "gust": 1,
+          "slack": 0.3,
+          "stiffness": 0.5,
+          "shear": 0.3,
+          "bend": 0.1,
+          "tear": 4,
+          "draw": "under",
+          "collide": false,
+          "pins": [{ "at": [8, 0], "to": "hero", "point": [-4, -5] }, { "at": [6, 0], "to": "hero", "point": [-6, -5] }]
+        }
+      ]
+    }
+  }
+}

@@ -27,6 +27,9 @@ export function frameAt(atlas, animation, time) {
   }
   return sequence.frames.at(-1);
 }
+// The pixel a frame's anchor names, in the source canvas. Atlases write it as `anchorPx` beside the 0-1 `anchor`;
+// one without `anchorPx` (written before it, or by hand) keeps its `anchor` in pixels, read as it always was.
+const anchorPixels = entry => entry.anchorPx ?? entry.anchor ?? { x: 0, y: 0 };
 /**
  * Draws one atlas frame into any 2D context, for games that draw many sprites into one canvas.
  * (x, y) is the frame's anchor when the atlas has one (pass anchor: false to ignore it), otherwise the top-left of
@@ -39,7 +42,7 @@ export function drawFrame(context, sheet, name, x, y, { scale = 1, flipX = false
   if (!Object.hasOwn(sheet.atlas.frames, name)) throw new Error(`Unknown frame: ${name}`);
   const entry = sheet.atlas.frames[name], { frame } = entry;
   const source = entry.sourceSize ?? { w: frame.w, h: frame.h }, offset = entry.spriteSourceSize ?? { x: 0, y: 0, w: frame.w, h: frame.h };
-  const origin = anchor && entry.anchor ? entry.anchor : { x: 0, y: 0 };
+  const origin = anchor ? anchorPixels(entry) : { x: 0, y: 0 };
   const left = Math.round(x) - (flipX ? source.w - origin.x : origin.x) * scale, top = Math.round(y) - origin.y * scale;
   const dx = flipX ? source.w - offset.x - offset.w : offset.x;
   context.imageSmoothingEnabled = false;

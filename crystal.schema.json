@@ -70,7 +70,7 @@
         },
         "trim": {
           "type": "boolean",
-          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns. Frames whose visible pictures are the same (a hold, a frame moved whole) share one rectangle."
         }
       },
       "required": [],

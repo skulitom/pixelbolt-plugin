@@ -30,8 +30,8 @@
 // Browser-compatible and deterministic, as the rest of the fluid compiler: only + − × ÷ and sqrt, craft.js's seeded
 // hash, fixed iteration counts (the solve may stop early once converged, at the same step on every engine), and cells,
 // markers and links visited in a fixed order.
-import { PixelError } from './core.js';
-import { fields } from './authoring.js';
+import { fail } from './core.js';
+import { fields, number, integer } from './authoring.js';
 import { random, traceLine } from './craft.js';
 
 export const EDGES = ['left', 'right', 'top', 'bottom'];
@@ -57,15 +57,6 @@ const MATTER_SIGMA = [0, CONDUCTIVITY.metal, CONDUCTIVITY.water, CONDUCTIVITY.ic
 const lands = m => m === METAL || m === WATER;
 const SALT = { pick: 21 };
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
 
 // ---- Reading -----------------------------------------------------------------------------------------------------------
 // An electrode on an obstacle: `voltage` (a number, or keys [{ frame, voltage, over }] that change it on cue),

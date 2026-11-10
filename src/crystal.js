@@ -6,27 +6,15 @@
 // pixel short of whatever it would touch, with mirror symmetry across both axes. Growth runs on a fixed timeline that
 // eases into rest: the last frames hold a still, finished picture.
 // Browser-compatible and deterministic: craft.js trigonometry, seeded hashing, + − × ÷ and sqrt only.
-import { PixelError, renderProject, readRows, parseColor } from './core.js';
-import { fields } from './authoring.js';
+import { renderProject, readRows, parseColor, fail } from './core.js';
+import { fields, number as num, integer as int, pair } from './authoring.js';
 import { sinDeg, cosDeg, ease, EASINGS, random } from './craft.js';
 import { atan2Deg } from './shapes.js';
 
 export const CRYSTAL_HABITS = ['prism', 'cube', 'octahedron', 'snowflake'];
 const LIMITS = { crystals: 32, total: 256, looks: 8, colors: 6 };
+const MAX_FRAMES = 256; // the most frames an effect has
 const MIN_LIGHT = 0.001; // the shortest light direction read: a shorter one has too little length to divide by
-const fail = (path, message) => { throw new PixelError(path, message); };
-const num = (v, path, min, max) => {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail(path, `expected a number from ${min} to ${max}`);
-  return v;
-};
-const int = (v, path, min, max) => {
-  if (!Number.isInteger(v) || v < min || v > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return v;
-};
-const pair = (v, path, min, max) => {
-  if (!Array.isArray(v) || v.length !== 2) fail(path, 'expected [x, y]');
-  return v.map((n, i) => num(n, `${path}[${i}]`, min, max));
-};
 // A number, or [low, high] drawn per crystal from the effect's seed.
 const span = (v, path, min, max, whole = false) => {
   const one = (n, p) => (whole ? int(n, p, min, max) : num(n, p, min, max));
@@ -123,7 +111,7 @@ function readEntry(entry, path, effect, looks, index) {
     const u = k => random(effect.seed, index, i, k);
     const at = along(count === 1 ? 0.5 : (i + 0.5 + (u(1) - 0.5) * 0.6) / count);
     const crystal = { habit, look, at, start: draw(start, u(2), true), grow: draw(grow, u(3), true), ease: easing,
-      tilt: draw(tilt, u(4)), turn: draw(turn, u(5)), order: i };
+      tilt: draw(tilt, u(4)), turn: draw(turn, u(5)), order: i, entry: index };
     crystal.angle = (toward ? atan2Deg(toward[1] - at[1], toward[0] - at[0]) : draw(angle, u(6))) + spread * (u(10) - 0.5);
     if (habit === 'prism') Object.assign(crystal, { length: draw(shape.length, u(7)), width: draw(shape.width, u(8)), tip: draw(shape.tip, u(9)), double: shape.double });
     else if (habit === 'snowflake') Object.assign(crystal, shape);
@@ -141,7 +129,7 @@ function readEntry(entry, path, effect, looks, index) {
 
 function readEffect(effect, path, source, looks) {
   fields(effect, ['frames', 'duration', 'seed', 'light', 'crystals', 'underlay', 'overlay'], path);
-  const frames = int(effect.frames, `${path}.frames`, 2, 256);
+  const frames = int(effect.frames, `${path}.frames`, 2, MAX_FRAMES);
   const duration = int(effect.duration ?? 80, `${path}.duration`, 20, 1000);
   const seed = int(effect.seed ?? 0, `${path}.seed`, 0, 2147483647);
   const light = effect.light === undefined ? [-1, -1] : pair(effect.light, `${path}.light`, -1, 1);
@@ -245,17 +233,18 @@ function inside(polygon, x, y) {
   return least;
 }
 
+// How squarely each face a placed crystal shows meets the light: its normal on the light's direction.
+const facing = (faces, light) => faces.map(face => face.normal[0] * light[0] + face.normal[1] * light[1] + face.normal[2] * light[2]);
 // A crystal's pixels this frame, as their places on the canvas (y × width + x) each with the band of the face it shows
-// (pixel x, y is sampled at its centre, x, y), and its lit ridge: the edge between the two faces that together catch
-// the most light, from its end nearer the seed.
+// (pixel x, y is sampled at its centre, x, y), and its lit ridge.
 function paintSolid(crystal, scale, light, bands, width, height, work) {
-  const { faces, world, axis } = place(crystal, scale), at = [], band = [];
+  const placed = place(crystal, scale), { faces } = placed, at = [], band = [];
   if (!faces.length) return { at, band, ridge: null };
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const face of faces) for (const [x, y] of face.points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   // A crystal wholly off one side of the canvas tests nothing (and must not count a negative box).
   work.spent += Math.max(0, Math.min(width, x1 + 2) - Math.max(0, x0 - 1)) * Math.max(0, Math.min(height, y1 + 2) - Math.max(0, y0 - 1)) * faces.length;
-  const lit = faces.map(face => face.normal[0] * light[0] + face.normal[1] * light[1] + face.normal[2] * light[2]);
+  const lit = facing(faces, light);
   const shade = lit.map(d => Math.max(0, Math.min(bands - 1, Math.floor((d - SHADE_LOW) / (SHADE_HIGH - SHADE_LOW) * bands))));
   for (let y = Math.max(0, Math.ceil(y0 - 1e-6)); y <= Math.min(height - 1, Math.floor(y1 + 1e-6)); y++) {
     for (let x = Math.max(0, Math.ceil(x0 - 1e-6)); x <= Math.min(width - 1, Math.floor(x1 + 1e-6)); x++) {
@@ -268,6 +257,12 @@ function paintSolid(crystal, scale, light, bands, width, height, work) {
       at.push(y * width + x); band.push(brightest);
     }
   }
+  return { at, band, ridge: litRidge(crystal, placed, lit) };
+}
+// A placed crystal's lit ridge: the edge between the two faces that together catch the most light, from its end nearer
+// the seed. null when no two of the faces it shows meet (a cube seen square on shows one): such a crystal has no glint.
+// `lit` is `facing` of its faces.
+function litRidge(crystal, { faces, world, axis }, lit) {
   const edges = new Map();
   faces.forEach((face, i) => face.vertices.forEach((v, k) => {
     const w = face.vertices[(k + 1) % face.vertices.length], key = v < w ? `${v},${w}` : `${w},${v}`;
@@ -293,12 +288,12 @@ function paintSolid(crystal, scale, light, bands, width, height, work) {
     }
     ridge = [ridge[0], tip];
   }
-  return { at, band, ridge };
+  return ridge;
 }
 // SHADE_LOW to SHADE_HIGH: how squarely a face meets the light (its normal on the light's direction), spread evenly over
 // the look's bands, so a prism lit from the side shows three. NUB: pixels a faceted crystal is long the frame after it
-// seeds. GLINT.run: frames its glint takes up the ridge, before the star.
-const SHADE_LOW = -0.3, SHADE_HIGH = 1, NUB = 2.5, GLINT = { run: 4 };
+// seeds. GLINT.run: frames its glint takes up the ridge, before the star; GLINT.star: frames the star shines after it.
+const SHADE_LOW = -0.3, SHADE_HIGH = 1, NUB = 2.5, GLINT = { run: 4, star: 2 };
 // Pixel-face tests a compile may spend painting faceted crystals (a cluster of 64 grown over 60 frames takes a few
 // million), and drawing every crystal into every frame: a cell or outline pixel written counts DRAWN of a test, about
 // what it costs beside a cube's pixel test. On a desktop the whole allowance takes about a dozen seconds.
@@ -315,7 +310,11 @@ const step = (dir, phase, j) => {
   return sx === 0 ? [0, sy * j] : [sx * j, sy * Math.floor((j + phase) / 2)];
 };
 // Grows a snowflake frame by frame in one quadrant (x ≥ 0, y ≥ 0 from the centre), mirrored into the other three, so
-// the arms match exactly. Returns, per frame, the pixels with their generation and the frame each grew in.
+// the arms match exactly. Returns, per frame, the pixels with their generation and the frame each grew in; `shown`,
+// the last frame on which a pixel that shows grew, and `grown`, the frame the flake is full grown: the later of that
+// and the last frame its plate changed size. Its reach stops changing `grow` frames after it seeds, so growth is
+// followed that far even when the effect ends first (those frames are not kept), and the compiler knows when a flake
+// cut short would have finished.
 // Each arm keeps to its own wedge: the line halfway between the vertical arm and the slanted one splits the quadrant,
 // so side branches of neighbouring arms meet on it in chevrons instead of one arm's branches combing across the other's.
 const WEDGE = (() => { const x = 2 / Math.sqrt(5), y = 1 + 1 / Math.sqrt(5), l = Math.sqrt(x * x + y * y); return [x / l, y / l]; })();
@@ -371,7 +370,8 @@ function growSnowflake(crystal, frames, seed) {
     return -1;
   };
   const out = [];
-  for (let f = 0; f < frames; f++) {
+  let shown = crystal.start, grown = crystal.start, plated = 0;
+  for (let f = 0; f < Math.max(frames, crystal.start + crystal.grow + 1); f++) {
     // The seed on the start frame, then the arms grow out to the radius over `grow` frames.
     const reach = f < crystal.start ? 0 : R * ease(crystal.ease, (f - crystal.start) / crystal.grow);
     if (f === crystal.start) put(0, 0, 0, 0, f);
@@ -388,6 +388,7 @@ function growSnowflake(crystal, frames, seed) {
         const [dx, dy] = step(tip.dir, tip.phase, tip.n + 1), x = tip.ox + dx, y = tip.oy + dy;
         if (x < 0 || y < 0 || !(parent ? clear(tip, x, y) : free(x, y))) { tip.alive = false; continue; }
         tip.n++; tip.pixels.push([x, y]); put(x, y, tip.index, tip.g, f); grew = true;
+        if (tip.g === 0 || tip.n >= 2) shown = f;
         if (tip.g >= 2 || tip.n < 2 || rate(tip.g + 1) <= 0) continue;
         const along = sprout(tip.g + 1, tip.next);
         if (tip.n * unit(tip.dir) < along + 2) continue;
@@ -409,12 +410,17 @@ function growSnowflake(crystal, frames, seed) {
         });
       }
     }
+    // The plate is drawn from a pixel across.
+    const plate = Math.min(crystal.plate, reach);
+    if (plate !== plated && (plate >= 1 || plated >= 1)) grown = f;
+    plated = plate;
+    if (f >= frames) continue;
     const pixels = [];
     // A side branch shows once it is two pixels long: a lone pixel on a stem would read as a speck.
     for (let c = 0; c < area; c++) if (owner[c] >= 0 && (gen[c] === 0 || tips[owner[c] >> 2].n >= 2)) pixels.push([c % size - mid, Math.floor(c / size) - mid, gen[c], born[c]]);
-    out.push({ pixels, plate: Math.min(crystal.plate, reach) });
+    out.push({ pixels, plate });
   }
-  return out;
+  return { frames: out, shown, grown: Math.max(shown, grown) };
 }
 const inHex = (x, y, r) => { const ax = Math.abs(x), ay = Math.abs(y); return ax <= r * 0.8660254 + 1e-9 && ay <= r - ax * 0.5773503 + 1e-9; };
 
@@ -492,6 +498,16 @@ export function compileCrystals(source) {
     }, work.spent);
     if (estimate > CRYSTAL_WORK) fail(`crystal.effects.${name}.crystals`, `painting and drawing these crystals would take about ${Math.ceil(estimate / 1e6)} million pixel tests, more than ${CRYSTAL_WORK / 1e6} million; use fewer or smaller crystals, shorter grow times or fewer frames`);
     const flakes = e.crystals.map(c => (c.habit === 'snowflake' ? growSnowflake(c, e.frames, e.seed) : null));
+    // Each crystal's timeline, known before a frame is drawn. `grown`: the frame it reaches its full size, `grow`
+    // frames after it seeds (a snowflake: the last frame its tips or plate grew). `rest`: the frame from which its
+    // drawing no longer changes: after a faceted crystal's glint (GLINT.run frames up the ridge, GLINT.star of star;
+    // none without a glint in its look or a ridge to run up), or the frame after a snowflake's newest pixels shone.
+    const timeline = e.crystals.map((c, i) => {
+      const glint = looks[c.look].glint !== null;
+      if (c.habit === 'snowflake') { const { shown, grown } = flakes[i]; return { grown, rest: glint ? Math.max(grown, shown + 1) : grown }; }
+      const placed = place(c, 1), grown = c.start + c.grow;
+      return { grown, rest: grown + (glint && litRidge(c, placed, facing(placed.faces, light)) ? GLINT.run + GLINT.star + 1 : 0) };
+    });
     // A finished crystal draws the same pixels every frame, so each is painted and outlined again only while its size
     // changes: its cells' places and keys, and its outline's places.
     const painted = e.crystals.map(() => ({ scale: -1, fill: null, keys: null, edge: null, ridge: null }));
@@ -506,7 +522,7 @@ export function compileCrystals(source) {
       e.crystals.forEach((c, i) => {
         const look = looks[c.look], n = look.colors.length;
         if (c.habit === 'snowflake') {
-          const { pixels, plate } = flakes[i][f], cx = Math.round(c.at[0]), cy = Math.round(c.at[1]), swap = c.arms === 'horizontal', cells = [], keys = [];
+          const { pixels, plate } = flakes[i].frames[f], cx = Math.round(c.at[0]), cy = Math.round(c.at[1]), swap = c.arms === 'horizontal', cells = [], keys = [];
           const add = (x, y, key) => { const px = cx + (swap ? y : x), py = cy + (swap ? x : y); if (px >= 0 && py >= 0 && px < width && py < height) { cells.push(py * width + px); keys.push(key.charCodeAt(0)); } };
           // The plate: a hexagon of the darkest band rimmed with the branches' band, under the arms, which are its ribs.
           if (plate >= 1) for (let y = -Math.ceil(plate); y <= Math.ceil(plate); y++) for (let x = -Math.ceil(plate); x <= Math.ceil(plate); x++) {
@@ -544,7 +560,7 @@ export function compileCrystals(source) {
         // Once grown, a glint runs up the lit ridge and twinkles at its end, a four-pointed star that shrinks and goes
         // out: the beat that says the crystal is done.
         const after = f - (c.start + c.grow);
-        if (look.glint && ridge && after >= 1 && after <= GLINT.run + 2) {
+        if (look.glint && ridge && after >= 1 && after <= GLINT.run + GLINT.star) {
           const [[ax, ay], [bx, by]] = ridge, q = Math.min(1, (after - 1) / (GLINT.run - 1));
           const x = Math.round(ax + (bx - ax) * q), y = Math.round(ay + (by - ay) * q), arm = after - GLINT.run === 1 ? 2 : after > GLINT.run ? 1 : 0;
           const star = [[x, y]];
@@ -569,9 +585,21 @@ export function compileCrystals(source) {
       const frameName = `${name}-${f}`; names.push(frameName); visiblePixels.push(visible);
       frames.push({ name: frameName, duration: e.duration, layers });
     }
-    if (settled === e.frames - 1) warnings.push(`crystal.effects.${name}: crystals are still growing on the last frame; add frames or shorten grow so the cluster comes to rest.`);
+    // What the last frame, which a one-shot holds, cuts off, from the timelines rather than from the pictures: two
+    // frames of slow growth can draw the same pixels, and a glint changes pixels after growth has ended.
+    const last = e.frames - 1, all = e.crystals.length, grown = Math.max(...timeline.map(t => t.grown)), rest = Math.max(...timeline.map(t => t.rest));
+    const growing = timeline.filter(t => t.grown > last).length, glinting = timeline.filter(t => t.rest > last).length;
+    // The fix: the frames that let the last crystal finish and its glint go out, when an effect can have that many.
+    const fix = why => (rest + 1 <= MAX_FRAMES ? `use at least ${rest + 1} frames${why}, or lower start or grow` : `lower start or grow: finishing takes ${rest + 1} frames, and an effect has at most ${MAX_FRAMES}`);
+    if (growing) {
+      const who = all === 1 ? 'the crystal is' : growing === all ? `all ${all} crystals are` : `${growing} of ${all} crystals ${growing === 1 ? 'is' : 'are'}`;
+      const slowest = all === 1 ? 'it' : `the slowest, in crystals[${e.crystals[timeline.findIndex(t => t.grown === grown)].entry}],`;
+      warnings.push(`crystal.effects.${name}: ${who} still growing on the last frame (${slowest} would be full grown on frame ${grown}); ${fix(rest > grown ? ` (${grown + 1} for the growth, the rest for the glint after it)` : '')}.`);
+    } else if (glinting) {
+      warnings.push(`crystal.effects.${name}: ${all === 1 ? 'the crystal is full grown, but the effect ends before its glint has played out' : `every crystal is full grown, but the effect ends before the glint of ${glinting} of ${all} has played out`}; ${fix(' so the last glint goes out')}.`);
+    }
     animations[name] = { frames: names, loop: false };
-    summaries[name] = { frames: e.frames, duration: e.frames * e.duration, crystals: e.crystals.length, settled, visiblePixels };
+    summaries[name] = { frames: e.frames, duration: e.frames * e.duration, crystals: e.crystals.length, grown, settled, visiblePixels };
   }
   const recipe = { ...shell, frames, animations };
   renderProject(recipe);

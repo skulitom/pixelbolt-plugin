@@ -8,7 +8,7 @@ export class PixelError extends Error {
 // Largest JSON request accepted by the MCP server and the studio export endpoint. It exceeds the largest single
 // frame the format allows (a 256x256 frame of explicit pixel corrections serializes to about 2.5 MB).
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
-const fail = (path, message) => { throw new PixelError(path, message); };
+export const fail = (path, message) => { throw new PixelError(path, message); };
 // Several errors as one: the first, naming the others in its message and listing every one in `errors`. `stopped`
 // says checking stopped at the cap of ten. Recipes and compiled sources report broken parts this way.
 export function joinErrors(all, stopped = false) {
@@ -16,14 +16,27 @@ export function joinErrors(all, stopped = false) {
   const [first, ...rest] = all;
   const combined = new PixelError(first.path, `${first.message.slice(first.path.length + 2)}; ${rest.length} more error${rest.length === 1 ? '' : 's'}${stopped ? ' (checking stopped at 10)' : ''}: ${rest.map(error => error.message).join('; ')}`);
   combined.errors = all.map(error => ({ path: error.path, error: error.message }));
+  if (stopped) combined.stopped = true;
   return combined;
 }
+// An error as a reply carries it. One error has its message and path. Several are each said once, in `errors`, a
+// message each (which starts with its path): the combined message would say them all a second time.
+export const errorReply = error => error.errors
+  ? { error: `${error.errors.length} errors${error.stopped ? ' (checking stopped at 10, so there may be more)' : ''}: fix every one in errors, then try again`, errors: error.errors.map(each => each.error) }
+  : { error: error.message, ...(error.path && { path: error.path }) };
 
 const own = (obj, key) => Object.hasOwn(obj, key);
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+export const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 // Names agents often write for a field or operation the format names differently, offered as "did you mean".
-const FIELD_ALIASES = { width: 'w', height: 'h', x1: 'x', y1: 'y', x0: 'x', y0: 'y', colour: 'color', fill: 'filled', frame: 'from', name: 'symbol' };
+const FIELD_ALIASES = { width: 'w', height: 'h', x1: 'x', y1: 'y', x0: 'x', y0: 'y', colour: 'color', fill: 'filled', frame: 'from', name: 'symbol', hold: 'duration', delay: 'duration', time: 'duration', ms: 'duration', length: 'duration' };
 const OP_ALIASES = { circle: 'ellipse', oval: 'ellipse', rectangle: 'rect', square: 'rect', point: 'pixel', dot: 'pixel', flood: 'fill', floodfill: 'fill', erase: 'clear', label: 'text', print: 'text', sprite: 'stamp', image: 'grid', recolor: 'replace', recolour: 'replace', border: 'outline' };
+// What the operations those names mean take, said with the suggestion: a circle is written with a centre and a radius,
+// an ellipse with its box, and the name alone left an agent to look the fields up.
+const OP_FIELDS = {
+  ellipse: 'x, y, w, h (the box it fills: a circle of radius r about cx, cy is x cx - r, y cy - r, w and h 2r + 1), color and optionally filled', rect: 'x, y, w, h, color and optionally filled', pixel: 'x, y, color',
+  fill: 'x, y, color (a flood fill from that pixel)', clear: 'x, y, w, h', text: 'x, y, text, color and optionally align', stamp: 'symbol, x, y', grid: 'x, y, rows',
+  replace: 'from, to (two colours)', outline: 'color and optionally position, width'
+};
 // One letter changed, added or removed: a typo of the other name.
 const oneEdit = (a, b) => {
   if (Math.abs(a.length - b.length) > 1 || a === b) return false;
@@ -40,7 +53,7 @@ function meant(key, names, aliases) {
 function unknownName(kind, key, names, aliases = FIELD_ALIASES) {
   const guess = meant(key, names, aliases);
   const listed = kind === 'operation' ? 'operations' : 'fields here';
-  return `unknown ${kind}${kind === 'operation' ? ` ${JSON.stringify(key)}` : ''}${guess ? `; did you mean "${guess}"?` : ''}${names.length <= 24 ? (guess ? ` ${listed[0].toUpperCase()}${listed.slice(1)}` : `; ${listed}`) + `: ${names.join(', ')}` : ''}`;
+  return `unknown ${kind}${kind === 'operation' ? ` ${JSON.stringify(key)}` : ''}${guess ? `; did you mean "${guess}"?${kind === 'operation' && own(OP_FIELDS, guess) ? ` It takes ${OP_FIELDS[guess]}.` : ''}` : ''}${names.length <= 24 ? (guess ? ` ${listed[0].toUpperCase()}${listed.slice(1)}` : `; ${listed}`) + `: ${names.join(', ')}` : ''}`;
 }
 function object(value, path, keys) {
   if (!isObject(value)) fail(path, 'expected an object');
@@ -151,15 +164,19 @@ function blend(data, i, color, opacity = 1) {
   for (let c = 0; c < 3; c++) data[i + c] = Math.round((color[c] * a + data[i + c] * old * (1 - a)) / out);
   data[i + 3] = Math.round(out * 255);
 }
+// Text rows are all as wide as the first: every miscounted row at once, with its own width, so a hand-typed grid is
+// fixed in one pass. What a recipe's grid, a source format's symbol and a patch's rows are checked with.
+export function sameWidth(rows, path) {
+  const width = rows[0].length, uneven = rows.flatMap((row, y) => row.length === width ? [] : [y]);
+  if (uneven.length) fail(`${path}[${uneven[0]}]`, `all rows must be ${width} characters wide, as row 0 is: ${uneven.slice(0, 8).map(y => `row ${y} has ${rows[y].length}`).join(', ')}${uneven.length > 8 ? ` and ${uneven.length - 8} more rows differ` : ''}`);
+}
 export function readRows(rows, path, palette) {
   list(rows, path, 256);
   if (!rows.length) fail(path, 'grid must contain at least one row');
   if (typeof rows[0] !== 'string' || rows[0].length < 1 || rows[0].length > 256) fail(`${path}[0]`, 'row must contain 1–256 characters');
   const width = rows[0].length;
   rows.forEach((row, y) => { if (typeof row !== 'string') fail(`${path}[${y}]`, `all rows must be ${width} characters wide`); });
-  // Every miscounted row at once, with its own width, so a hand-typed grid is fixed in one pass.
-  const uneven = rows.flatMap((row, y) => row.length === width ? [] : [y]);
-  if (uneven.length) fail(`${path}[${uneven[0]}]`, `all rows must be ${width} characters wide, as row 0 is: ${uneven.slice(0, 8).map(y => `row ${y} has ${rows[y].length}`).join(', ')}${uneven.length > 8 ? ` and ${uneven.length - 8} more rows differ` : ''}`);
+  sameWidth(rows, path);
   const unknown = new Map();
   rows.forEach((row, y) => {
     for (const char of row) if (char !== '.' && char !== ' ') {
@@ -292,6 +309,15 @@ export function renderProject(spec, options = {}) {
   const clipped = new Map();
   const clip = (path, pixels = 1) => clipped.set(path, (clipped.get(path) ?? 0) + pixels);
   const rendered = new Map(), frameNames = new Set();
+  // Colours a frame takes from an earlier frame as exact RGBA, which its own palettes need not name: what the frame it
+  // continues (`from`) or copies from recoloured with a frame or layer palette, and what that frame took the same way.
+  // Diagnostics count them as declared for the frame (`inherited`); drawing never reads them.
+  let taken = null;
+  const take = source => {
+    for (const value of Object.values(source.palette ?? {})) taken.add(value);
+    for (const entry of source.layerPalettes ?? []) for (const value of Object.values(entry.palette)) taken.add(value);
+    for (const value of source.inherited ?? []) taken.add(value);
+  };
   // The row an operation stands on, for a layer with sort "ground": its `ground`, or the lowest row it draws (a
   // stamp's or grid's bottom after scale and rotation, a line's lower end, a shape's bottom edge). Text needs `ground`,
   // since accents and alignment move it. Operations that work on an area rather than stand on the ground are refused.
@@ -331,13 +357,20 @@ export function renderProject(spec, options = {}) {
       if (y > bounds[3]) bounds[3] = y;
     };
     list(ops, path);
-    const order = ops.map((_, index) => index);
+    const order = ops.map((_, index) => index), refused = new Set();
     if (sorted) {
-      const rows = ops.map((op, index) => standingRow(op, `${path}[${index}]`));
+      // An operation a sorted layer cannot take is noted like any other broken one, before the layer draws, and
+      // skipped; the rest still sort and are still checked.
+      const rows = ops.map((op, index) => {
+        const p = `${path}[${index}]`;
+        try { return standingRow(op, p); } catch (error) { note(error, p); refused.add(index); return 0; }
+      });
       order.sort((a, b) => rows[a] - rows[b] || a - b);
     }
     for (const index of order) {
+      // A budget, not a broken operation: it stops the check, joined to whatever was noted before it.
       if (++operationCount > 20000) fail(path, 'project exceeds 20,000 drawing operations');
+      if (refused.has(index)) continue;
       const p = `${path}[${index}]`;
       try { drawOp(ops[index], p); } catch (error) { note(error, p); }
     }
@@ -510,6 +543,7 @@ export function renderProject(spec, options = {}) {
           if (typeof op.from !== 'string' || !rendered.has(op.from)) fail(`${p}.from`, 'must name an earlier frame');
           // A frame copy keeps exact RGBA; remap swaps exact colours, named by project palette key or hex, for others.
           const source = rendered.get(op.from).data, swaps = new Map();
+          take(rendered.get(op.from));
           if (op.remap !== undefined) {
             object(op.remap, `${p}.remap`);
             if (Object.keys(op.remap).length > 256) fail(`${p}.remap`, 'at most 256 colours');
@@ -718,7 +752,10 @@ export function renderProject(spec, options = {}) {
   }
   const frames = checked(() => spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
-    object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'tile', 'ops', 'layers', 'pixels']);
+    // A field a frame doesn't have is noted like a broken operation and the frame is read without it, so the same
+    // reply still names what else is wrong: another frame's operations, an animation that lists a missing frame.
+    try { object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'tile', 'ops', 'layers', 'pixels']); }
+    catch (error) { if (!isObject(frame) || !error.message.includes('unknown field')) throw error; note(error, p); }
     const frameName = name(frame.name, `${p}.name`);
     if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
     frameNames.add(frameName.toLowerCase());
@@ -742,8 +779,10 @@ export function renderProject(spec, options = {}) {
     }
     const tile = frame.tile === undefined ? null : tileFacts(frame.tile, `${p}.tile`, width, height);
     let data = new Uint8ClampedArray(width * height * 4), owner = ownerNames && new Uint16Array(width * height);
+    taken = new Set();
     if (frame.from !== undefined) {
       if (typeof frame.from !== 'string' || !rendered.has(frame.from)) fail(`${p}.from`, 'must name an earlier frame');
+      take(rendered.get(frame.from));
       data.set(rendered.get(frame.from).data);
       owner?.set(rendered.get(frame.from).owners);
     } else if (background.some(Boolean)) {
@@ -842,7 +881,7 @@ export function renderProject(spec, options = {}) {
       if (owner) owner[y * width + x] = !data[(y * width + x) * 4 + 3] ? 0 : owner[y * width + x] || ownerId('frame.pixels');
     }
     activePalette = palette;
-    const result = { name: frameName, duration, data, ...(owner && { owners: owner }), ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }) };
+    const result = { name: frameName, duration, data, ...(owner && { owners: owner }), ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }), ...(taken.size && { inherited: [...taken] }) };
     rendered.set(frameName, result);
     return result;
   }));
@@ -862,7 +901,8 @@ export function renderProject(spec, options = {}) {
 
 // Compiler-only validation/timing for the stamp subset emitted by compilePoses. It shares header, animation and
 // atlas validation with the renderer, but never allocates or composites a canvas. A stamp cannot erase, so visible
-// symbol bounds suffice to compute the exact trimmed atlas, including flips and canvas clipping.
+// symbol bounds suffice to compute the trimmed atlas, including flips and canvas clipping. Frames drawn the same way
+// share a cell here; the renderer compares pixels, so it also shares frames that only come out the same.
 export function describeStampRecipe(spec) {
   const { width, height, palette, symbols } = readProject(spec, { stills: false });
   if (spec.background !== undefined) fail('project.background', 'compiler stamp recipes omit the background');
@@ -939,8 +979,9 @@ export function describeStampRecipe(spec) {
       left = Math.min(left, x); right = Math.max(right, x);
       top = Math.min(top, y); bottom = Math.max(bottom, y);
     }
-    boxes.push(right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true }
-      : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 });
+    // Frames drawn by the same stamps and corrections are one picture, and share a cell as the renderer's do.
+    boxes.push(right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true, key: 'empty' }
+      : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1, key: JSON.stringify([frame.layers ?? [], frame.pixels ?? []]) });
     return { name: frameName, duration };
   });
   const animations = readAnimations(spec, frames);
@@ -986,26 +1027,47 @@ function readSheet(spec, frames, width, height, boxes = null) {
 // Deterministic shelf packing of each frame's visible bounds (tallest first, then recipe order).
 // Cell coordinates are exported pixels; source bounds are unscaled canvas pixels.
 function packTrimmed(frames, width, height, padding, scale) {
+  const row = (box, y) => { const from = ((box.sy + y) * width + box.sx) * 4; return frames[box.index].data.subarray(from, from + box.w * 4); };
   const boxes = frames.map((frame, index) => {
     let left = width, top = height, right = -1, bottom = -1;
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) if (frame.data[(y * width + x) * 4 + 3]) {
       if (x < left) left = x; if (x > right) right = x; if (y < top) top = y; if (y > bottom) bottom = y;
     }
-    return right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true } : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 };
+    if (right < 0) return { index, sx: 0, sy: 0, w: 1, h: 1, empty: true, key: 'empty' };
+    const box = { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1 };
+    // FNV-1a over the picture finds candidates; `same` then compares them byte for byte.
+    let hash = 0x811c9dc5;
+    for (let y = 0; y < box.h; y++) for (const byte of row(box, y)) hash = Math.imul(hash ^ byte, 0x01000193);
+    return { ...box, key: hash >>> 0 };
   });
-  return packBoxes(boxes, padding, scale);
+  const same = (a, b) => {
+    if (a.empty) return true;
+    for (let y = 0; y < a.h; y++) { const p = row(a, y), q = row(b, y); for (let i = 0; i < p.length; i++) if (p[i] !== q[i]) return false; }
+    return true;
+  };
+  return packBoxes(boxes, padding, scale, same);
 }
 
-function packBoxes(boxes, padding, scale) {
+// Frames whose trimmed pictures are the same share one cell: a hold, or a frame moved whole (each keeps its own
+// sx, sy, so it is drawn where it stands). A box's `key` names its picture; `same` settles boxes of equal size and key.
+function packBoxes(boxes, padding, scale, same = () => true) {
   const cellWidth = box => (box.w + padding * 2) * scale, cellHeight = box => (box.h + padding * 2) * scale;
-  const target = Math.max(...boxes.map(cellWidth), Math.ceil(Math.sqrt(boxes.reduce((sum, box) => sum + cellWidth(box) * cellHeight(box), 0))));
+  const first = new Map(), twins = new Map();
+  const packed = boxes.filter(box => {
+    const group = `${box.w}x${box.h}:${box.key}`, others = first.get(group) ?? [], twin = others.find(other => same(other, box));
+    if (twin) { twins.set(box, twin); return false; }
+    first.set(group, [...others, box]);
+    return true;
+  });
+  const target = Math.max(...packed.map(cellWidth), Math.ceil(Math.sqrt(packed.reduce((sum, box) => sum + cellWidth(box) * cellHeight(box), 0))));
   const cells = new Array(boxes.length);
   let cursorX = 0, cursorY = 0, shelf = 0, used = 0;
-  for (const box of [...boxes].sort((a, b) => cellHeight(b) - cellHeight(a) || a.index - b.index)) {
+  for (const box of [...packed].sort((a, b) => cellHeight(b) - cellHeight(a) || a.index - b.index)) {
     if (cursorX > 0 && cursorX + cellWidth(box) > target) { cursorY += shelf; cursorX = 0; shelf = 0; }
     cells[box.index] = { x: cursorX + padding * scale, y: cursorY + padding * scale, sx: box.sx, sy: box.sy, w: box.w, h: box.h, ...(box.empty && { empty: true }) };
     cursorX += cellWidth(box); shelf = Math.max(shelf, cellHeight(box)); used = Math.max(used, cursorX);
   }
+  for (const [box, twin] of twins) cells[box.index] = { ...cells[twin.index], sx: box.sx, sy: box.sy };
   return { width: used, height: cursorY + shelf, cells };
 }
 
@@ -1100,7 +1162,9 @@ export function drawGuides(target, targetWidth, box, scale, region, guides) {
 }
 
 // Packs frames into one RGBA sheet. `trim: false` forces the uniform grid even for a trimmed recipe (aligned
-// material passes need identical rectangles). Anchors and points are exported pixels; pivot is anchor/source size.
+// material passes need identical rectangles). Points and `anchorPx` are exported pixels; `pivot` and `anchor` are
+// both the anchor as a share of the source size (0-1), TexturePacker's convention, which Phaser and PixiJS read as
+// a sprite's origin.
 export function buildAtlas(project, { trim } = {}) {
   const { width, height, frames, sheet } = project, s = sheet.scale;
   const trimmed = Boolean(sheet.trim) && trim !== false;
@@ -1110,7 +1174,7 @@ export function buildAtlas(project, { trim } = {}) {
   const data = new Uint8ClampedArray(atlasWidth * atlasHeight * 4);
   const entries = Object.create(null);
   const extras = frame => ({
-    ...(frame.anchor && { pivot: { x: round6(frame.anchor[0] / width), y: round6(frame.anchor[1] / height) }, anchor: { x: frame.anchor[0] * s, y: frame.anchor[1] * s } }),
+    ...(frame.anchor && { pivot: { x: round6(frame.anchor[0] / width), y: round6(frame.anchor[1] / height) }, anchor: { x: round6(frame.anchor[0] / width), y: round6(frame.anchor[1] / height) }, anchorPx: { x: frame.anchor[0] * s, y: frame.anchor[1] * s } }),
     ...(frame.points && { points: Object.fromEntries(Object.entries(frame.points).map(([key, [x, y]]) => [key, { x: x * s, y: y * s }])) }),
     ...(frame.tile && { tile: { ...frame.tile, ...(frame.tile.collision && { collision: frame.tile.collision.map(polygon => polygon.map(([x, y]) => ({ x: x * s, y: y * s }))) }) } })
   });
@@ -1409,8 +1473,63 @@ export function pictureSheet({ palette = {}, headings = [], rows: lines, scale =
   return { width, height, scale: s, data };
 }
 
+// Which palette keys colour what, over every frame: a line a key with its colour, its pixels and the layers (a rig's
+// parts) it colours most, so "the fur" or "the jacket" is a set of keys to change together. Keys of one ramp are
+// listed together, dark to light, then the rest by pixels; `unused` names keys that draw nothing and `blended` counts
+// pixels whose colour is no key's (two translucent colours over each other). Pixels are told apart by colour, so keys
+// that share a colour are counted under the first of them, and `same` says which. `layers` names every layer that
+// draws, in drawing order: what frames[*].layers[<name>].palette recolours alone. The project is rendered with owners.
+export function paletteUse(project) {
+  if (!project.ownerNames) fail('inspect.palette', 'palette needs the project rendered with { owners: true }, which records the layer that drew each pixel');
+  const pack = (r, g, b, a) => ((r * 256 + g) * 256 + b) * 256 + a, keyOf = new Map(), use = new Map();
+  const same = [];
+  for (const [key, value] of Object.entries(project.palette)) {
+    const color = parseColor(value), id = pack(...color);
+    if (!color[3]) continue;
+    if (keyOf.has(id)) same.push(`${key} is the colour of ${keyOf.get(id)}, and counted there`); else keyOf.set(id, key);
+  }
+  let blended = 0;
+  for (const { data, owners } of project.frames) for (let i = 0; i < owners.length; i++) {
+    if (!data[i * 4 + 3]) continue;
+    const key = keyOf.get(pack(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]));
+    if (key === undefined) { blended++; continue; }
+    if (!use.has(key)) use.set(key, { pixels: 0, by: new Map() });
+    const entry = use.get(key);
+    entry.pixels++; entry.by.set(owners[i], (entry.by.get(owners[i]) ?? 0) + 1);
+  }
+  const line = key => {
+    const { pixels, by } = use.get(key), parts = [...by].filter(([id]) => id).sort((a, b) => b[1] - a[1]).map(([id]) => project.ownerNames[id - 1]);
+    return `${key} ${project.palette[key]}: ${pixels} px${parts.length ? ` on ${parts.slice(0, 4).join(', ')}${parts.length > 4 ? ` and ${parts.length - 4} more` : ''}` : ''}`;
+  };
+  const ramps = (project.ramps ?? []).map(ramp => ramp.filter(key => use.has(key))).filter(ramp => ramp.length), ramped = new Set(ramps.flat());
+  const others = [...use.keys()].filter(key => !ramped.has(key)).sort((a, b) => use.get(b).pixels - use.get(a).pixels), twins = new Set(same.map(text => text.split(' ')[0])), unused = Object.keys(project.palette).filter(key => !use.has(key) && !twins.has(key));
+  return { ...(ramps.length && { ramps: ramps.map(ramp => ramp.map(line)) }), ...(others.length && { [ramps.length ? 'others' : 'keys']: others.map(line) }), ...(same.length && { same }), ...(unused.length && { unused }), ...(blended && { blended }), layers: project.ownerNames.join(', '), counted: `every pixel of ${project.frames.length === 1 ? 'the one frame' : `all ${project.frames.length} frames`}, whatever the view shows` };
+}
+
+// The same view of several recipes as one image, each sheet under the one before and left-aligned, with its name
+// written above it: a hero in three team colours, or a sprite before and after, compared with one look. `views` are
+// inspectProject results with a `name` each. Returns the first view with the taller sheet and `stack`: where each
+// recipe's sheet starts, under its label.
+export function stackViews(views) {
+  const sheets = views.map(view => view.sheet), t = Math.max(1, Math.min(2, Math.floor(sheets[0].scale / 2))), pad = 3 * t, band = (FONT_HEIGHT + 4) * t;
+  const labels = views.map(view => layoutText(String(view.name).replace(/[^\x20-\x7e]/g, '?'))), width = Math.max(...sheets.map(sheet => sheet.width), ...labels.map(text => text.width * t + 2 * pad));
+  const height = sheets.reduce((sum, sheet) => sum + band + sheet.height, 0), data = new Uint8ClampedArray(width * height * 4), stack = [];
+  for (let i = 0; i < data.length; i += 4) data.set(gutterColor, i);
+  let y = 0;
+  sheets.forEach((sheet, index) => {
+    const text = labels[index], top = y + 2 * t + text.top * t;
+    text.rows.forEach((cells, row) => { for (let x = 0; x < cells.length; x++) if (cells[x] === '#') for (let dy = 0; dy < t; dy++) for (let dx = 0; dx < t; dx++) data.set([230, 234, 238, 255], ((top + row * t + dy) * width + pad + x * t + dx) * 4); });
+    y += band;
+    for (let row = 0; row < sheet.height; row++) data.set(sheet.data.subarray(row * sheet.width * 4, (row + 1) * sheet.width * 4), (y + row) * width * 4);
+    stack.push({ name: views[index].name, y, height: sheet.height });
+    y += sheet.height;
+  });
+  const { name, ...first } = views[0];
+  return { ...first, sheet: { ...sheets[0], data, width, height }, stack };
+}
+
 export function inspectProject(project, options = {}) {
-  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'guides']);
+  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'every', 'guides']);
   const { width, height, frames } = project;
   if (options.frames !== undefined && options.animation !== undefined) fail('inspect', 'choose frames or animation, not both');
   let cells = frames.map((_, i) => i);
@@ -1457,6 +1576,17 @@ export function inspectProject(project, options = {}) {
   const step = options.step === undefined ? 1 : integer(options.step, 'inspect.step', 1, 1024);
   const offset = options.offset === undefined ? 0 : integer(options.offset, 'inspect.offset', 0, 2047);
   if (offset >= total) fail('inspect.offset', `the selection has ${total} position${total === 1 ? '' : 's'}, numbered from 0; choose an offset below ${total}`);
+  // A cell per `every` milliseconds of playback: a frame fills as many cells as it is held, so the sheet reads as
+  // the animation plays, holds and fast steps included.
+  const every = options.every === undefined ? undefined : integer(options.every, 'inspect.every', 10, 60000);
+  if (every !== undefined) {
+    if (options.animation === undefined) fail('inspect.every', 'every samples playback, so it needs an animation');
+    if (options.step !== undefined || options.offset !== undefined) fail('inspect.every', 'every picks positions by time; omit step and offset');
+    const a = project.animations[options.animation], count = Math.ceil(a.duration / every);
+    if (count > 256) fail('inspect.every', `${a.duration} ms at one cell per ${every} ms is ${count} cells; at most 256, so choose every ${Math.ceil(a.duration / 256)} or more`);
+    positions = Array.from({ length: count }, (_, n) => animationPosition(project, a, n * every));
+    methods.push(`one cell per ${every} ms of playback`);
+  }
   if (step > 1 || offset > 0) {
     positions = positions.filter(i => i >= offset && (i - offset) % step === 0);
     const suffix = step % 100 >= 11 && step % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][step % 10] ?? 'th';
@@ -1496,12 +1626,15 @@ export function inspectProject(project, options = {}) {
       if (native) view.nativeSheet = drawPartLegend(view.nativeSheet, parts.legend);
     }
   }
-  if (total !== cells.length) view.sampling = { total, shown: cells.length, omitted: total - cells.length, positions, ...((step > 1 || offset > 0) && { step, offset }), method: `${methods.join(', then ')}; durations are original, not playback timing` };
+  if (every !== undefined) view.sampling = { total, shown: cells.length, every, positions, method: `${methods.join(', then ')}; a frame fills a cell for each ${every} ms it is held` };
+  else if (total !== cells.length) view.sampling = { total, shown: cells.length, omitted: total - cells.length, positions, ...((step > 1 || offset > 0) && { step, offset }), method: `${methods.join(', then ')}; durations are original, not playback timing` };
   if (diagnostics) view.diagnostics = analyzeProject(project);
-  if (options.animation !== undefined && (diagnostics || mode === 'onion')) {
+  if (options.animation !== undefined && (diagnostics || mode === 'onion' || every !== undefined)) {
     const a = project.animations[options.animation], fps = animationFps(project, options.animation); let start = 0;
     view.timing = { animation: options.animation, duration: a.duration, loop: a.loop, ...(fps !== undefined && { fps }), entries: a.frames.map((index, position) => {
       const entry = { position, frame: frames[index].name, start, duration: frames[index].duration, ...animationNeighbors(a, position) };
+      // How many pixels this step changes: 0 is a hold, and a step far above its neighbours is a jump.
+      if (entry.previous !== null) entry.changed = changedPixels(frames[a.frames[entry.previous]].data, frames[index].data);
       start += entry.duration; return entry;
     }) };
   }
@@ -1521,6 +1654,11 @@ export function inspectProject(project, options = {}) {
   return view;
 }
 
+function changedPixels(a, b) {
+  let count = 0;
+  for (let at = 0; at < a.length; at += 4) if (a[at] !== b[at] || a[at + 1] !== b[at + 1] || a[at + 2] !== b[at + 2] || a[at + 3] !== b[at + 3]) count++;
+  return count;
+}
 // Positions refer to the expanded sequence, never the recipe's frame order.
 export function animationPosition(project, animation, time) {
   let cursor = animation.loop ? ((time % animation.duration) + animation.duration) % animation.duration : Math.max(0, Math.min(time, animation.duration));
@@ -1575,8 +1713,9 @@ export function analyzeProject(project) {
   const known = new Set(Object.values(project.palette).map(color => colorId(parseColor(color), 0)));
   const stats = frames.map(frame => {
     const colors = new Set(), outside = new Set(), isolated = [], unlisted = [];
-    // Colors a frame or layer palette introduces are declared for that frame.
-    const introduced = [...Object.values(frame.palette ?? {}), ...(frame.layerPalettes ?? []).flatMap(entry => Object.values(entry.palette))];
+    // Colors a frame or layer palette introduces are declared for that frame, and for the frames that continue it or
+    // copy from it (`inherited`), whose pixels carry them.
+    const introduced = [...Object.values(frame.palette ?? {}), ...(frame.layerPalettes ?? []).flatMap(entry => Object.values(entry.palette)), ...(frame.inherited ?? [])];
     const declared = introduced.length ? new Set([...known, ...introduced.map(color => colorId(parseColor(color), 0))]) : known;
     let visible = 0, isolatedCount = 0, hash = 2166136261;
     for (let at = 0; at < frame.data.length; at += 4) {
@@ -1625,6 +1764,67 @@ export function analyzeProject(project) {
   return { advisory: true, frames: stats, animations, findings };
 }
 
+// Diagnostics as a reply carries them. Up to DIAGNOSTIC_ROWS frames keep a row each; past that the rows are added up
+// (`frameTotals`: ranges of visible pixels and colours, cleanup counts summed) and `frames` keeps only the three rows
+// with the most corners and strays, since thirty rows of near-equal counts tell a reader nothing a total does not.
+// Animations and findings are kept whole. `analyzeProject` still measures every frame.
+export const DIAGNOSTIC_ROWS = 8;
+export function briefDiagnostics(diagnostics) {
+  const { frames, ...rest } = diagnostics;
+  if (frames.length <= DIAGNOSTIC_ROWS) return diagnostics;
+  const range = key => [Math.min(...frames.map(row => row[key])), Math.max(...frames.map(row => row[key]))], sum = key => frames.reduce((total, row) => total + row[key], 0);
+  const most = frames.map((row, index) => ({ row, index, count: row.corners + row.strays })).filter(entry => entry.count).sort((a, b) => b.count - a.count || a.index - b.index).slice(0, 3).map(entry => entry.row);
+  return { advisory: rest.advisory, frameTotals: { frames: frames.length, visible: range('visible'), colors: range('colors'), corners: sum('corners'), strays: sum('strays') }, frames: most, omitted: frames.length - most.length, animations: rest.animations, findings: rest.findings };
+}
+
+// Cells (or frames) as a reply carries them: in order, a line per run that lasts the same, and a run of three or more
+// numbered names as its ends. Nineteen cells of a smoke puff read ["smoke-puff-0 … smoke-puff-18: 60 ms each"], where
+// a `{frame, duration}` object each was most of a reply. Cells that carry more than a name and a duration (a motion
+// review's) are returned as they are.
+// Names in order, a run of three or more numbered ones (a-0, a-1, a-2) written as "a-0 … a-2".
+function nameRuns(labels) {
+  const numbered = label => /^(.*?)(\d+)$/.exec(label), names = [];
+  for (let a = 0, b; a < labels.length; a = b) {
+    const first = numbered(labels[a]);
+    for (b = a + 1; first && b < labels.length; b++) { const next = numbered(labels[b]); if (!next || next[1] !== first[1] || Number(next[2]) !== Number(first[2]) + b - a) break; }
+    if (b - a > 2) names.push(`${labels[a]} … ${labels[b - 1]}`);
+    else { names.push(labels[a]); b = a + 1; }
+  }
+  return names;
+}
+export function briefCells(cells) {
+  if (!cells.every(cell => Object.keys(cell).every(key => key === 'frame' || key === 'name' || key === 'duration'))) return cells;
+  const lines = [];
+  for (let start = 0, end; start < cells.length; start = end) {
+    for (end = start + 1; end < cells.length && cells[end].duration === cells[start].duration; end++);
+    lines.push(`${nameRuns(cells.slice(start, end).map(cell => cell.frame ?? cell.name)).join(', ')}: ${cells[start].duration} ms${end - start > 1 ? ' each' : ''}`);
+  }
+  return lines;
+}
+
+// A comparison as a reply carries it. Up to COMPARED changed frames are listed each with its own figures. Past that
+// (a palette change touches every frame of a character) the same few lines would repeat for every frame, so the
+// reply says how many changed and which, the pixels and the box over all of them, the commonest colour changes
+// summed, and the three frames that changed most; a long list of unchanged frames is their names in runs.
+const COMPARED = 8;
+export function briefComparison(report) {
+  const { changed, unchanged, ...rest } = report.frames;
+  if (changed.length <= COMPARED && unchanged.length <= COMPARED * 2) return report;
+  const brief = list => (list.length <= COMPARED * 2 ? list : { count: list.length, frames: nameRuns(list).join(', ') });
+  if (changed.length <= COMPARED) return { ...report, frames: { changed, unchanged: brief(unchanged), ...rest } };
+  const measured = changed.filter(entry => entry.box), sums = new Map();
+  // A frame with few changed pixels lists each one; a frame with many, its colour changes. Both are counted.
+  const add = (from, to, pixels) => { const key = `${from}\n${to}`; sums.set(key, (sums.get(key) ?? 0) + pixels); };
+  for (const entry of changed) { for (const { from, to, pixels } of entry.transitions ?? []) add(from, to, pixels); for (const { from, to } of entry.changes ?? []) add(from, to, 1); }
+  const box = measured.reduce((all, { box: b }) => (all ? { x: Math.min(all.x, b.x), y: Math.min(all.y, b.y), x2: Math.max(all.x2, b.x + b.w), y2: Math.max(all.y2, b.y + b.h) } : { x: b.x, y: b.y, x2: b.x + b.w, y2: b.y + b.h }), null);
+  const transitions = [...sums].sort((a, b) => b[1] - a[1]).slice(0, COMPARED).map(([key, pixels]) => ({ from: key.split('\n')[0], to: key.split('\n')[1], pixels }));
+  return { ...report, frames: {
+    changed: { count: changed.length, frames: unchanged.length ? nameRuns(changed.map(entry => entry.frame)).join(', ') : 'every frame', pixels: changed.reduce((sum, entry) => sum + (entry.pixels ?? 0), 0),
+      ...(box && { box: { x: box.x, y: box.y, w: box.x2 - box.x, h: box.y2 - box.y } }), ...(transitions.length && { transitions }),
+      most: [...measured].sort((a, b) => b.pixels - a.pixels).slice(0, 3).map(({ frame, pixels, box: b }) => ({ frame, pixels, box: b })) },
+    unchanged: brief(unchanged), ...rest } };
+}
+
 // Two names make one number: the first times NAME_PAIRS (2 to the 26th, more names than a frame has pixels) plus the second.
 const NAME_PAIRS = 67108864;
 // A namer's names as small numbers: `index` names a pixel's colour (once per colour, through `char`, which also notes
@@ -1668,7 +1868,9 @@ export function compareProjects(before, after) {
     }
     if (!pixels) { unchanged.push(frame.name); continue; }
     const box = { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
-    const detail = pixels <= 16 ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: names.chars[Math.floor(pair / NAME_PAIRS)], to: names.chars[pair % NAME_PAIRS], pixels: count })) };
+    // A few pixels are listed one by one. More, or four or more that all make the same change (a recoloured palette
+    // key, a filled patch), are summed up by what became what.
+    const detail = pixels <= 16 && !(pixels >= 4 && transitions.size === 1) ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: names.chars[Math.floor(pair / NAME_PAIRS)], to: names.chars[pair % NAME_PAIRS], pixels: count })) };
     changed.push({ frame: frame.name, pixels, box, ...detail });
     shown.push({ frame: frame.name, status: 'changed', before: old.data, after: frame.data, box });
   }
@@ -1704,7 +1906,16 @@ export function compareProjects(before, after) {
       if (stacked) report.imageNote = `before above after: side by side, two ${region.w}-pixel frames would pass the 4096-pixel sheet limit`;
     }
   }
-  const legend = namer.legend();
-  if (Object.keys(legend).length) report.legend = legend;
+  // A colour with no one-letter palette key is written out where it is reported: its palette name, or its hex. Only
+  // "?" (more colours than there are symbols) still needs a legend.
+  // Beside a hex the other side is a hex too, with its key: a recoloured key reads "#d9a566" to "#8a5a2c (c)", not
+  // a colour turning into a letter.
+  const legend = namer.legend(), written = symbol => (symbol !== '?' && own(legend, symbol) ? legend[symbol].palette ?? legend[symbol].color : symbol);
+  const hex = value => value.startsWith('#'), keyed = key => (own(after.palette, key) ? `${toHex(parseColor(after.palette[key]))} (${key})` : key);
+  for (const frame of changed) for (const item of frame.changes ?? frame.transitions ?? []) {
+    const from = written(item.from), to = written(item.to);
+    item.from = hex(to) && !hex(from) ? keyed(from) : from; item.to = hex(from) && !hex(to) ? keyed(to) : to;
+  }
+  if (own(legend, '?')) report.legend = { '?': legend['?'] };
   return report;
 }

@@ -110,8 +110,31 @@ export function decodePNG(bytes) {
   }
   return { data, width, height, encoding: { colorType: COLOR_TYPES[type][0], bitDepth: depth, tRNS: Boolean(trns) } };
 }
-export function importPNG(bytes, { name = 'imported', atlas } = {}) {
+// A sheet of equal frames laid out in a grid, when no atlas came with it: the frames in reading order, as an atlas
+// would list them, leaving out cells with nothing drawn. `padding` is the empty border round each frame (Pixelbolt's
+// own sheets have 1); left out, it is the smallest from 0 to 8 that makes the frames tile the image exactly.
+function gridFrames(image, name, frame, padding) {
+  const [w, h] = frame ?? [];
+  if (!Array.isArray(frame) || frame.length !== 2 || !Number.isInteger(w) || !Number.isInteger(h) || w < 1 || h < 1 || w > 256 || h > 256) fail('frame: expected the size of one frame, [width, height], each 1–256');
+  if (padding !== undefined && (!Number.isInteger(padding) || padding < 0 || padding > 64)) fail('padding: expected the empty border round each frame, a whole number from 0 to 64');
+  const fits = p => image.width % (w + 2 * p) === 0 && image.height % (h + 2 * p) === 0;
+  const border = padding ?? [0, 1, 2, 3, 4, 5, 6, 7, 8].find(fits);
+  if (border === undefined || !fits(border)) fail(`frame: frames of ${w}×${h}${padding === undefined ? ' with a border of 0 to 8 pixels' : ` with a border of ${padding}`} do not tile the ${image.width}×${image.height} image; give the padding its sheet has, or its atlas`);
+  const frames = {}, columns = image.width / (w + 2 * border), rows = image.height / (h + 2 * border);
+  for (let row = 0; row < rows; row++) for (let column = 0; column < columns; column++) {
+    const x = column * (w + 2 * border) + border, y = row * (h + 2 * border) + border;
+    let drawn = false;
+    for (let py = 0; py < h && !drawn; py++) for (let px = 0; px < w; px++) if (image.data[((y + py) * image.width + x + px) * 4 + 3]) { drawn = true; break; }
+    if (drawn) frames[`${name}-${Object.keys(frames).length}`] = { frame: { x, y, w, h }, duration: 100 };
+  }
+  return { frames };
+}
+
+export function importPNG(bytes, { name = 'imported', atlas, frame, padding } = {}) {
   const image = decodePNG(bytes), keyed = image.encoding.tRNS;
+  if (frame !== undefined && atlas !== undefined) fail('frame: an atlas already says where the frames are; give one or the other');
+  if (frame === undefined && padding !== undefined) fail('padding: goes with frame, the size of one frame in a sheet');
+  if (frame !== undefined) atlas = gridFrames(image, name, frame, padding);
   if (atlas !== undefined && (!atlas || typeof atlas !== 'object' || Array.isArray(atlas) || String(atlas.meta?.scale ?? '1') !== '1')) fail('atlas must use unscaled source pixels (meta.scale 1)');
   const entries = atlas?.frames ? Object.entries(atlas.frames) : [['idle', { frame: { x: 0, y: 0, w: image.width, h: image.height }, duration: 100 }]];
   if (!entries.length || entries.length > 256) fail('expected 1–256 atlas frames');

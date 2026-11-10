@@ -56,6 +56,35 @@ export function autotileFrames(recipe) {
   }
   return tiles;
 }
+// How a map names a compiled set's tiles: the legend entry for a tilemap (a scene instance's, or the `tilemap`
+// operation's), with `{mask}` where each frame's name has its mask and every variant listed with its weight, and the
+// cell size. null for a set whose names don't follow one pattern (a layered set, tiles of several terrains), which a
+// map writes by hand. Without it an agent lists the 188 frame names of a set to find that a tile is "meadow-255-a".
+export function tilemapEntry(recipe) {
+  const tiles = autotileFrames(recipe);
+  if (!tiles.length || tiles.some(tile => tile.terrain !== undefined || tile.mode !== tiles[0].mode)) return null;
+  const weight = new Map(recipe.frames.map(frame => [frame.name, frame.tile?.weight ?? 1])), patterns = new Map();
+  for (const { frame, mask } of tiles) {
+    const parts = frame.split('-'), at = parts.indexOf(String(mask));
+    if (at < 0) return null;
+    const pattern = parts.map((part, index) => (index === at ? '{mask}' : part)).join('-'), seen = patterns.get(pattern) ?? { count: 0, weight: weight.get(frame) };
+    if (seen.weight !== weight.get(frame)) return null;
+    patterns.set(pattern, { ...seen, count: seen.count + 1 });
+  }
+  const names = [...patterns.keys()], counts = new Set([...patterns.values()].map(entry => entry.count)), weights = names.map(name => patterns.get(name).weight);
+  if (counts.size !== 1) return null;
+  const entry = names.length === 1 ? { frame: names[0] } : { frames: names, ...(weights.some(value => value !== 1) && { weights }) };
+  return { tile: [recipe.width, recipe.height], legend: { ...entry, autotile: tiles[0].mode } };
+}
+
+// What a compile reply gives of a tile set: a scene instance's `tilemap` without its rows, the cell size and the
+// legend with `#` for the terrain. A set with slopes has a character for each slope too and rules for the feet under
+// them (the legend its metadata holds), with the small map that uses every one. null where tilemapEntry is.
+export function tilemapOf(recipe, metadata) {
+  const entry = tilemapEntry(recipe);
+  if (!entry) return null;
+  return metadata?.slopes ? { tile: entry.tile, legend: metadata.slopes.legend, rows: metadata.slopes.map } : { tile: entry.tile, legend: { '#': entry.legend } };
+}
 export function quadrantPieces(mode, mask) {
   const has = key => mode === 'cardinal' ? (mask & (CARDINAL_BITS[key] ?? 0)) !== 0 : (mask & BLOB_BITS[key]) !== 0;
   return Object.fromEntries(Object.entries(QUADRANTS).map(([position, [a, b, diagonal]]) => {

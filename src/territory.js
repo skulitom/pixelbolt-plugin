@@ -7,8 +7,8 @@
 // src/bodies.js calls this from a few hooks: reading an effect, the contacts it gathers, the end of each substep and of
 // each frame, and drawing. Browser-compatible and deterministic, as bodies.js is: only + − × ÷ and sqrt, craft.js's
 // trigonometry, and cells, bodies and pickups visited in a fixed order.
-import { PixelError } from './core.js';
-import { fields } from './authoring.js';
+import { fail, isObject, sameWidth } from './core.js';
+import { fields, number, integer } from './authoring.js';
 import { cosDeg, sinDeg } from './craft.js';
 import { layoutText, measureText, FONT_CAP_HEIGHT } from './font.js';
 
@@ -17,16 +17,6 @@ const LIMITS = { teams: 8, cells: 65536, pickups: 64, events: 64, strikes: 16, h
 // Labels the news line shows for a power that names none.
 const LABELS = { split: 'SPLIT', grow: 'GROW', speed: 'SPEED', warp: 'WARP', magnet: 'MAGNET', vanish: 'GONE', break: 'BREAK' };
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
 const pair = (value, path, min, max, whole = false) => {
   if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
   return value.map((n, i) => (whole ? integer : number)(n, `${path}[${i}]`, min, max));
@@ -68,7 +58,8 @@ export function readTerritory(value, path, { width, height, palette }) {
   let columns, rows, start;
   if (value.rows !== undefined) {
     if (value.size !== undefined) fail(`${path}.size`, 'rows already give the size; size goes with split');
-    if (!Array.isArray(value.rows) || !value.rows.length || typeof value.rows[0] !== 'string' || !value.rows[0].length || value.rows.some(row => typeof row !== 'string' || row.length !== value.rows[0].length)) fail(`${path}.rows`, 'expected equal-width text rows, one character per cell');
+    if (!Array.isArray(value.rows) || !value.rows.length || typeof value.rows[0] !== 'string' || !value.rows[0].length || value.rows.some(row => typeof row !== 'string')) fail(`${path}.rows`, 'expected equal-width text rows, one character per cell');
+    sameWidth(value.rows, `${path}.rows`);
     columns = value.rows[0].length; rows = value.rows.length;
     start = new Int8Array(columns * rows);
     value.rows.forEach((row, j) => { for (let i = 0; i < columns; i++) {
@@ -125,7 +116,7 @@ export function readPickups(list, path, context) {
     if (entry.symbol !== undefined && (typeof entry.symbol !== 'string' || !Object.hasOwn(context.symbols, entry.symbol))) fail(`${p}.symbol`, `unknown symbol ${JSON.stringify(entry.symbol)}`);
     const symbol = entry.symbol ?? null, size = integer(entry.size ?? (symbol ? Math.max(context.symbols[symbol].length, context.symbols[symbol][0].length) : 5), `${p}.size`, 1, 64);
     const from = integer(entry.from ?? 0, `${p}.from`, 0, 18000), until = entry.until === undefined ? null : integer(entry.until, `${p}.until`, from + 1, 18001);
-    return { at: pair(entry.at, `${p}.at`, 0, 4096), size, from, until, symbol, color: entry.color === undefined ? null : key(entry.color, `${p}.color`, context.palette), path: p, ...readPower(entry, p, context) };
+    return { at: pair(entry.at, `${p}.at`, 0, 4096), size, from, until, symbol, color: entry.color === undefined ? null : key(entry.color, `${p}.color`, context.palette), ...readPower(entry, p, context) };
   });
 }
 
@@ -137,11 +128,12 @@ export function readEvents(list, path, context, bodies) {
     const p = `${path}[${i}]`;
     if (!isObject(entry)) fail(p, 'expected { frame, body, power, … }');
     fields(entry, ['frame', 'body', ...POWER_FIELDS], p);
-    const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === String(entry.body).toLowerCase());
+    if (typeof entry.body !== 'string') fail(`${p}.body`, 'expected a body\'s name');
+    const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === entry.body.toLowerCase());
     if (index < 0) fail(`${p}.body`, `no body is named ${JSON.stringify(entry.body)}`);
     if (bodies[index].fixed && entry.power !== 'vanish' && entry.power !== 'break') fail(`${p}.body`, `${entry.body} is fixed; powers go to bodies that move freely (a fixed body can only vanish or break)`);
     if (bodies[index].shape === 'hoop' && entry.power === 'break') fail(`${p}.power`, `${entry.body} is a hoop, a container, and does not break; it can vanish`);
-    return { frame: integer(entry.frame, `${p}.frame`, 1, 18000), body: index, path: p, ...readPower(entry, p, context) };
+    return { frame: integer(entry.frame, `${p}.frame`, 1, 18000), body: index, ...readPower(entry, p, context) };
   });
 }
 
@@ -154,12 +146,13 @@ export function readStrikes(list, path, context, bodies) {
     const p = `${path}[${i}]`;
     if (!isObject(entry)) fail(p, 'expected { by, power, … }');
     fields(entry, ['by', 'rest', 'from', 'until', 'cut', ...POWER_FIELDS], p);
-    const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === String(entry.by).toLowerCase());
+    if (typeof entry.by !== 'string') fail(`${p}.by`, 'expected a body\'s name');
+    const index = bodies.findIndex(b => b.name !== null && b.name.toLowerCase() === entry.by.toLowerCase());
     if (index < 0) fail(`${p}.by`, `no body is named ${JSON.stringify(entry.by)}; a strike names the body whose pushes give the power`);
     const from = integer(entry.from ?? 0, `${p}.from`, 0, 18000), until = entry.until === undefined ? null : integer(entry.until, `${p}.until`, from + 1, 18001);
     // A cut: the strike's body passes through what it strikes, which leaves behind it at this speed (pixels a frame).
     const cut = entry.cut === undefined ? null : number(entry.cut, `${p}.cut`, 0.1, 8);
-    return { by: index, rest: integer(entry.rest ?? 10, `${p}.rest`, 1, 18000), from, until, cut, path: p, ...readPower(entry, p, context) };
+    return { by: index, rest: integer(entry.rest ?? 10, `${p}.rest`, 1, 18000), from, until, cut, ...readPower(entry, p, context) };
   });
 }
 
@@ -196,8 +189,9 @@ export function readHud(list, path, context, teams) {
 // ---- The territory in a world -----------------------------------------------------------------------------------------
 /** The territory's state while a world runs. `trace(at, material, columns, rows, scale, x, y)` is bodies.js's face tracer;
  * `scale(b, k)` grows a body's shape by k; `copy(b)` adds a copy of a body to the world and returns it; `fastest` is the
- * bodies' speed limit. */
-export function createTerritory(effect, { trace, scale, copy, shatter, width, height, fastest = Infinity }) {
+ * bodies' speed limit; `stir(b)` wakes a body a power is about to move or reshape, and what leans on it; `energy(b)` is
+ * what a tireless body keeps. */
+export function createTerritory(effect, { trace, scale, copy, shatter, stir, energy, width, height, fastest }) {
   // Powers work without a territory too: then there are no cells and no teams.
   const t = effect.territory ?? { cell: 1, x: 0, y: 0, columns: 0, rows: 0, teams: [], start: new Int8Array(0), bounce: 1, friction: 0 };
   const { columns, rows, cell, teams } = t, owner = Int8Array.from(t.start);
@@ -234,6 +228,11 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
     const i = Math.floor((px - t.x) / cell), j = Math.floor((py - t.y) / cell);
     return i >= 0 && j >= 0 && i < columns && j < rows ? j * columns + i : -1;
   };
+  // Whether magnet m pulls body b: every free body but its own, and none of its own team.
+  const pulls = (m, b) => m.body !== b && !(m.team >= 0 && b.team === m.team);
+  // The sleeping bodies a magnet pulls wake as it starts, and as it stops: a sleeper ignored it, and one that had come to
+  // rest held up by it hung there once it was gone.
+  const rouse = m => { for (const b of all) if (!b.fixed && !b.gone && b.asleep && pulls(m, b)) stir(b); };
   const take = (b, p, f, what) => {
     // A strike's power is counted rather than listed (a crowd that multiplies takes thousands), and makes no news.
     const entry = what.strike === undefined ? { frame: f, [what.pickup !== undefined ? 'pickup' : 'event']: what.pickup ?? what.event, body: b.name ?? b.path, power: p.power } : null;
@@ -241,6 +240,13 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
     // What a cut struck leaves behind the cutter at the cut's speed (woken: a sleeper given a speed would hang still).
     const back = p.cut && what.back ? what.back : null;
     if (back) { b.asleep = false; b.sleepy = 0; }
+    // A power that moves or reshapes a sleeping body wakes it, and what rests on it: asleep, a warped body hung where it
+    // landed with its stack left standing on nothing, one that grew stayed sunk in the floor, and a split's copies sat
+    // on their taker for good.
+    if (p.power === 'split' || p.power === 'grow' || p.power === 'warp') stir(b);
+    // What a tireless body keeps is what it had before the power plus what the power gives it (a speed, a new height, a
+    // cut's push): kept as it was, its next hit took the power back.
+    const kept = b.tireless ? b.energy - energy(b) : 0;
     if (p.power === 'split') {
       // Copies turned evenly about the taker's heading (a cut's pieces about the way behind the cutter, each at the cut's
       // speed on top of the taker's own); the taker takes the first heading. A body whose fill list steps with time
@@ -256,13 +262,19 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
         if (tint !== null) target.colour = tint;
         if (back) { target.vx = vx + p.cut * (back[0] * c - back[1] * s); target.vy = vy + p.cut * (back[0] * s + back[1] * c); }
         else { target.vx = vx * c - vy * s; target.vy = vx * s + vy * c; }
+        if (target.tireless) target.energy = kept + energy(target);
         // A copy of a grown or hurried body shrinks back or slows down when the taker does.
         if (target !== b) for (const timer of timers.filter(other => other.body === b)) timers.push({ ...timer, body: target, undo: timer.again(target) });
       }
     } else if (p.power === 'grow') {
       const running = timers.find(timer => timer.body === b && timer.power === 'grow');
       if (running) running.until = Math.max(running.until, f + p.frames);
-      else { scale(b, p.scale); const again = body => () => scale(body, 1 / p.scale); timers.push({ body: b, power: 'grow', until: f + p.frames, undo: again(b), again }); }
+      else {
+        scale(b, p.scale);
+        // Shrinking back, it wakes with what stood on it: asleep, it hung over the floor by what it had lost.
+        const again = body => () => { if (!body.gone) stir(body); scale(body, 1 / p.scale); };
+        timers.push({ body: b, power: 'grow', until: f + p.frames, undo: again(b), again });
+      }
     } else if (p.power === 'speed') {
       if (b.speed) {
         const base = b.speed, running = timers.find(timer => timer.body === b && timer.power === 'speed');
@@ -282,6 +294,7 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
     } else if (p.power === 'magnet') {
       const [x, y] = p.to ?? what.at;
       magnets.push({ x, y, strength: p.strength, until: f + p.frames, team: b.team, body: b });
+      rouse(magnets.at(-1));
     } else if (p.power === 'vanish') {
       // Gone, as a body that leaves the canvas is: what it held falls (bodies.js wakes what rested on it).
       b.gone = true;
@@ -293,6 +306,7 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
       if (entry) entry.pieces = made;
     }
     if (back && p.power !== 'split' && p.power !== 'warp' && p.power !== 'vanish' && p.power !== 'break') { b.vx += p.cut * back[0]; b.vy += p.cut * back[1]; }
+    if (b.tireless && !b.gone) b.energy = kept + energy(b);
   };
   // The bodies each strike's body pushed (or cut) this frame, by index, given its power at the frame's end; a cut body
   // with the way behind the cutter where it was first touched.
@@ -334,7 +348,7 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
     // A magnet's pull on a body this substep: toward its point, as steady as gravity, on bodies of other teams.
     pull: (b, dt) => {
       for (const m of magnets) {
-        if (m.body === b || (m.team >= 0 && b.team === m.team)) continue;
+        if (!pulls(m, b)) continue;
         const dx = m.x - b.x, dy = m.y - b.y, d = Math.sqrt(dx * dx + dy * dy);
         if (d > 0.5) { b.vx += dx / d * m.strength * dt; b.vy += dy / d * m.strength * dt; }
       }
@@ -345,7 +359,7 @@ export function createTerritory(effect, { trace, scale, copy, shatter, width, he
     frame: (f, bodies) => {
       all = bodies;
       for (let k = timers.length - 1; k >= 0; k--) if (timers[k].until <= f) { timers[k].undo(); timers.splice(k, 1); }
-      for (let k = magnets.length - 1; k >= 0; k--) if (magnets[k].until <= f) magnets.splice(k, 1);
+      for (let k = magnets.length - 1; k >= 0; k--) if (magnets[k].until <= f) { rouse(magnets[k]); magnets.splice(k, 1); }
       pickups.forEach((p, index) => {
         if (p.taken || f < p.from || (p.until !== null && f >= p.until)) return;
         const h = p.size / 2, x0 = p.at[0] - h, y0 = p.at[1] - h, x1 = p.at[0] + h, y1 = p.at[1] + h;

@@ -1,15 +1,13 @@
 // Browser-compatible recipe patching: targeted edits addressed by readable paths. No I/O.
-import { PixelError, parseColor, renderProject } from './core.js';
+import { parseColor, renderProject, fail, isObject, sameWidth } from './core.js';
 import { pixelId, colorOf, idsOf, cleanupIds } from './craft.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const define = (target, key, value) => Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true });
 const summarize = value => {
   const text = JSON.stringify(value);
   return text === undefined || text.length <= 160 ? value : `${Array.isArray(value) ? 'list' : typeof value} of ${text.length} JSON characters`;
 };
-const segmentPattern = /\.([^.[\]"]+)|\[(\d+|-|[a-zA-Z][\w-]*)\]|\[("(?:[^"\\]|\\.)*")\]/y;
+const segmentPattern = /\.([^.[\]"]+)|\[(\d+|-|\*|[a-zA-Z][\w-]*)\]|\[("(?:[^"\\]|\\.)*")\]/y;
 // Canvas verbs change final pixels in canvas coordinates; the rest edit the recipe structure.
 const CANVAS = ['paint', 'grid', 'move', 'recolor', 'cleanup'], VERBS = ['set', 'insert', 'remove', ...CANVAS];
 
@@ -25,7 +23,8 @@ function regionPixels(recipe, frameIndex, verb, value, where) {
     if (!Number.isInteger(number) || number < (key === 'w' || key === 'h' ? 1 : 0) || number > max) fail(`${where}.${key}`, 'expected an integer region inside the canvas');
   }
   if (value.x + w > recipe.width || value.y + h > recipe.height) fail(where, 'region must fit inside the canvas');
-  if (rows && rows.some(row => typeof row !== 'string' || row.length !== w)) fail(`${where}.rows`, 'rows must have equal width');
+  if (rows && rows.some(row => typeof row !== 'string')) fail(`${where}.rows`, 'expected 1–256 equal-width rows');
+  if (rows) sameWidth(rows, `${where}.rows`);
   if (value.mask !== undefined && (!Array.isArray(value.mask) || value.mask.length !== h || value.mask.some(row => typeof row !== 'string' || row.length !== w || /[^x.]/.test(row)))) fail(`${where}.mask`, 'mask must match the region: x selects, dot preserves');
   if (value.erase !== undefined && (typeof value.erase !== 'string' || value.erase.length !== 1 || '. '.includes(value.erase) || Object.hasOwn(recipe.palette ?? {}, value.erase))) fail(`${where}.erase`, 'choose one non-palette character other than dot/space for erasure');
   let data, from, to;
@@ -100,6 +99,7 @@ function parsePath(text, where) {
     if (match[1] !== undefined) segments.push({ key: match[1] });
     else if (match[3] !== undefined) segments.push({ name: JSON.parse(match[3]) });
     else if (match[2] === '-') segments.push({ end: true });
+    else if (match[2] === '*') segments.push({ any: true });
     else segments.push(/^\d+$/.test(match[2]) ? { index: Number(match[2]) } : { name: match[2] });
   }
   return segments;
@@ -112,6 +112,7 @@ function locate(root, segments, where, verb) {
   for (const [i, segment] of segments.entries()) {
     const last = i === segments.length - 1, owner = path || 'the project';
     let slot;
+    if (segment.any) fail(where, '[*] is every item of a list, for set and remove: frames[*].layers[cape].palette');
     if (Array.isArray(node)) {
       if (segment.key !== undefined) fail(where, `${owner} is a list; select an item with [index] or [name]`);
       if (segment.end) {
@@ -140,7 +141,32 @@ function locate(root, segments, where, verb) {
   }
 }
 
-// Applies changes in order to a copy of the recipe. Each edit reports its resolved path and the value it replaced.
+// frames[*].layers[cape].palette: [*] stands for every item of a list, so one change reaches a layer in every frame.
+// Returns the path of each match. An item that lacks what the rest of the path names (a frame without that layer, or
+// for a remove without that field) is passed over; no match at all is an error.
+function everyMatch(root, segments, where, verb) {
+  if (segments.at(-1).any) fail(where, '[*] is followed by what to change in each item, such as frames[*].duration');
+  const text = taken => taken.map((segment, i) => (segment.key !== undefined ? `${i ? '.' : ''}${segment.key}` : segment.index !== undefined ? `[${segment.index}]` : `[${JSON.stringify(segment.name)}]`)).join('');
+  const child = (node, segment) => (Array.isArray(node) ? (segment.index !== undefined ? node[segment.index] : node.find(item => (isObject(item) ? item.name : item) === segment.name))
+    : isObject(node) ? node[segment.key ?? segment.name ?? String(segment.index)] : undefined);
+  const matches = [];
+  const walk = (node, i, taken) => {
+    const segment = segments[i];
+    if (segment.any) {
+      if (!Array.isArray(node)) fail(where, `[*] needs a list, and ${text(taken) || 'the project'} is not one`);
+      node.forEach((item, index) => walk(item, i + 1, [...taken, { index }]));
+    } else if (i === segments.length - 1) {
+      if (verb === 'set' ? isObject(node) || Array.isArray(node) : child(node, segment) !== undefined) matches.push(text([...taken, segment]));
+    } else if (child(node, segment) !== undefined) walk(child(node, segment), i + 1, [...taken, segment]);
+  };
+  walk(root, 0, []);
+  if (!matches.length) fail(where, 'no item has what this path names');
+  if (matches.length > 4096) fail(where, `the path matches ${matches.length} places; at most 4,096`);
+  return matches;
+}
+
+// Applies changes in order to a copy of the recipe. Each edit reports its resolved path and the value it replaced; a
+// change with [*] reports how many places it matched.
 export function patchRecipe(recipe, changes) {
   if (!isObject(recipe)) fail('project', 'expected an object');
   if (!Array.isArray(changes) || !changes.length || changes.length > 1024) fail('changes', 'expected a list of 1–1024 changes');
@@ -153,7 +179,7 @@ export function patchRecipe(recipe, changes) {
   if (changes.reduce((sum, change) => sum + estimate(recipe, change), 0) > budget) fail('changes', 'regional edit work exceeds 67,108,864 estimated pixels; split the batch or reduce frame scope');
   const next = structuredClone(recipe), edits = [];
   let work = 0;
-  changes.forEach((change, i) => {
+  const apply = (change, i) => {
     const where = `changes[${i}]`;
     if (!isObject(change)) fail(where, 'expected an object such as {"set": "frames[idle].duration", "value": 120}');
     for (const key of Object.keys(change)) if (![...VERBS, 'scope', 'value'].includes(key)) fail(`${where}.${key}`, 'unknown field in patch');
@@ -177,7 +203,7 @@ export function patchRecipe(recipe, changes) {
       if (!Array.isArray(entries) || (verb === 'paint' && !entries.length) || entries.length > 131072) fail(`${where}.value`, verb === 'paint' ? 'paint needs 1–65,536 pixels with x, y and color' : 'expected a bounded pixel list');
       if (verb === 'paint' && entries.length > 65536) fail(`${where}.value`, 'paint needs 1–65,536 pixels with x, y and color');
       const frame = parent[slot];
-      if (frame.pixels !== undefined && !Array.isArray(frame.pixels)) fail(target, `${path}.pixels must be a list`);
+      if (frame.pixels !== undefined && (!Array.isArray(frame.pixels) || frame.pixels.some(pixel => !isObject(pixel)))) fail(target, `${path}.pixels must be a list of pixel objects`);
       // Keep one correction per coordinate. Later paint replaces an earlier correction, without touching layers.
       const pixels = new Map((frame.pixels ?? []).map(pixel => [`${pixel.x},${pixel.y}`, pixel]));
       entries.forEach((pixel, j) => {
@@ -221,7 +247,14 @@ export function patchRecipe(recipe, changes) {
       edit.created = true;
       define(parent, slot, structuredClone(change.value));
     } else fail(target, `nothing to remove at ${path}`);
-    edits.push(edit);
+    return edit;
+  };
+  changes.forEach((change, i) => {
+    const verb = isObject(change) ? ['set', 'remove'].find(key => typeof change[key] === 'string' && change[key].includes('[*]')) : undefined;
+    if (!verb) { edits.push(apply(change, i)); return; }
+    const matches = everyMatch(next, parsePath(change[verb], `changes[${i}].${verb}`), `changes[${i}].${verb}`, verb);
+    for (const path of matches) apply({ ...change, [verb]: path }, i);
+    edits.push({ [verb]: change[verb], matched: matches.length });
   });
   return { recipe: next, edits };
 }

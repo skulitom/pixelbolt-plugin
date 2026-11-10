@@ -1,0 +1,101 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "wrecking-ball",
+  "width": 96,
+  "height": 64,
+  "palette": {
+    "k": "#14141c",
+    "s": "#4a5068",
+    "f": "#6f7896",
+    "m": "#b4bdd8",
+    "b": "#8a5a36",
+    "h": "#c98c4f",
+    "r": "#d7b56d",
+    "w": "#e8f4ff"
+  },
+  "symbols": {
+    "ground": [
+      "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+      "ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+    ],
+    "crate": [
+      "kkkkkkkk",
+      "khhhhhhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khbbbbhk",
+      "khhhhhhk",
+      "kkkkkkkk"
+    ]
+  },
+  "effects": {
+    "wrecking-ball": {
+      "frames": 160,
+      "duration": 40,
+      "gravity": [0, 0.16],
+      "walls": ["left", "right"],
+      "obstacles": [{ "symbol": "ground", "x": 0, "y": 60 }],
+      "bodies": [
+        { "name": "pivot", "shape": "circle", "radius": 2, "at": [50, 6], "fixed": true, "fill": "s", "outline": "k" },
+        {
+          "name": "ball",
+          "shape": "circle",
+          "radius": 6,
+          "at": [86, 14],
+          "density": 9,
+          "bounce": 0.3,
+          "friction": 0.5,
+          "fill": "m",
+          "outline": "k"
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [34, 56],
+          "grid": { "count": [3, 1], "step": [8, 0] },
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate"
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [38, 48],
+          "grid": { "count": [2, 1], "step": [8, 0] },
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate"
+        },
+        {
+          "shape": "box",
+          "size": [8, 8],
+          "at": [42, 40],
+          "asleep": true,
+          "density": 0.6,
+          "friction": 0.6,
+          "bounce": 0.1,
+          "symbol": "crate"
+        }
+      ],
+      "ropes": [
+        {
+          "from": { "body": "pivot", "point": [3, 1] },
+          "to": { "body": "ball", "point": [-7, -2] },
+          "links": 14,
+          "slack": 0,
+          "thickness": 1,
+          "fill": "r",
+          "outline": "k"
+        }
+      ]
+    }
+  }
+}

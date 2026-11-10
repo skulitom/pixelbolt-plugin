@@ -1,0 +1,46 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "flag",
+  "width": 64,
+  "height": 48,
+  "palette": {
+    "k": "#14141c",
+    "s": "#4a5068",
+    "b": "#1a2433",
+    "r": "#b23a48",
+    "R": "#e06c5a",
+    "w": "#f2e6c9",
+    "g": "#d7b56d"
+  },
+  "effects": {
+    "flag": {
+      "frames": 60,
+      "duration": 40,
+      "gravity": [0, 0.1],
+      "background": "b",
+      "bodies": [
+        { "name": "pole", "shape": "box", "size": [2, 38], "at": [16, 24], "fixed": true, "fill": "g", "outline": "k" }
+      ],
+      "cloths": [
+        {
+          "name": "flag",
+          "at": [18, 10],
+          "size": [25, 15],
+          "cell": 1,
+          "fill": ["r", "R", "w"],
+          "outline": "k",
+          "light": [0, -1],
+          "wind": [1.6, 0],
+          "gust": 1,
+          "slack": 0.35,
+          "stiffness": 0.5,
+          "shear": 0.25,
+          "bend": 0.02,
+          "tear": 4,
+          "pins": [{ "at": [0, 0], "x": 17, "y": 10 }, { "at": [0, 14], "x": 17, "y": 24 }]
+        }
+      ]
+    }
+  }
+}

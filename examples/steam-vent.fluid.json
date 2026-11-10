@@ -150,10 +150,11 @@
         { "name": "fade", "at": [16, 2], "area": [32, 6], "rate": 1, "density": -0.4 }
       ],
       "look": [
-        { "field": "density", "colors": ["q"], "thresholds": [0.11], "dither": 0.65, "pattern": "noise" },
-        { "field": "density", "colors": ["q"], "thresholds": [0.25], "dither": 0.45 },
-        { "field": "density", "colors": ["Q", "w"], "thresholds": [0.42, 1], "dither": 0.6 }
-      ]
+        { "field": "density", "colors": ["q", "Q", "w"], "thresholds": [0.035, 0.11, 0.6], "dither": 0 },
+        { "field": "shadow", "colors": ["q"], "thresholds": [0.55], "dither": 0 },
+        { "field": "light", "colors": ["w"], "thresholds": [0.7], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
     }
   }
 }

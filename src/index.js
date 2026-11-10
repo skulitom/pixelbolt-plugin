@@ -1,4 +1,4 @@
-export { PixelError, MAX_REQUEST_BYTES, parseColor, renderProject, buildAtlas, scalePixels, inspectProject, compareProjects, analyzeProject, reviewPixels, animationPosition, animationNeighbors, onionPixels, tileRepeat, tileReport, readGuides, drawGuides, pictureSheet } from './core.js';
+export { PixelError, errorReply, MAX_REQUEST_BYTES, parseColor, renderProject, buildAtlas, scalePixels, inspectProject, stackViews, paletteUse, compareProjects, analyzeProject, briefDiagnostics, briefCells, briefComparison, reviewPixels, animationPosition, animationNeighbors, onionPixels, tileRepeat, tileReport, readGuides, drawGuides, pictureSheet } from './core.js';
 export { patchRecipe } from './patch.js';
 export { encodePNG, encodeAPNG } from './png.js';
 export { measureText, layoutText, FONT_CHARACTERS, FONT_HEIGHT, FONT_CAP_HEIGHT } from './font.js';
@@ -15,8 +15,9 @@ export { compileCrystals, CRYSTAL_HABITS } from './crystal.js';
 export { compilePowder, createLivePowder, POWDER_STATES, POWDER_INPUTS, SANDBOX, sandboxSource, packStrokes, unpackStrokes, replayStrokes, applyStroke } from './powder.js';
 export { compileFluid, createLiveFluid, FLUID_KINDS, FLUID_FIELDS, FLUID_WALLS } from './fluid.js';
 export { compileBodies, bodiesFrames, MATCH_FRAMES, BODY_SHAPES, BODY_WALLS } from './bodies.js';
+export { JOINT_TYPES } from './constraints.js';
 export { DITHER_PATTERNS, EASINGS, ease, ditherThreshold, cleanupIds, rotateRows, draftTurn, ruleVariants, rewriteIds } from './craft.js';
-export { BLOB_MASKS, CARDINAL_MASKS, neighbourMask, quadrantPieces, templatePiece } from './autotile.js';
+export { BLOB_MASKS, CARDINAL_MASKS, neighbourMask, quadrantPieces, templatePiece, tilemapEntry, tilemapOf } from './autotile.js';
 export { readTerrain, drawTerrain, terrainTemplate, templateSeams, seamWarnings, testMapRecipe, testMapScale, TEST_MAP } from './terrain.js';
 export { prepareScene, renderScene, sceneImage, inspectTile } from './scene.js';
 export { createSceneBundle } from './scene-export.js';

@@ -54,10 +54,7 @@
         "vorticity": 0.35,
         "cooling": 0.05,
         "dissipation": 0.08,
-        "look": [
-          { "field": "density", "colors": ["s"], "thresholds": [0.35], "dither": 0.5 },
-          { "field": "density", "colors": ["S"], "thresholds": [0.8], "dither": 0.4 }
-        ]
+        "look": [{ "field": "density", "colors": ["s", "S"], "thresholds": [0.1, 0.35], "dither": 0 }]
       },
       "ice": {
         "look": [

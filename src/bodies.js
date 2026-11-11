@@ -1,8 +1,9 @@
-// Rigid bodies compiled to ordinary, editable recipes. A pixelforge-bodies source names effects; each drops balls,
-// boxes and convex polygons into a canvas with gravity, walls, pixel obstacles and fixed (or spinning) containers, runs
-// a small rigid-body simulation and bakes every frame into palette `grid` operations on the source's own palette.
-// Bodies bounce, slide, roll, stack, knock each other about and come to rest; a body can start asleep, holding still
-// until something hits it, and change colour at each hit.
+// Rigid bodies, joints, ropes and cloth compiled to ordinary, editable recipes. A pixelforge-bodies source names effects;
+// each drops balls, boxes and convex polygons into a canvas with gravity, walls, pixel obstacles and fixed (or spinning)
+// containers, runs a small rigid-body simulation and bakes every frame into palette `grid` operations on the source's
+// own palette. Bodies bounce, slide, roll, stack, knock each other about and come to rest; a body can start asleep,
+// holding still until something hits it, and change colour at each hit. Joints connect bodies into ragdolls and hinges,
+// ropes hang and break, and cloth pins, drapes, ripples and tears.
 //
 // The solver is sequential impulses in substeps (after Box2D): contacts with speculative distance, so fast bodies never
 // pass through thin walls; warm starting; a soft push out of overlaps whose velocity is relaxed away afterwards, so it
@@ -13,11 +14,13 @@
 // Same units as pixelforge-fluid (docs/physics-model.md, section 2): pixels, frames, pixels per frame and per frame².
 // Browser-compatible and deterministic: only + − × ÷ and sqrt, craft.js's polynomial trigonometry, fixed substeps
 // and iteration counts, and bodies, contacts and pixels visited in a fixed order.
-import { PixelError, renderProject } from './core.js';
-import { fields } from './authoring.js';
+import { renderProject, fail, isObject, sameWidth } from './core.js';
+import { fields, number, integer } from './authoring.js';
 import { sinDeg, cosDeg, traceLine, turnRows, random } from './craft.js';
 import { atan2Deg } from './shapes.js';
 import { readTerritory, readPickups, readEvents, readStrikes, readHud, createTerritory } from './territory.js';
+import { readJoints, ropeJoint, jointPairs, pairKey, resetJoints, wakeJoints, solveJoints, correctJoints, breakJoints, paintRopes } from './constraints.js';
+import { readCloths, createCloth, stepCloth, paintCloth, clothWork } from './cloth.js';
 
 export const BODY_SHAPES = ['circle', 'box', 'polygon', 'hoop'];
 export const BODY_WALLS = ['left', 'right', 'top', 'bottom'];
@@ -43,16 +46,6 @@ const GONE = 16;
 // Walls and obstacles without their own bounce and friction.
 const SURFACE = { bounce: 0, friction: 0.5 };
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
 const boolean = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected true or false'); return value; };
 const pair = (value, path, min, max) => {
   if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
@@ -69,7 +62,8 @@ function paletteKey(value, path, palette) {
   return value;
 }
 
-// A convex polygon's local outline, centred on its centroid and wound so (edge.y, −edge.x) points out.
+// A convex polygon's local outline, centred on its centroid and wound so (edge.y, −edge.x) points out, and where that
+// centroid lies among the points as they were written (`centre`).
 function convex(points, path) {
   if (!Array.isArray(points) || points.length < 3 || points.length > 8) fail(path, 'expected 3–8 points [x, y] around the body\'s centre');
   let pts = points.map((p, i) => pair(p, `${path}[${i}]`, -64, 64));
@@ -82,6 +76,7 @@ function convex(points, path) {
   cx /= 3 * area; cy /= 3 * area;
   if (area < 0) pts = pts.reverse();
   pts = pts.map(([x, y]) => [x - cx, y - cy]);
+  pts.centre = [cx, cy];
   for (let i = 0; i < pts.length; i++) {
     const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % pts.length], [qx, qy] = pts[(i + 2) % pts.length];
     if ((bx - ax) * (qy - by) - (by - ay) * (qx - bx) <= 1e-9) fail(path, 'expected a convex outline, every corner turning the same way (no dents and no three points in a line)');
@@ -149,7 +144,7 @@ function readBody(entry, path, context) {
   if (entry.speed !== undefined && fixed) fail(`${path}.speed`, 'speed holds a free body\'s speed; a fixed body moves exactly by its velocity and spin');
   const speed = entry.speed === undefined ? null : number(entry.speed, `${path}.speed`, 0.05, MAX_SPEED);
   // Geometry in the body's own frame, centred on its centre of mass.
-  let parts, area, inertia, size;
+  let parts, area, inertia, size, centre = null;
   if (shape === 'circle') {
     const r = number(entry.radius, `${path}.radius`, 0.5, 32);
     parts = [{ kind: 'circle', r }]; area = PI * r * r; inertia = r * r / 2; size = [Math.max(1, Math.round(2 * r)), Math.max(1, Math.round(2 * r))];
@@ -158,7 +153,7 @@ function readBody(entry, path, context) {
     if (shape === 'box') {
       const [w, h] = pair(entry.size, `${path}.size`, 1, 64);
       points = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]];
-    } else points = convex(entry.points, `${path}.points`);
+    } else { points = convex(entry.points, `${path}.points`); centre = points.centre; }
     const part = polygonPart(points);
     parts = [part];
     area = 0; let second = 0;
@@ -188,11 +183,22 @@ function readBody(entry, path, context) {
   }
   // Looks: a fill (a list changes colour at each hit), an outline, or a symbol drawn turned with the body.
   if (entry.symbol !== undefined && (entry.fill !== undefined || entry.outline !== undefined)) fail(`${path}.symbol`, 'a body is drawn with a symbol or with fill and outline, not both');
-  let fills = null, outline = null, symbol = null;
+  let fills = null, outline = null, symbol = null, rows = null;
   if (entry.symbol !== undefined) {
     if (typeof entry.symbol !== 'string' || !Object.hasOwn(symbols, entry.symbol)) fail(`${path}.symbol`, `unknown symbol ${JSON.stringify(entry.symbol)}`);
     if (shape === 'hoop') fail(`${path}.symbol`, 'a hoop is drawn as its outline; give it fill');
     symbol = entry.symbol;
+    // A picture is drawn with its middle on the body's centre, and a polygon's centre is its centroid, which a lopsided
+    // outline has off the middle its points were written around. The picture belongs where the points were written, so
+    // it is padded with empty columns and rows until its middle is the centroid: a triangle's picture then stands on
+    // the triangle that collides, instead of hanging a third of the way off it.
+    if (centre) {
+      const padX = Math.round(2 * centre[0]), padY = Math.round(2 * centre[1]);
+      if (padX || padY) {
+        const wide = symbols[symbol].map(row => (padX < 0 ? '.'.repeat(-padX) : '') + row + (padX > 0 ? '.'.repeat(padX) : '')), blank = '.'.repeat(wide[0].length);
+        rows = [...Array(Math.max(0, -padY)).fill(blank), ...wide, ...Array(Math.max(0, padY)).fill(blank)];
+      }
+    }
   } else {
     if (entry.fill === undefined) fail(`${path}.fill`, 'expected a palette key, or a list of keys to change to at each hit');
     fills = Array.isArray(entry.fill) ? entry.fill : [entry.fill];
@@ -277,7 +283,7 @@ function readBody(entry, path, context) {
     invMass: fixed ? 0 : 1 / mass, invInertia: fixed || shape === 'hoop' ? 0 : 1 / (mass * inertia),
     bounce: material.bounce, friction: material.friction, drag: material.drag, spinDrag: material.spinDrag,
     weightless: material.weightless, asleep: material.asleep, tireless: material.tireless, temperature, team, speed, fills, fillEvery, outline, symbol, trail, smear, breaks,
-    ...(pivot && pivoted(x, y, a, pivot, velocity, spin))
+    ...(rows && { rows }), ...(pivot && pivoted(x, y, a, pivot, velocity, spin))
   }));
 }
 // A fixed body turning about a pivot: `at` (x, y) is the pivot, its velocity the pivot's; the body's centre and its
@@ -341,9 +347,85 @@ export function readBodies(list, path, context) {
   return bodies;
 }
 
+// Ropes: a chain of small hidden bodies between two anchors, with a line or a chain of links drawn over them. A rope may
+// hang from a body, from the world, or from both; its links collide with the world and other bodies, never with their
+// neighbours, and a joint whose `break` impulse is passed splits the rope.
+const ROPE_FIELDS = ['from', 'to', 'links', 'slack', 'thickness', 'look', 'fill', 'outline', 'density', 'break', 'draw'];
+function readRopes(list, path, { bodies, byName, palette, joints }) {
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.length > 16) fail(path, 'expected a list of at most 16 ropes');
+  const end = (value, at) => {
+    if (!isObject(value)) fail(at, 'expected { body, point } or { at }');
+    fields(value, ['body', 'point', 'at'], at);
+    if (value.body !== undefined && value.at !== undefined) fail(`${at}.at`, 'a rope end is a body or a world point, not both');
+    if (value.body !== undefined) {
+      if (typeof value.body !== 'string') fail(`${at}.body`, 'expected a body name');
+      const body = byName.get(value.body.toLowerCase());
+      if (!body) {
+        const known = [...byName.values()].map(other => other.name).filter(Boolean);
+        fail(`${at}.body`, `unknown body ${JSON.stringify(value.body)}${known.length ? `; the bodies are ${known.join(', ')}` : ''}`);
+      }
+      return { index: bodies.indexOf(body), body, point: value.point === undefined ? [0, 0] : pair(value.point, `${at}.point`, -4096, 4096) };
+    }
+    if (value.at === undefined) fail(at, 'expected { body, point } or { at }');
+    return { index: -1, body: null, point: pair(value.at, `${at}.at`, -4096, 4096) };
+  };
+  const worldPoint = anchor => anchor.body
+    ? [anchor.body.x + cosDeg(anchor.body.angle) * anchor.point[0] - sinDeg(anchor.body.angle) * anchor.point[1],
+      anchor.body.y + sinDeg(anchor.body.angle) * anchor.point[0] + cosDeg(anchor.body.angle) * anchor.point[1]]
+    : anchor.point;
+  return list.map((entry, i) => {
+    const at = `${path}[${i}]`;
+    if (!isObject(entry)) fail(at, 'expected a rope');
+    fields(entry, ROPE_FIELDS, at);
+    const from = end(entry.from, `${at}.from`), to = end(entry.to, `${at}.to`);
+    if (from.body && from.body === to.body) fail(`${at}.to`, 'a rope hangs between two bodies, or a body and a point; both ends are the same body');
+    const links = integer(entry.links ?? 12, `${at}.links`, 2, 64);
+    if (bodies.length + links > LIMITS.bodies) fail(`${at}.links`, `the ropes and bodies make ${bodies.length + links} bodies, more than ${LIMITS.bodies}`);
+    const slack = number(entry.slack ?? 0.15, `${at}.slack`, 0, 2);
+    const thickness = number(entry.thickness ?? 1, `${at}.thickness`, 1, 4);
+    const look = entry.look ?? 'rope';
+    if (!['rope', 'chain'].includes(look)) fail(`${at}.look`, 'expected rope or chain');
+    const fill = paletteKey(entry.fill, `${at}.fill`, palette);
+    const outline = entry.outline === undefined ? null : paletteKey(entry.outline, `${at}.outline`, palette);
+    const density = number(entry.density ?? 0.6, `${at}.density`, 0.05, 10);
+    const breakAt = entry.break === undefined ? null : number(entry.break, `${at}.break`, 0.01, 1000000);
+    const draw = entry.draw ?? 'under';
+    if (!['under', 'over'].includes(draw)) fail(`${at}.draw`, 'expected under or over');
+    const a = worldPoint(from), b = worldPoint(to), dx = b[0] - a[0], dy = b[1] - a[1], span = Math.sqrt(dx * dx + dy * dy);
+    // A link far lighter than what hangs from it lets the rope stretch: the solve passes a pull along the chain a
+    // joint an iteration, and a ball two thousand times a link's weight falls to the floor before the rope holds
+    // it. Unless the source gives the rope's density, a link weighs at least 1/128 of the heavier free end, at
+    // which a ball swings as it does on a rigid joint.
+    const radius = Math.max(0.5, thickness / 2), area = PI * radius * radius;
+    const heaviest = Math.max(0, ...[from.body, to.body].filter(body => body && !body.fixed && body.invMass > 0).map(body => 1 / body.invMass));
+    const mass = entry.density === undefined ? Math.max(density * area, heaviest / 128) : density * area;
+    const linkIndices = [];
+    for (let k = 0; k < links; k++) {
+      const t = (k + 1) / (links + 1), x = a[0] + dx * t, y = a[1] + dy * t;
+      const body = {
+        name: null, path: `${at} (link ${k})`, shape: 'circle', parts: [{ kind: 'circle', r: radius }], size: [Math.max(1, Math.round(2 * radius)), Math.max(1, Math.round(2 * radius))],
+        fixed: false, x, y, angle: 0, vx: 0, vy: 0, spin: 0, invMass: 1 / mass, invInertia: 1 / (mass * radius * radius / 2),
+        bounce: 0.1, friction: 0.5, drag: 0.02, spinDrag: 0.1, weightless: false, asleep: false, tireless: false, temperature: null,
+        team: -1, speed: null, fills: [fill], fillEvery: null, outline: null, symbol: null, trail: null, smear: null, breaks: null,
+        pivot: null, anchor: null, drift: null, hidden: true
+      };
+      linkIndices.push(bodies.length); bodies.push(body);
+    }
+    const max = span / (links + 1) * (1 + slack);
+    const jointIndices = [];
+    const add = (aIndex, bIndex, la, lb) => { const index = joints.length; joints.push(ropeJoint(aIndex, bIndex, la, lb, max, breakAt, `${at} (joint ${jointIndices.length})`)); jointIndices.push(index); };
+    add(linkIndices[0], from.index, [0, 0], from.point);
+    for (let k = 0; k + 1 < linkIndices.length; k++) add(linkIndices[k], linkIndices[k + 1], [0, 0], [0, 0]);
+    add(linkIndices.at(-1), to.index, [0, 0], to.point);
+    if (joints.length > 256) fail(`${at}.links`, `the joints and ropes make more than 256 joints; use fewer links or ropes`);
+    return { look, thickness, fill, outline, draw, linkIndices, jointIndices };
+  });
+}
+
 function readEffect(effect, path, context) {
   if (!isObject(effect)) fail(path, 'expected an effect');
-  fields(effect, ['frames', 'duration', 'substeps', 'iterations', 'gravity', 'background', 'walls', 'obstacles', 'territory', 'bodies', 'most', 'pickups', 'events', 'strikes', 'hud'], path);
+  fields(effect, ['frames', 'duration', 'substeps', 'iterations', 'gravity', 'background', 'walls', 'obstacles', 'territory', 'bodies', 'joints', 'ropes', 'cloths', 'most', 'pickups', 'events', 'strikes', 'hud'], path);
   const { width, height, symbols, palette } = context, most = context.frames ?? LIMITS.frames;
   const background = effect.background === undefined ? null : paletteKey(effect.background, `${path}.background`, palette);
   if (Number.isInteger(effect.frames) && effect.frames > most && effect.frames <= MATCH_FRAMES) fail(`${path}.frames`, `a recipe holds at most ${most} frames; write a longer match as numbered video frames: pixelbolt sequence <source> --out <folder> --fps 30, or pixel_compile with sequence`);
@@ -374,7 +456,16 @@ function readEffect(effect, path, context) {
   });
   // A territory of team-owned cells, then the bodies (whose teams it names), the powers and the heads-up display.
   const territory = effect.territory === undefined ? null : readTerritory(effect.territory, `${path}.territory`, { width, height, palette });
-  const bodies = readBodies(effect.bodies, `${path}.bodies`, { ...context, teams: territory ? territory.teams : null, breakable: true });
+  // A cloth- or rope-only effect may leave `bodies` out; every other effect needs at least one body.
+  const clothOnly = effect.cloths !== undefined || effect.ropes !== undefined;
+  const listedBodies = effect.bodies === undefined || (Array.isArray(effect.bodies) && effect.bodies.length === 0)
+    ? (clothOnly ? [] : readBodies(effect.bodies, `${path}.bodies`, { ...context, teams: territory ? territory.teams : null, breakable: true }))
+    : readBodies(effect.bodies, `${path}.bodies`, { ...context, teams: territory ? territory.teams : null, breakable: true });
+  const bodies = listedBodies;
+  const byName = new Map(bodies.filter(body => body.name !== null).map(body => [body.name.toLowerCase(), body]));
+  const joints = readJoints(effect.joints, `${path}.joints`, { bodies, byName });
+  const ropes = readRopes(effect.ropes, `${path}.ropes`, { bodies, byName, palette, joints });
+  const cloths = readCloths(effect.cloths, `${path}.cloths`, { bodies, byName, palette });
   const pickups = readPickups(effect.pickups, `${path}.pickups`, context), events = readEvents(effect.events, `${path}.events`, context, bodies);
   const strikes = readStrikes(effect.strikes, `${path}.strikes`, context, bodies);
   const hud = readHud(effect.hud, `${path}.hud`, context, territory ? territory.teams : null);
@@ -382,7 +473,7 @@ function readEffect(effect, path, context) {
   // room for every body with breaks to break into all its pieces, up to CROWD.
   const pieces = bodies.reduce((sum, b) => sum + (b.breaks ? b.breaks.pieces : 0), 0);
   const crowd = integer(effect.most ?? Math.min(CROWD, Math.max(LIMITS.bodies, bodies.length + pieces)), `${path}.most`, bodies.length, CROWD);
-  return { frames, duration, substeps, iterations, gravity, background, walls: Object.fromEntries(BODY_WALLS.map(edge => [edge, walls.includes(edge)])), obstacles, territory, bodies, most: crowd, pickups, events, strikes, hud };
+  return { frames, duration, substeps, iterations, gravity, background, walls: Object.fromEntries(BODY_WALLS.map(edge => [edge, walls.includes(edge)])), obstacles, territory, bodies, joints, ropes, cloths, most: crowd, pickups, events, strikes, hud };
 }
 
 // ---- Pixel obstacles --------------------------------------------------------------------------------------------------
@@ -656,6 +747,20 @@ export function createBodyWorld(effect, context) {
     ...b, index, c: cosDeg(b.angle), s: sinDeg(b.angle), w: b.spin * RADIANS, x0: b.anchor ? b.anchor[0] : b.x, y0: b.anchor ? b.anchor[1] : b.y, angle0: b.angle,
     gone: false, sleepy: 0, hit: false, struck: false, colour: 0, hits: 0, history: [], poses: [], extent: Math.max(b.size[0], b.size[1]) / 2
   }));
+  // Joints and ropes resolve their body indices to this world's bodies; cloths start at their authored places.
+  const joints = (effect.joints ?? []).map(joint => {
+    const a = joint.aIndex >= 0 ? bodies[joint.aIndex] : null, b = joint.bIndex >= 0 ? bodies[joint.bIndex] : null;
+    return { ...joint, a, b, aIndex: a ? a.index : -1, bIndex: b ? b.index : -1, accN: 0, accA: 0, broken: false };
+  });
+  const ropes = (effect.ropes ?? []).map(rope => ({ ...rope, links: rope.linkIndices.map(index => bodies[index]), joints: rope.jointIndices.map(index => joints[index]) }));
+  const chain = Math.max(0, ...ropes.map(rope => rope.links.length));
+  const cloths = (effect.cloths ?? []).map(definition => createCloth(definition, { bodies }));
+  // A cloth's solid test reads the live world grid, which a fluid may replace when its obstacles move.
+  const solidAt = (x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    if (ix < 0 || iy < 0 || ix >= width || iy >= height) return (ix < 0 && effect.walls.left) || (ix >= width && effect.walls.right) || (iy < 0 && effect.walls.top) || (iy >= height && effect.walls.bottom);
+    return world.solid[iy * width + ix] === 1;
+  };
   // The most bodies the world may hold once powers split them (the effect's `most`).
   const most = effect.most ?? LIMITS.bodies;
   // A tireless body's energy (motion and spin, plus height against gravity, per unit of mass), which every hit sets back:
@@ -778,15 +883,21 @@ export function createBodyWorld(effect, context) {
     return pieces.length;
   };
   // Territory and powers (territory.js): cells owned by teams, pickups, events and strikes.
-  const turf = effect.territory || [effect.pickups, effect.events, effect.strikes].some(list => list && list.length) ? createTerritory(effect, { trace: traceGrid, scale, copy, shatter: (b, at, count) => shatter(b, at, count, b.breaks ? b.breaks.speed : 0.5), width, height, fastest: MAX_SPEED }) : null;
-  // A body that cuts passes through what it cuts, so it is drawn over it (paintBodies draws it last).
-  for (const r of effect.strikes ?? []) if (r.cut) bodies[r.by].cuts = true;
+  // A body a power is about to move or reshape wakes, and so does what leans on it where it is; what it touches where the
+  // power leaves it wakes once it is placed there (see advance).
+  const stirred = [];
+  const stir = b => { rouse([b]); b.asleep = false; b.sleepy = 0; stirred.push(b); };
+  const turf = effect.territory || [effect.pickups, effect.events, effect.strikes].some(list => list && list.length) ? createTerritory(effect, { trace: traceGrid, scale, copy, shatter: (b, at, count) => shatter(b, at, count, b.breaks ? b.breaks.speed : 0.5), stir, energy, width, height, fastest: MAX_SPEED }) : null;
+  // A body that cuts passes through what it cuts, so it is drawn over it (paintBodies draws it last): in the frames its
+  // strike works in, as it cuts. (Marked once for the whole run, a blade whose cut had not begun, or was over, was still
+  // drawn over the balls it pushed.)
+  const cutting = f => { const by = turf.cutters(f); for (const r of effect.strikes ?? []) if (r.cut) bodies[r.by].cuts = by.includes(r.by); };
   let current = 0;
   const dynamic = b => !b.fixed && !b.gone;
   const moving = b => b.fixed ? (b.vx !== 0 || b.vy !== 0 || b.spin !== 0) : !b.gone && !b.asleep;
   const awake = b => !b.fixed && !b.gone && !b.asleep;
   let warm = new Map();
-  const stats = { hits: 0, escaped: [], rest: null, overlaps: [], paths: {}, broken: [], crowded: new Set() };
+  const stats = { hits: 0, escaped: [], rest: null, overlaps: [], paths: {}, broken: [], jointBreaks: [], crowded: new Set() };
   // Bodies that break when knocked (see shatter); their pieces don't.
   const breakable = bodies.some(b => b.breaks);
   const round = v => Math.round(v * 100) / 100;
@@ -864,7 +975,7 @@ export function createBodyWorld(effect, context) {
         const s = world.segments[index];
         a.world.forEach((pa, ia) => {
           const m = partSegment(pa, s, margin);
-          if (m) contacts.push({ a, b: null, key: `${a.index}:s${index}:${ia}`, ...m, bounce: Math.max(a.bounce, s.bounce), friction: Math.sqrt(a.friction * s.friction), soft: s.soft, move: s.move });
+          if (m) contacts.push({ a, b: null, key: `${a.index}:s${index}:${ia}`, face: s, ...m, bounce: Math.max(a.bounce, s.bounce), friction: Math.sqrt(a.friction * s.friction), soft: s.soft, move: s.move });
         });
       }
       // Cells of the other teams' territory are walls to it.
@@ -981,7 +1092,11 @@ export function createBodyWorld(effect, context) {
   };
   const substep = () => {
     placeMoving();
+    wakeJoints(joints);
     let contacts = collide();
+    // Bodies joined by a joint with collide: false pass through each other (the links of a rope, a ragdoll's neighbours).
+    const skip = jointPairs(joints.filter(joint => !joint.broken));
+    if (skip.size) contacts = contacts.filter(contact => !(contact.b && skip.has(pairKey(contact.a.index, contact.b.index))));
     if (cutters) contacts = cut(contacts);
     // A body moving into a sleeping one wakes it; so does anything moving that it rests on, and a fixed body that moves
     // at all (a platform sinking slowly from under a box, or one turning under it, would leave it asleep in the air).
@@ -1050,7 +1165,10 @@ export function createBodyWorld(effect, context) {
         const ran = point.rax * ny - point.ray * nx, rbn = point.rbx * ny - point.rby * nx, rat = point.rax * ty - point.ray * tx, rbt = point.rbx * ty - point.rby * tx;
         const kn = ma + mb + ia * ran * ran + ib * rbn * rbn, kt = ma + mb + ia * rat * rat + ib * rbt * rbt;
         point.normalMass = kn > 0 ? 1 / kn : 0; point.tangentMass = kt > 0 ? 1 / kt : 0;
-        const kept = warm.get(`${contact.key}:${point.id}`);
+        // A face is known by its number, and a retrace numbers the faces afresh: a push kept from another way a face
+        // looked is not this face's (a ball in a corner took the floor's push from the wall beside it, and was kicked
+        // along the floor). One kept from a face looking the same way starts the solve as well as its own would.
+        const saved = warm.get(`${contact.key}:${point.id}`), { face } = contact, kept = saved && (!face || (saved[2] === face.nx && saved[3] === face.ny)) ? saved : null;
         point.normal = kept ? kept[0] : 0; point.tangent = kept ? kept[1] : 0; point.most = 0;
       }
     }
@@ -1058,7 +1176,11 @@ export function createBodyWorld(effect, context) {
       const { nx, ny } = contact;
       apply(contact, point, nx * point.normal + ny * point.tangent, ny * point.normal - nx * point.tangent);
     }
-    for (let k = 0; k < iterations; k++) solve(contacts, true);
+    resetJoints(joints);
+    for (let k = 0; k < iterations; k++) { solve(contacts, true); solveJoints(joints, dt, 1); }
+    // A pull travels along a chain one joint a pass, so a rope of many links gets as many more passes as its longest
+    // chain has links: without them each link stays a little stretched and a rope of 64 hangs half as long again.
+    if (chain) solveJoints(joints, dt, chain);
     // Positions, at no more than the speed limit (bodies started on top of each other were thrown at twice it).
     for (const b of bodies) {
       if (!dynamic(b) || b.asleep) continue;
@@ -1071,6 +1193,8 @@ export function createBodyWorld(effect, context) {
       }
       place(b);
     }
+    // Joints correct the drift a velocity solve leaves, then their bodies are placed again for contacts and drawing.
+    if (joints.length) { correctJoints(joints); for (const b of bodies) if (!b.gone) place(b); }
     // Relax: the push out of overlaps leaves no velocity behind.
     for (let k = 0; k < Math.max(1, iterations >> 1); k++) solve(contacts, false);
     // Restitution, from the approach speed before the solve, on points that pushed. An approach slower than `impact`
@@ -1098,7 +1222,7 @@ export function createBodyWorld(effect, context) {
     const knocks = breakable ? new Map() : null;
     const give = (body, rx, ry, nx, ny) => { const arm = rx * ny - ry * nx; return body.invMass + body.invInertia * arm * arm; };
     for (const contact of contacts) for (const point of contact.points) {
-      next.set(`${contact.key}:${point.id}`, [point.normal, point.tangent]);
+      next.set(`${contact.key}:${point.id}`, contact.face ? [point.normal, point.tangent, contact.face.nx, contact.face.ny] : [point.normal, point.tangent]);
       if (point.approach < -impact && point.most > 0) { contact.a.hit = contact.a.struck = true; if (contact.b) contact.b.hit = contact.b.struck = true; }
       // A strike's body strikes what it pushes, a hit or not: a blade that sweeps a ball along a wall keeps striking it.
       if (turf && contact.b && point.most > 0) turf.strike(contact.a, contact.b);
@@ -1127,6 +1251,7 @@ export function createBodyWorld(effect, context) {
     }
     // Bodies knocked harder than they hold break, in body order, as they move after the knock.
     if (knocks) for (const [b, knock] of [...knocks].sort((p, q) => p[0].index - q[0].index)) if (knock.speed >= b.breaks.at) shatter(b, knock.at, b.breaks.pieces, b.breaks.speed);
+    if (joints.length) breakJoints(joints, current, stats.jointBreaks);
     warm = next;
     time += dt;
   };
@@ -1142,12 +1267,16 @@ export function createBodyWorld(effect, context) {
     // Moving fixed bodies are drawn (and met by a fluid) where they are at the frame's end, not where its last substep
     // started: a paddle drawn a substep behind showed a gap before the box it pushed.
     placeMoving();
+    // Cloth steps with the frame, against the bodies where they now are. Its pins follow fixed bodies' end-of-frame places.
+    if (f > 0) for (const cloth of cloths) stepCloth(cloth, f, { substeps, iterations, gravity, solidAt, bodies, width, height });
     // Powers run out and are taken, and the score is counted, between frames. What a body that vanished held up wakes.
     if (turf) {
       const was = bodies.map(b => b.gone);
       turf.frame(f, bodies);
+      cutting(f);
       for (const b of bodies) if (!b.gone) place(b);
       rouse(bodies.filter((b, k) => k < was.length && b.gone && !was[k]));
+      if (stirred.length) { rouse(stirred.filter(b => !b.gone)); stirred.length = 0; }
     }
     // Hits change colour once a frame (a fill list that steps with time doesn't); slow bodies fall
     // asleep; bodies far outside the canvas are gone. A named body's path has a place for every frame: null once it is gone.
@@ -1160,13 +1289,18 @@ export function createBodyWorld(effect, context) {
         if (b.sleepy >= SLEEP_FRAMES) { b.asleep = true; b.vx = 0; b.vy = 0; b.w = 0; }
       }
       const [x0, y0, x1, y1] = b.box;
-      if (!b.fixed && (x1 < -GONE || y1 < -GONE || x0 > width + GONE || y0 > height + GONE)) { b.gone = true; stats.escaped.push({ body: b.name ?? b.path, frame: f }); }
+      // Far past an open edge a body has left, unless gravity is bringing it back: a ball thrown over the top falls into
+      // the picture again (it left for good at 16 pixels up, mid-flight). A weightless body never comes back.
+      const back = b.weightless ? [0, 0] : gravity;
+      if (!b.fixed && ((x1 < -GONE && !(back[0] > 0)) || (y1 < -GONE && !(back[1] > 0)) || (x0 > width + GONE && !(back[0] < 0)) || (y0 > height + GONE && !(back[1] < 0)))) { b.gone = true; stats.escaped.push({ body: b.name ?? b.path, frame: f }); }
       b.history.push([b.x, b.y]);
       if (b.name !== null && !b.fixed) stats.paths[b.name].push(b.gone ? null : [round(b.x), round(b.y), round(atan2Deg(b.s, b.c))]);
       if (b.history.length > 18) b.history.shift();
       if (b.smear) { b.poses.push([b.x, b.y, b.c, b.s]); if (b.poses.length > b.smear.frames + 1) b.poses.shift(); }
     }
-    if (stats.rest === null && f > 0 && bodies.every(b => b.gone || b.fixed && !moving(b) || b.asleep)) stats.rest = f;
+    // The frame from which everything rests to the end: one that wakes later (a support taken away, a late hit) clears it.
+    if (!(f > 0 && bodies.every(b => b.gone || b.fixed && !moving(b) || b.asleep) && cloths.every(cloth => cloth.rest !== null))) stats.rest = null;
+    else if (stats.rest === null) stats.rest = f;
   };
   // New obstacles (a fluid's that move, or its resting sand) wake the sleeping bodies within a pixel of a hard pixel that
   // came or went, and those resting on them: a crate asleep on a shelf that slid away hung in the air, and one beside a
@@ -1223,16 +1357,19 @@ export function createBodyWorld(effect, context) {
     if (kept.length === bodies.length) return;
     bodies.length = 0;
     kept.forEach((b, index) => { b.index = index; bodies.push(b); });
+    for (const joint of joints) { joint.aIndex = joint.a ? joint.a.index : -1; joint.bIndex = joint.b ? joint.b.index : -1; }
     warm = new Map();
   };
-  return { bodies, stats, gravity, advance, turf, retrace, retraceCells, add, place, compact };
+  return { bodies, stats, gravity, advance, turf, retrace, retraceCells, add, place, compact, joints, ropes, cloths };
 }
 
 // The bodies splits added to a world (the pieces of broken bodies are counted with them, under broken).
 const copiesOf = (world, effect) => world.bodies.length - effect.bodies.length - world.stats.broken.reduce((sum, entry) => sum + entry.pieces, 0);
+const clothFigures = cloths => cloths.length ? { cloths: cloths.map((cloth, index) => ({ name: cloth.definition.name ?? `cloth-${index}`, tears: cloth.tears, rest: cloth.rest })) } : {};
 function simulate(effect, context) {
   const world = createBodyWorld(effect, context), drawn = [];
   for (let f = 0; f < effect.frames; f++) { world.advance(f); drawn.push(drawFrame(world, context.width, context.height, context, f, effect.hud)); }
+  if (world.cloths.length) world.stats.cloths = clothFigures(world.cloths).cloths;
   return { drawn, stats: world.stats, turf: world.turf, steps: (effect.frames - 1) * effect.substeps, copies: copiesOf(world, effect) };
 }
 
@@ -1393,7 +1530,7 @@ function cover(b, x, y) {
 // pixels and at 45 a plus sign. The physics keeps the exact angle.
 const turnStep = size => (Math.max(size[0], size[1]) < 6 ? 90 : 1);
 // The shorter turn from angle a to angle b, in degrees (−180 to 180).
-const turnBetween = (a, b) => ((b - a) % 360 + 540) % 360 - 180;
+export const turnBetween = (a, b) => ((b - a) % 360 + 540) % 360 - 180;
 function drawnDegrees(b, size = b.size) {
   const every = turnStep(size), exact = atan2Deg(b.s, b.c);
   let degrees = Math.round(exact / every) * every;
@@ -1567,7 +1704,7 @@ function bodyPainter(grid, W, H, n) {
 // just behind the body, to the last at the far end of the sweep, as a pixel artist draws a fast swing.
 function paintSmears(bodies, n, put) {
   for (const b of bodies) {
-    if (b.gone || !b.smear || b.poses.length < 2) continue;
+    if (b.gone || b.hidden || !b.smear || b.poses.length < 2) continue;
     const { colors, frames } = b.smear, codes = colors.map(key => key.charCodeAt(0)), poses = b.poses, spans = poses.length - 1;
     for (let k = 0; k < spans; k++) {
       const [ax, ay, ac, as] = poses[k], [bx, by, bc, bs] = poses[k + 1], from = atan2Deg(as, ac), turn = turnBetween(from, atan2Deg(bs, bc));
@@ -1594,7 +1731,7 @@ export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
   const put = (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; };
   // Trails first, under every body: a disc a pixel narrower than the body, along where it was in recent frames.
   for (const b of bodies) {
-    if (b.gone || !b.trail || b.history.length < 2) continue;
+    if (b.gone || b.hidden || !b.trail || b.history.length < 2) continue;
     const code = b.trail.color.charCodeAt(0), points = b.history.slice(-1 - b.trail.length), d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1) * n, cells = disc(d);
     for (let k = 0; k + 1 < points.length; k++) {
       const [ax, ay] = points[k], [bx, by] = points[k + 1], steps = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay)) * n));
@@ -1607,7 +1744,7 @@ export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
   paintSmears(bodies, n, put);
   const painter = bodyPainter(grid, W, H, n);
   for (const b of drawOrder(bodies)) {
-    if (b.gone) continue;
+    if (b.gone || b.hidden) continue;
     painter.start(b);
     const put = painter.put;
     if (b.shape === 'hoop') {
@@ -1633,11 +1770,18 @@ export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
 // A frame of a bodies source: the territory's cells and waiting pickups, the bodies over them (n times finer with
 // subpixels) and the heads-up display's operations.
 function drawFrame(world, width, height, context, f, hud = []) {
-  const n = context.subpixels ?? 1, grid = new Uint16Array(width * n * height * n);
+  const n = context.subpixels ?? 1, W = width * n, H = height * n, grid = new Uint16Array(W * H);
+  const put = (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; };
   if (world.turf) world.turf.draw(grid, width, height, f, context.symbols, n);
+  const beneathCloth = world.cloths.filter(cloth => cloth.definition.draw === 'under'), aboveCloth = world.cloths.filter(cloth => cloth.definition.draw === 'over');
+  const beneathRope = world.ropes.filter(rope => rope.draw === 'under'), aboveRope = world.ropes.filter(rope => rope.draw === 'over');
+  if (beneathCloth.length) paintCloth(beneathCloth, put, n);
+  if (beneathRope.length) paintRopes(beneathRope, put, n);
   if (n > 1) paintBodiesFine(world.bodies, grid, width, height, context.symbols, n);
   else paintBodies(world.bodies, grid, width, height, context.symbols);
-  return { ...crop(grid, width * n, height * n), hud: world.turf && hud.length ? world.turf.hud(f, hud, n) : [] };
+  if (aboveRope.length) paintRopes(aboveRope, put, n);
+  if (aboveCloth.length) paintCloth(aboveCloth, put, n);
+  return { ...crop(grid, W, H), hud: world.turf && hud.length ? world.turf.hud(f, hud, n) : [] };
 }
 
 /** Draws the bodies into `grid` (character codes, width × height): trails first, then each body in order (a cutter last). */
@@ -1648,7 +1792,7 @@ export function paintBodies(bodies, grid, width, height, symbols) {
   // under where it is now: a disc a pixel narrower snaps to the other kind of pixel place, and a body at rest showed a
   // pixel of trail beside it.
   for (const b of bodies) {
-    if (b.gone || !b.trail || b.history.length < 2) continue;
+    if (b.gone || b.hidden || !b.trail || b.history.length < 2) continue;
     const code = b.trail.color.charCodeAt(0), points = b.history.slice(-1 - b.trail.length), d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1);
     for (let k = 0; k + 1 < points.length; k++) {
       const [ax, ay] = points[k], [bx, by] = points[k + 1], steps = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay))));
@@ -1662,7 +1806,7 @@ export function paintBodies(bodies, grid, width, height, symbols) {
   paintSmears(bodies, 1, put);
   const painter = bodyPainter(grid, width, height, 1);
   for (const b of drawOrder(bodies)) {
-    if (b.gone) continue;
+    if (b.gone || b.hidden) continue;
     painter.start(b);
     const put = painter.put;
     // A box or polygon is drawn as its upright picture, fill and outline, turned by turnRows (as a symbol is): its sides
@@ -1765,7 +1909,7 @@ function work(effect, { width, height, n = 1, symbols = {} }) {
   for (const b of effect.bodies) {
     // A body's picture (its symbol, or its shape) within its reach, turned (a circle doesn't turn), then its trail and its
     // smear: a sample each half (fine) pixel its far end sweeps, each over the bounds it is turned in.
-    const picture = b.symbol ? symbols[b.symbol] : null, w = Math.max(b.size[0], picture ? picture[0].length : 0), h = Math.max(b.size[1], picture ? picture.length : 0);
+    const picture = b.rows ?? (b.symbol ? symbols[b.symbol] : null), w = Math.max(b.size[0], picture ? picture[0].length : 0), h = Math.max(b.size[1], picture ? picture.length : 0);
     const reach = b.shape === 'circle' ? Math.max(w, h) / 2 : Math.sqrt(w * w + h * h) / 2, across = 2 * reach * n + 2;
     let cost = Math.min(width * height * n * n, across * across);
     if (b.trail) { const d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1) * n; cost += b.trail.length * (MAX_SPEED * n + 1) * d * d; }
@@ -1774,7 +1918,11 @@ function work(effect, { width, height, n = 1, symbols = {} }) {
     if (!b.fixed || freed.has(b)) drawn = Math.max(drawn, cost);
   }
   step += added * costliest; frame += added * drawn;
-  return effect.frames * (effect.substeps * step + frame * PIXEL_WORK);
+  // Joints cost an impulse per iteration and substep; cloth adds its particles, constraints and drawn cells.
+  const joints = effect.joints ?? [], cloths = effect.cloths ?? [];
+  step += joints.length * effect.iterations * 8;
+  const clothCost = clothWork(cloths, { frames: effect.frames, substeps: effect.substeps, iterations: effect.iterations });
+  return effect.frames * (effect.substeps * step + frame * PIXEL_WORK) + clothCost;
 }
 // The area of a body's shape: a circle's, or a polygon's (a box's) by its corners.
 function shapeArea(b) {
@@ -1909,7 +2057,8 @@ function readSource(source, frames) {
   if (!isObject(symbols)) fail('bodies.symbols', 'expected named symbols for obstacles and sprites');
   for (const [name, rows] of Object.entries(symbols)) {
     identifier(name, `bodies.symbols.${name}`);
-    if (!Array.isArray(rows) || !rows.length || rows.length > 256 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string' || row.length !== rows[0].length)) fail(`bodies.symbols.${name}`, 'expected 1–256 equal-width text rows');
+    if (!Array.isArray(rows) || !rows.length || rows.length > 256 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string')) fail(`bodies.symbols.${name}`, 'expected 1–256 equal-width text rows');
+    sameWidth(rows, `bodies.symbols.${name}`);
   }
   if (!isObject(source.effects) || !Object.keys(source.effects).length || Object.keys(source.effects).length > LIMITS.effects) fail('bodies.effects', `expected 1–${LIMITS.effects} named effects`);
   const shell = { version: 1, name: source.name, width: width * n, height: height * n, palette, ...(Object.keys(symbols).length && { symbols }), ...(source.anchor !== undefined && { anchor: scaleAnchor(source.anchor, n) }) };
@@ -1958,13 +2107,15 @@ export function compileBodies(source) {
     });
     animations[name] = { frames: names, loop: false };
     const effectWarnings = run.stats.overlaps.map(pair => `${pair}; they push apart on the first frame. Move it clear`);
-    if (!run.drawn.some(frame => frame.pixels)) effectWarnings.push(`${path}: no body is ever on the canvas; check at against width and height`);
+    if (!run.drawn.some(frame => frame.pixels)) effectWarnings.push(`${path}: nothing is ever on the canvas; check at against width and height`);
     const crowded = run.stats.crowded.size;
     if (crowded) effectWarnings.push(`${path}.most: ${crowded} ${crowded === 1 ? 'body' : 'bodies'} broke into fewer pieces than asked, or not at all, because the effect holds at most ${effect.most} bodies; raise most`);
     warnings.push(...effectWarnings);
     const played = territoryFigures(run.turf, effect.territory);
     metadata.effects[name] = {
       frames: effect.frames, substeps: effect.substeps, steps: run.steps, bodies: effect.bodies.length, ...(run.copies && { copies: run.copies }), hits: run.stats.hits,
+      ...(effect.joints.length && { joints: effect.joints.length }), ...(effect.ropes.length && { ropes: effect.ropes.length }), ...(effect.cloths.length && { cloths: effect.cloths.length, clothFigures: run.stats.cloths }),
+      ...(run.stats.jointBreaks.length && { brokenJoints: run.stats.jointBreaks }), ...(run.stats.cloths?.some(cloth => cloth.tears) && { clothTears: run.stats.cloths.filter(cloth => cloth.tears).reduce((sum, cloth) => sum + cloth.tears, 0) }),
       escaped: run.stats.escaped, ...(run.stats.broken.length && { broken: run.stats.broken }), rest: run.stats.rest, pixels: run.drawn.map(frame => frame.pixels), ...(Object.keys(run.stats.paths).length && { paths: run.stats.paths }), ...played, ...(effectWarnings.length && { warnings: effectWarnings })
     };
   }
@@ -1990,7 +2141,7 @@ export function bodiesFrames(source, effectName) {
   return {
     name: source.name, effect: name, width: width * n, height: height * n, palette, frames: effect.frames, duration: effect.duration,
     image: f => {
-      if (!Number.isInteger(f) || f < at || f >= effect.frames) fail('sequence', `frame ${f} is not ahead of frame ${at} within the match's ${effect.frames}`);
+      if (!Number.isInteger(f) || f < 0 || f < at || f >= effect.frames) fail('sequence', `frame ${f} is not ahead of frame ${at} within the match's ${effect.frames}`);
       // Every frame is drawn, shown or not, as compileBodies draws them: a body's drawn place and angle hold from frame
       // to frame, so a frame drawn after skipped ones must have seen each of them. Only the shown one is rendered, as a
       // one-frame recipe whose frame name is fixed (the effect's name and frame number passed the renderer's 64).
@@ -2002,6 +2153,6 @@ export function bodiesFrames(source, effectName) {
       }
       return image;
     },
-    figures: () => ({ frames: at + 1, ...(copiesOf(world, effect) && { copies: copiesOf(world, effect) }), hits: world.stats.hits, escaped: world.stats.escaped, ...(world.stats.broken.length && { broken: world.stats.broken }), ...territoryFigures(world.turf, effect.territory) })
+    figures: () => ({ frames: at + 1, ...(copiesOf(world, effect) && { copies: copiesOf(world, effect) }), hits: world.stats.hits, ...(effect.joints.length && { joints: effect.joints.length }), ...(effect.ropes.length && { ropes: effect.ropes.length }), ...clothFigures(world.cloths), ...(world.stats.jointBreaks.length && { brokenJoints: world.stats.jointBreaks }), escaped: world.stats.escaped, ...(world.stats.broken.length && { broken: world.stats.broken }), ...territoryFigures(world.turf, effect.territory) })
   };
 }

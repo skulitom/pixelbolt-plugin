@@ -14,9 +14,31 @@
 //   them as a map's cells draws the tiles Pixelbolt's tilemap draws.
 // A frame's tile.weight becomes its probability against the heaviest tile of its kind (one terrain and mask, one set of
 // corners, or the plain tiles), which Tiled picks between; its tile.collision polygons objects in its collision group
-// (in exported pixels) and tile.oneWay a bool property oneWay. A looping atlas animation over frames of one kind (one terrain and
-// mask, one set of corners, or plain tiles) animates its first frame's tile; its other frames are then no Wang tiles,
-// so the brush never places a still frame of it.
+// (in exported pixels) and tile.oneWay a bool property oneWay. An atlas animation over frames of one kind (one terrain and
+// mask, one set of corners, or plain tiles) is one tile, its first frame (see tileAnimations): its other frames are no
+// Wang tiles, so the brush never places a still frame of it, and when it loops the tile plays it.
+
+// Which frames of a tile sheet are tiles and which are later frames of a tile's animation: the one rule for the Tiled
+// tileset here and the Godot TileSet (godot.js imports it), so both editors are offered the same tiles from one atlas.
+// `animations` is the atlas's, in order; `kind(frame)` says what a frame is as a tile (null for none), and frames of
+// one kind are alternatives an editor picks between. An animation with two or more frames, all of one kind, claims its
+// frames: the first is its tile and the others are `covered`, never tiles of their own, whether or not the animation
+// can play in that editor (each writer decides that from `claims`, [{ key, animation }] in order), so a set whose
+// animation can't play doesn't flicker between its frames. A frame is claimed once: an animation with a frame an
+// earlier one covered, or with a later frame that starts an earlier one (which stays that animation's tile), claims
+// nothing. An animation's first frame is its tile even where the animation comes back to it (a hold, or a loop that
+// ends on it), and may start more than one animation.
+export function tileAnimations(animations, kind) {
+  const claims = [], covered = new Set(), starts = new Set();
+  for (const [key, animation] of Object.entries(animations ?? {})) {
+    const frames = animation.frames, first = kind(frames[0]);
+    if (frames.length < 2 || first === null || frames.some(frame => covered.has(frame) || kind(frame) !== first || (frame !== frames[0] && starts.has(frame)))) continue;
+    starts.add(frames[0]);
+    for (const frame of frames.slice(1)) if (frame !== frames[0]) covered.add(frame);
+    claims.push({ key, animation });
+  }
+  return { claims, covered };
+}
 
 // The positions in a Wang id of each mask bit: blob bits run in Tiled's order; a cardinal mask has sides only and a
 // corner mask (NW, NE, SW, SE) corners only.
@@ -47,8 +69,8 @@ const popcount = mask => { let bits = 0; for (let m = mask; m; m &= m - 1) bits+
 // the sheet's path relative to the .tsx (default the atlas's meta.image, beside it) and title the tileset's name in
 // Tiled (default name, which also names its terrains: a hazed copy of a sheet keeps its terrains' names under its own
 // title). Returns { text, warnings }; text is
-// null when the sheet is not a grid. `oneShots: false` leaves out the warning for animations that don't loop, which a
-// sprite's tileset expects (an attack plays once).
+// null when the sheet is not a grid. `oneShots: false` leaves out the warnings for animations that can't play in a tile
+// (they don't loop, or start on a frame that already plays one), which a sprite's tileset expects (an attack plays once).
 export function tiledTileset(source, { oneShots = true } = {}) {
   const { atlas, margin = 0, separation = 0 } = source, warnings = [], frames = atlas.frames, names = Object.keys(frames);
   const first = frames[names[0]].frame, [w, h] = [first.w, first.h], { w: width, h: height } = atlas.meta.size;
@@ -64,16 +86,32 @@ export function tiledTileset(source, { oneShots = true } = {}) {
   const cornered = new Map((source.layered ?? []).map(tile => [tile.frame, tile.corners])), plain = new Set(source.plain ?? []);
   const kind = frame => (byFrame.has(frame) ? `${byFrame.get(frame).terrain} ${byFrame.get(frame).mask}` : cornered.has(frame) ? `corners ${cornered.get(frame).join()}` : plain.has(frame) ? '' : null);
 
-  // Animated tiles: a looping animation over frames of one kind, each frame used by one animation at most.
-  const animated = new Map(), covered = new Set(), stopping = [];
-  for (const [key, animation] of Object.entries(atlas.animations ?? {})) {
+  // Animated tiles. In a sheet with terrain, which frames an animation takes is tileAnimations' rule, shared with the
+  // Godot TileSet; which of them play is Tiled's own: a Tiled tile plays any list of frames, always looping, so every
+  // looping animation plays (Godot plays only frames side by side in a row), the first one where two start on one frame.
+  // A sheet with no terrain (a sprite's, in a scene) has no brush to keep an animation's frames from: there each looping
+  // animation plays from its first frame, whatever other animations its frames are in (a walk that passes through the
+  // frame an idle starts on still plays), as long as its first frame plays nothing yet.
+  const brushed = byFrame.size > 0 || cornered.size > 0, animated = new Map(), stopping = [], second = [];
+  let covered = new Set();
+  if (brushed) {
+    const taken = tileAnimations(atlas.animations, kind);
+    covered = taken.covered;
+    for (const { key, animation } of taken.claims) {
+      if (!animation.loop) stopping.push(key);
+      else if (animated.has(animation.frames[0])) second.push(key);
+      else animated.set(animation.frames[0], animation.frames);
+    }
+  } else for (const [key, animation] of Object.entries(atlas.animations ?? {})) {
     const sequence = animation.frames, start = kind(sequence[0]);
     if (sequence.length < 2 || start === null || sequence.some(frame => kind(frame) !== start) || animated.has(sequence[0]) || sequence.some(frame => covered.has(frame))) continue;
     if (!animation.loop) { stopping.push(key); continue; }
     animated.set(sequence[0], sequence);
     for (const frame of sequence.slice(1)) if (frame !== sequence[0]) covered.add(frame);
   }
-  if (stopping.length && oneShots) warnings.push(`animation${stopping.length === 1 ? '' : 's'} ${stopping.slice(0, 8).join(', ')}${stopping.length > 8 ? ', …' : ''} became still tiles of ${stopping.length === 1 ? 'its' : 'their'} first frame: Tiled loops every tile animation`);
+  const named = keys => `animation${keys.length === 1 ? '' : 's'} ${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', …' : ''} became still tiles of ${keys.length === 1 ? 'its' : 'their'} first frame`;
+  if (stopping.length && oneShots) warnings.push(`${named(stopping)}: Tiled loops every tile animation`);
+  if (second.length && oneShots) warnings.push(`${named(second)}: ${second.length === 1 ? 'its first frame already plays' : 'their first frames already play'} an earlier animation, and a Tiled tile plays one`);
   const tiled = names.filter(frame => kind(frame) !== null && !covered.has(frame));
 
   // Wang sets: one per single terrain, in order of first appearance, then the layered set.
@@ -88,6 +126,8 @@ export function tiledTileset(source, { oneShots = true } = {}) {
     for (const [bit, at] of WANG_INDEX[tile.mode]) if (tile.mask & bit) wang[at] = 1;
     if (tile.mask) set.tiles.push({ frame, wang, mask: tile.mask });
   }
+  // A warning names its terrain when the tileset has more than one, whether or not each of them gets a Wang set.
+  const terrains = sets.size;
   for (const set of sets.values()) {
     if (set.modes.size > 1) {
       warnings.push(`terrain ${set.name}: no Wang set: it mixes ${[...set.modes].sort().join(' and ')} masks, and a Tiled Wang set matches one way; give one set's frames another tile.terrain`);
@@ -96,7 +136,7 @@ export function tiledTileset(source, { oneShots = true } = {}) {
     }
     set.type = WANG_TYPES[[...set.modes][0]];
     const masks = new Set(set.tiles.map(tile => tile.mask)), missing = WANG_TILES[[...set.modes][0]] - masks.size;
-    if (missing > 0) warnings.push(`${sets.size > 1 ? `terrain ${set.name}: ` : ''}${missing} of the ${WANG_TILES[[...set.modes][0]]} ${[...set.modes][0]} Wang tiles are missing, so Tiled draws its nearest match where one is needed`);
+    if (missing > 0) warnings.push(`${terrains > 1 ? `terrain ${set.name}: ` : ''}${missing} of the ${WANG_TILES[[...set.modes][0]]} ${[...set.modes][0]} Wang tiles are missing, so Tiled draws its nearest match where one is needed`);
     const fullest = set.tiles.reduce((best, tile) => (!best || popcount(tile.mask) > popcount(best.mask) ? tile : best), null);
     set.icon = fullest ? id(fullest.frame) : -1;
     set.colorIcons = [set.icon];

@@ -12,10 +12,40 @@
     "w": "#dff6ff",
     "o": "#3b2414",
     "h": "#c98c4f",
+    "n": "#a5683a",
     "k": "#14141c",
     "r": "#e0475a",
+    "q": "#ff9aa8",
     "s": "#8a8f99",
-    "S": "#5d626b"
+    "S": "#5d626b",
+    "m": "#b4bdd8"
+  },
+  "symbols": {
+    "crate": [
+      "oooooooo",
+      "ohhhhhno",
+      "ohhhhnho",
+      "ohhhnhho",
+      "ohhnhhho",
+      "ohnhhhho",
+      "onhhhhho",
+      "oooooooo"
+    ],
+    "stone": [
+      ".SSSS.",
+      "SmmssS",
+      "SmsssS",
+      "SssssS",
+      ".SSSS."
+    ],
+    "ball": [
+      ".kkkk.",
+      "krrrrk",
+      "krqrrk",
+      "krrrrk",
+      "krrrrk",
+      ".kkkk."
+    ]
   },
   "effects": {
     "crate-splash": {
@@ -37,7 +67,7 @@
       ],
       "cleanup": { "strays": true },
       "bodies": [
-        { "name": "crate", "shape": "box", "size": [8, 8], "at": [14, 14], "density": 0.2, "fill": "h", "outline": "o" },
+        { "name": "crate", "shape": "box", "size": [8, 8], "at": [14, 14], "density": 0.2, "symbol": "crate" },
         {
           "name": "stone",
           "shape": "box",
@@ -45,8 +75,7 @@
           "at": [33, 10],
           "angle": 10,
           "density": 2.5,
-          "fill": "s",
-          "outline": "S"
+          "symbol": "stone"
         },
         {
           "name": "ball",
@@ -55,8 +84,7 @@
           "at": [51, 16],
           "velocity": [-0.2, 0],
           "density": 0.5,
-          "fill": "r",
-          "outline": "k"
+          "symbol": "ball"
         }
       ]
     }

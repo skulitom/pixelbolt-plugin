@@ -55,12 +55,22 @@
       "pP",
       "pP",
       "pP"
+    ],
+    "crate": [
+      "OOOOOOOO",
+      "OhhhhhpO",
+      "OhhhhphO",
+      "OhhhphhO",
+      "OhhphhhO",
+      "OhphhhhO",
+      "OphhhhhO",
+      "OOOOOOOO"
     ]
   },
   "effects": {
     "sand-slide": {
       "kind": "liquid",
-      "frames": 110,
+      "frames": 56,
       "duration": 50,
       "seed": 5,
       "walls": ["left", "right", "bottom"],
@@ -87,8 +97,7 @@
           "at": [17, 13],
           "density": 0.8,
           "friction": 1.2,
-          "fill": "h",
-          "outline": "O"
+          "symbol": "crate"
         },
         {
           "name": "ball",

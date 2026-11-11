@@ -1,5 +1,5 @@
 // Optional authoring compilers. All output is ordinary, editable version-1 recipe data.
-import { PixelError, CANVAS_SIDE, parseColor, renderProject, describeStampRecipe, readRows, pictureSheet } from './core.js';
+import { PixelError, CANVAS_SIDE, parseColor, renderProject, describeStampRecipe, readRows, pictureSheet, fail, sameWidth } from './core.js';
 import { AUTOTILE_MODES, MODE_MASKS, MODE_BITS, tilePieces, templatePiece } from './autotile.js';
 import { terrainTemplate, mergeTerrain, normalTerrain, readTerrain, templateSeams, seamWarnings, testMapRecipe, layeredTestMapRecipe } from './terrain.js';
 import { slopeTiles, slopeCollision, slopeLegend, SLOPE_MAP } from './slopes.js';
@@ -7,7 +7,6 @@ import { EASINGS, ease, rotateRows, draftTurn, rasterizeBone, rasterizeMass } fr
 import { turn, angleDelta, solveReach } from './pose-geometry.js';
 import { expandMotions, validateRig, MOTION_TEMPLATES } from './motions.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
 export function fields(value, keys, path, nullable = []) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail(path, 'expected an object');
   for (const key of Object.keys(value)) if (!keys.includes(key) || (value[key] === null && !nullable.includes(key))) fail(`${path}.${key}`, 'unknown or null field');
@@ -16,6 +15,34 @@ export function point(value, path, bound = 4096) {
   if (!Array.isArray(value) || value.length !== 2 || value.some(v => !Number.isInteger(v) || Math.abs(v) > bound)) fail(path, `expected two integer coordinates within ±${bound}`);
   return value;
 }
+// What the source formats share when they read a number: one within bounds, a whole one, [x, y], and a value or a
+// [min, max] range with the draw that samples it. Declared as functions, so modules that import each other can use them.
+export function number(value, path, min, max) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
+  return value;
+}
+export function integer(value, path, min, max) {
+  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
+  return value;
+}
+export function pair(value, path, min, max) {
+  if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
+  return [number(value[0], `${path}[0]`, min, max), number(value[1], `${path}[1]`, min, max)];
+}
+// A number, or [min, max] sampled per particle.
+export function range(value, path, min, max, whole = false) {
+  const check = whole ? integer : number;
+  if (Array.isArray(value)) {
+    if (value.length !== 2) fail(path, 'expected a number or [min, max]');
+    const [a, b] = [check(value[0], `${path}[0]`, min, max), check(value[1], `${path}[1]`, min, max)];
+    if (a > b) fail(path, 'min must not exceed max');
+    return [a, b];
+  }
+  const v = check(value, path, min, max);
+  return [v, v];
+}
+export function pick([a, b], r) { return a + (b - a) * r; }
+export function pickWhole([a, b], r) { return a + Math.min(b - a, Math.floor(r * (b - a + 1))); }
 const identifier = (value, path) => {
   if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a named part, pose or marker');
   return value;
@@ -65,8 +92,27 @@ function structuralPart(part, source, path) {
 
 // Templates check planted-foot reach on many single poses; they need resolved joints, not a validated recipe. The
 // probe mode is private to this module (a symbol nobody else holds), so compilePoses' public contract is unchanged.
-const PROBE = Symbol('pose probe');
-export function expandPoses(source) { return expandMotions(source, compilePoses, probe => compilePoses(probe, PROBE)); }
+const PROBE = Symbol('pose probe'), WITHIN = Symbol('motion expansion');
+// Expansion compiles poses one at a time, each as the only pose of a source made for it: the rest pose, a generated
+// pose to see what it draws, a probe of a few of its parts. An error from one of those addresses the pose where the
+// author's source has it, as the full compile does (writtenPoses), not as poses.poses[0] of that one-pose source: an
+// authored pose at its own index, and a generated pose, which is named <motion>-<label>, by its motion (the longest
+// motion name its own begins with) and its name.
+function posesWithin(input) {
+  const authored = new Map(input.poses.map((pose, i) => [pose?.name, { path: `poses.poses[${i}]` }]));
+  const motions = Object.keys(input.motions).sort((a, b) => b.length - a.length);
+  return { get(name) {
+    if (authored.has(name)) return authored.get(name);
+    const motion = typeof name === 'string' ? motions.find(key => name.startsWith(`${key}-`)) : undefined;
+    return motion === undefined ? undefined : { path: `poses.motions.${motion} (${name})`, generated: true };
+  } };
+}
+export function expandPoses(source) {
+  // Made at the first compile: by then expandMotions has checked that the source has poses and motions to read.
+  let written = null;
+  const compile = probe => one => compilePoses(one, { [WITHIN]: { written: written ??= posesWithin(source), probe } });
+  return expandMotions(source, compile(false), compile(true));
+}
 // Nominal pixels visited while drawing distinct bone and mass shapes in one compile (see rasterizeMass). Real rigs use
 // a few percent of it; a source that would draw for seconds fails fast with a path instead of blocking the caller.
 export const RASTER_BUDGET = 8388608;
@@ -78,7 +124,7 @@ function writtenPoses(input, expanded) {
   const found = new Map();
   input.poses.forEach((pose, i) => found.set(pose?.name, { path: `poses.poses[${i}]` }));
   for (const motion of Object.keys(expanded.motionInfo ?? {})) for (const name of expanded.animations[motion].frames)
-    if (!found.has(name)) found.set(name, { path: `poses.motions.${motion} (${name})`, motion });
+    if (!found.has(name)) found.set(name, { path: `poses.motions.${motion} (${name})`, motion, generated: true });
   return found;
 }
 
@@ -111,9 +157,12 @@ function stampsOutside(frames, symbols, width, height) {
 const nameList = (names, limit = 3) => names.slice(0, limit).join(', ') + (names.length > limit ? ` and ${names.length - limit} more` : '');
 const span = (low, high) => low === high ? `${low}` : `${low} to ${high}`;
 
-export function compilePoses(source, mode) {
-  let written = null;
-  if (source?.motions !== undefined) { const input = source; source = expandPoses(source); written = writtenPoses(input, source); }
+export function compilePoses(source, within) {
+  // `within` is this module's own (see expandPoses): a compile made during motion expansion, and whether it is a probe.
+  const mode = within?.[WITHIN]?.probe ? PROBE : undefined;
+  let written = within?.[WITHIN]?.written ?? null;
+  const motions = source?.motions;
+  if (motions !== undefined) { const input = source; source = expandPoses(source); written = writtenPoses(input, source); }
   fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'innerLines', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
   if (source.format !== 'pixelforge-poses' || source.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
   if (source.light !== undefined && (!Number.isInteger(source.light) || source.light < 0 || source.light > 359)) fail('poses.light', 'expected whole degrees from 0 to 359');
@@ -240,7 +289,7 @@ export function compilePoses(source, mode) {
       ...(p.cleanup === false && { cleanup: false }), ...(p.squash !== undefined && { squash: p.squash })
     })) };
   };
-  const frames = source.poses.map((pose, index) => {
+  const posed = source.poses.map((pose, index) => {
     const writtenAs = written?.get(pose?.name), path = writtenAs?.path ?? `poses.poses[${index}]`, motion = writtenAs?.motion;
     fields(pose, ['name', 'duration', 'origin', 'parts', 'markers', 'contacts', 'mirror', 'relight', 'tween'], path);
     identifier(pose.name, `${path}.name`);
@@ -317,7 +366,12 @@ export function compilePoses(source, mode) {
       if (!Array.isArray(spec.parts) || spec.parts.length > 64) fail(partsPath, 'expected at most 64 parts in back-to-front order');
       inputs = { origin, parts: [] };
       const instances = new Map(), owners = new Map(), worldAngles = new Map(), solved = new Map(), resolvedShapes = new Map();
-      const instancePath = (instance, i) => spec === pose && motion === undefined ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
+      // How every error and warning addresses a part of this pose. A pose the author wrote lists its parts, so a part
+      // goes by its index there (poses.poses[2].parts[0]: the path a patch of the source takes). A pose made from
+      // others (a motion template's, a tween, a relit mirror) has no such list in the source, so its part goes by name
+      // (poses.motions.idle (idle-settle).parts (tail)), never by an index into a list the compiler made.
+      const listed = spec === pose && !writtenAs?.generated;
+      const instancePath = (instance, i) => listed ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
       spec.parts.forEach((instance, i) => {
         const ip = instancePath(instance, i);
         fields(instance, ['name', 'part', 'at', 'attach', 'flipX', 'rotate', 'angle', 'reach', 'bend', 'cleanup', 'squash'], ip);
@@ -333,7 +387,12 @@ export function compilePoses(source, mode) {
         if (instance.attach !== undefined) {
           fields(instance.attach, ['part', 'point'], `${ip}.attach`);
           identifier(instance.attach.part, `${ip}.attach.part`); identifier(instance.attach.point, `${ip}.attach.point`);
-          if (!instances.has(instance.attach.part)) fail(`${ip}.attach`, 'attachment must name a point on a part in this pose');
+          // The error names what the pose does have: a first attachment is usually to a part's definition name, or to a
+          // part that was never given the point.
+          if (!instances.has(instance.attach.part)) {
+            const names = [...instances.keys()], definition = Object.hasOwn(source.parts, instance.attach.part) && spec.parts.filter(other => other.part === instance.attach.part).map(other => other.name);
+            fail(`${ip}.attach`, `no part instance named "${instance.attach.part}" in this pose${definition ? ` ("${instance.attach.part}" is a part definition${definition.length ? `, placed here as ${definition.slice(0, 4).map(name => `"${name}"`).join(', ')}` : ', not placed in this pose'}; attach.part takes an instance's name)` : ''}; its instances: ${names.slice(0, 16).join(', ')}${names.length > 16 ? ` and ${names.length - 16} more` : ''}`);
+          }
           checkGraph(instances.get(instance.attach.part), done, [...stack, i]);
         }
         done.add(i);
@@ -354,7 +413,7 @@ export function compilePoses(source, mode) {
       const resolve = i => {
         const instance = spec.parts[i];
         if (Object.hasOwn(placed, instance.name)) return;
-        const ip = spec === pose ? `${partsPath}[${i}]` : `${partsPath} (${instance.name})`;
+        const ip = instancePath(instance, i);
         if (typeof instance.part !== 'string' || !Object.hasOwn(source.parts, instance.part)) fail(`${ip}.part`, 'unknown part definition');
         for (const key of ['flipX', 'cleanup']) if (instance[key] !== undefined && typeof instance[key] !== 'boolean') fail(`${ip}.${key}`, 'expected a boolean');
         for (const key of ['rotate', 'angle']) if (instance[key] !== undefined && (!Number.isInteger(instance[key]) || Math.abs(instance[key]) > 360)) fail(`${ip}.${key}`, 'expected whole degrees from -360 to 360, clockwise');
@@ -369,7 +428,11 @@ export function compilePoses(source, mode) {
         if (instance.attach !== undefined) {
           resolve(instances.get(instance.attach.part));
           const part = placed[instance.attach.part];
-          if (!part || !Object.hasOwn(part.points, instance.attach.point)) fail(`${ip}.attach`, 'attachment must name a point on a part in this pose');
+          if (!part || !Object.hasOwn(part.points, instance.attach.point)) {
+            const target = spec.parts[instances.get(instance.attach.part)], shape = source.parts[target?.part] ?? {}, have = Object.keys(part?.points ?? {});
+            const how = shape.bone ? '"end", or [along, across] from the start of the bone' : shape.mass ? '[x, y] from the centre of the mass' : '[column, row] in its rows';
+            fail(`${ip}.attach`, `"${instance.attach.part}" has no point "${instance.attach.point}" (${have.length ? `its points: ${have.join(', ')}` : 'it has none'}). Name one of its points, or add this one under parts.${target?.part}.points: "${instance.attach.point}": ${how}`);
+          }
           parent = part.points[instance.attach.point];
           parentAngle = worldAngles.get(instance.attach.part);
         }
@@ -411,21 +474,27 @@ export function compilePoses(source, mode) {
         if (shape.outline && parentShape?.fill && instances.get(instance.attach.part) < index
           && source.parts[instance.part].bone && (source.parts[instance.part].bone.caps?.[0] ?? 'socket') === 'socket') {
           const rows = symbols[symbol].map(row => [...row]);
-          let changed = false, fingerprint = 2166136261;
+          let fingerprint = 2166136261;
+          const opened = [];
           for (let y = 0; y < shape.height; y++) for (let x = 0; x < shape.width; x++) {
             const at = y * shape.width + x;
             if (!shape.outline[at]) continue;
             const px = part.topLeft[0] + x - parent.topLeft[0], py = part.topLeft[1] + y - parent.topLeft[1];
             if (px >= 0 && py >= 0 && px < parentShape.width && py < parentShape.height && parentShape.fill[py * parentShape.width + px]) {
-              rows[y][x] = '.'; changed = true; fingerprint = Math.imul(fingerprint ^ at, 16777619) >>> 0;
+              rows[y][x] = '.'; opened.push(at); fingerprint = Math.imul(fingerprint ^ at, 16777619) >>> 0;
             }
           }
-          if (changed) {
+          if (opened.length) {
             symbol = `${shape.symbol}-j${fingerprint.toString(36)}`;
             const joined = rows.map(row => row.join(''));
-            if (symbol.length > 64 || Object.hasOwn(source.parts, symbol) || (symbols[symbol] && JSON.stringify(symbols[symbol]) !== JSON.stringify(joined))) fail(partsPath, `socket symbol ${symbol} collides or is too long; shorten or rename the part`);
+            if (symbol.length > 64 || Object.hasOwn(source.parts, symbol) || (symbols[symbol] && JSON.stringify(symbols[symbol]) !== JSON.stringify(joined))) fail(instancePath(instance, index), `socket symbol ${symbol} collides or is too long; shorten or rename the part`);
             symbols[symbol] = joined; part.symbol = symbol;
-            if (lineShades.has(shape.symbol)) lineShades.set(symbol, lineShades.get(shape.symbol));
+            // The opened drawing's outline is the whole drawing's less the pixels opened, which are outline no longer.
+            if (lineShades.has(shape.symbol) && !lineShades.has(symbol)) {
+              const outline = shape.outline.slice();
+              for (const at of opened) outline[at] = 0;
+              lineShades.set(symbol, { outline, shade: lineShades.get(shape.symbol).shade });
+            }
           }
         }
         return { name: instance.name, ops: [{ op: 'stamp', symbol, x: part.topLeft[0], y: part.topLeft[1], ...(shape.flipX && { flipX: true }) }] };
@@ -455,28 +524,35 @@ export function compilePoses(source, mode) {
     return { name: pose.name, ...(duration !== undefined && { duration }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers, ...(lines.length && { pixels: lines }) };
   });
   if (mode === PROBE) return { metadata: { poses: metadata.poses } };
+  // A rig's rest pose is what the motions are made from. It is a frame only when an animation plays it: left in the
+  // sheet otherwise, a four-frame idle would export five cells. Its metadata stays, since the review tools measure it.
+  const played = new Set(Object.values(source.animations ?? {}).flatMap(animation => Array.isArray(animation?.frames) ? animation.frames : []));
+  const frames = source.rig?.rest !== undefined && posed.length > 1 && played.size && !played.has(source.rig.rest) ? posed.filter(frame => frame.name !== source.rig.rest) : posed;
   // When every pose shares one origin, it is declared once as the recipe anchor.
   const shared = frames.every(frame => frame.anchor[0] === frames[0].anchor[0] && frame.anchor[1] === frames[0].anchor[1]);
   if (shared) for (const frame of frames) delete frame.anchor;
-  const recipe = { version: 1, name: source.name, width: source.width, height: source.height, palette: source.palette ?? {}, ...(source.ramps !== undefined && { ramps: source.ramps }), ...(shared && { anchor: compiled[source.poses[0].name].origin }), symbols, frames, ...(source.animations !== undefined && { animations: source.animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
+  const recipe = { version: 1, name: source.name, width: source.width, height: source.height, palette: source.palette ?? {}, ...(source.ramps !== undefined && { ramps: source.ramps }), ...(shared && { anchor: compiled[frames[0].name].origin }), symbols, frames, ...(source.animations !== undefined && { animations: source.animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
   if (source.rig?.rest !== undefined) {
     const rest = compiled[source.rig.rest];
     if (!rest) fail('poses.rig.rest', 'unknown rest pose');
     for (const name of [source.rig.body, source.rig.chest, source.rig.neck, source.rig.head, ...['legs', 'hind', 'fore', 'arms'].flatMap(role => (source.rig[role] ?? []).flat()), ...(source.rig.tail ?? [])].filter(n => n !== undefined)) if (!Object.hasOwn(rest.placed, name)) fail('poses.rig', `unknown rest-pose instance ${name}`);
-    // Rig output keeps only used, distinct drawings. Lexical selection is independent of cache insertion order.
-    const used = [...new Set(frames.flatMap(frame => frame.layers.map(layer => layer.ops[0].symbol)))].sort();
+    // Rig output keeps only used, distinct drawings. Lexical selection is independent of cache insertion order. A rest
+    // pose left out of the frames is still named like the rest (its metadata says which drawing each part is), but a
+    // drawing only it uses is not in the recipe.
+    const used = [...new Set(posed.flatMap(frame => frame.layers.map(layer => layer.ops[0].symbol)))].sort();
     const canonical = new Map(), aliases = new Map(), unique = {};
     for (const name of used) {
       const rows = symbols[name], key = JSON.stringify(rows);
       if (!canonical.has(key)) { canonical.set(key, name); unique[name] = rows; }
       aliases.set(name, canonical.get(key));
     }
-    for (const frame of frames) for (const layer of frame.layers) {
+    for (const frame of posed) for (const layer of frame.layers) {
       const stamp = layer.ops[0], before = stamp.symbol; stamp.symbol = aliases.get(before);
       const part = metadata.poses[frame.name].parts[layer.name];
       if (part.symbol || before !== stamp.symbol) part.symbol = stamp.symbol;
     }
-    recipe.symbols = unique;
+    const drawn = new Set(frames.flatMap(frame => frame.layers.map(layer => layer.ops[0].symbol)));
+    recipe.symbols = frames === posed ? unique : Object.fromEntries(Object.entries(unique).filter(([name]) => drawn.has(name)));
   }
   const project = describeStampRecipe(recipe);
   // An expanded source cut down to fewer animations still carries the other motions' notes: those are skipped with a
@@ -500,7 +576,7 @@ export function compilePoses(source, mode) {
   else if (dropped.length) warnings.push({ path: 'poses.motionInfo', message: `There are no animations ${nameList(dropped.map(name => `"${name}"`), 6)}, so their entries were skipped: delete them, or rename them to match renamed animations.` });
   for (const [name, animation] of Object.entries(project.animations)) {
     let start = 0;
-    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, ...(motionInfo[name] && motionInfo[name]), entries: animation.frames.map((index, position) => {
+    metadata.animations[name] = { duration: animation.duration, loop: animation.loop, ...motionInfo[name], entries: animation.frames.map((index, position) => {
       const frame = project.frames[index], pose = metadata.poses[frame.name], entry = { position, frame: frame.name, start, duration: frame.duration, markers: pose.markers, ...(pose.contacts !== undefined && { contacts: pose.contacts }) };
       start += frame.duration; return entry;
     }) };
@@ -512,7 +588,7 @@ export function compilePoses(source, mode) {
   // draws nothing inside the canvas, the poses the templates make from it follow it there, and its warning says so.
   const rig = source.rig, rest = rig?.rest !== undefined ? compiled[rig.rest] : undefined, clipped = [];
   let restGone = false;
-  stampsOutside(frames, recipe.symbols, width, height).forEach((clip, index) => {
+  stampsOutside(posed, symbols, width, height).forEach((clip, index) => {
     if (!clip.outside) return;
     const name = clip.name, writtenAs = written?.get(name), origin = compiled[name].origin, gone = clip.outside === clip.total;
     if (gone && written && name === rig?.rest) restGone = true;
@@ -554,7 +630,13 @@ export function compilePoses(source, mode) {
     }
     const box = items.reduce((all, { box: b }) => [Math.min(all[0], b[0]), Math.min(all[1], b[1]), Math.max(all[2], b[2]), Math.max(all[3], b[3])], items[0].box);
     const nothing = items.every(item => item.outside === item.total), poses = `${items.length} of ${new Set(source.animations[motion].frames).size} poses`;
-    return `poses.motions.${motion}: ${poses} ${nothing ? `draw${one ? 's' : ''} nothing inside` : `draw${one ? 's' : ''} up to ${Math.max(...items.map(item => item.outside))} pixels outside`} the ${canvas} (${names}; ${one ? 'its' : 'their'} parts cover ${cover(box)}). Generated poses move the rest pose${rig?.rest !== undefined ? ` "${rig.rest}"` : ''}: ${nothing ? 'place it inside the canvas first' : 'give it more room in the canvas, or change the motion\'s settings'}.`;
+    // How far past which edges, the room that would hold it, and the settings of this template that carry the figure there.
+    const over = { top: Math.max(0, -box[1]), bottom: Math.max(0, box[3] - height + 1), left: Math.max(0, -box[0]), right: Math.max(0, box[2] - width + 1) };
+    const room = [over.top + over.bottom && `raise \`height\` by ${over.top + over.bottom}${over.top ? ` and move the rest pose's \`origin\` and \`rig.ground\` down ${over.top}` : ''}`, over.left + over.right && `raise \`width\` by ${over.left + over.right}${over.left ? ` and move the rest pose's \`origin\` right ${over.left}` : ''}`].filter(Boolean).join(', and ');
+    const past = [['top', -box[1]], ['bottom', box[3] - height + 1], ['left', -box[0]], ['right', box[2] - width + 1]].filter(([, by]) => by > 0).map(([edge, by]) => `${by} px past the ${edge}`);
+    const upDown = box[1] < 0 || box[3] >= height, gait = [...(upDown ? ['lift', 'bob'] : []), ...(box[0] < 0 || box[2] >= width ? ['stride', 'lean'] : [])];
+    const settings = { walk: gait, trot: gait, run: gait, jump: upDown ? ['apex (the figure rises twice that)', 'stretch'] : [], idle: ['breath', 'squash'], attack: ['arm', 'windup', 'strike'], hurt: ['recoil'] }[motions?.[motion]?.template] ?? [];
+    return `poses.motions.${motion}: ${poses} ${nothing ? `draw${one ? 's' : ''} nothing inside` : `reach${one ? 'es' : ''} ${nameList(past, 4)} of`} the ${canvas}${nothing ? '' : `, where up to ${Math.max(...items.map(item => item.outside))} of ${one ? 'its' : 'their'} pixels are clipped`} (${names}; ${one ? 'its' : 'their'} parts cover ${cover(box)}). Generated poses move the rest pose${rig?.rest !== undefined ? ` "${rig.rest}"` : ''}: ${nothing ? 'place it inside the canvas first' : `for room, ${room}; or lower the motion's ${settings.length ? nameList(settings.map(setting => setting.replace(/^(\w+)/, '`$1`')), 4).replace(/, ([^,]*)$/, ' or $1') : 'settings'}`}.`;
   };
   return plain({ recipe, metadata, ...(warnings.length && { warnings: text.map(item => typeof item === 'string' ? item : grouped(item)) }) });
 }
@@ -731,7 +813,7 @@ export function compileAutotile(source) {
   });
   if (source.animation !== undefined && (typeof source.animation !== 'string' || !source.animation.includes('{mask}'))) fail('autotile.animation', 'expected an animation name template containing {mask}');
   if (source.preview !== undefined) {
-    fields(source.preview, ['background'], 'autotile.preview');
+    fields(source.preview, ['background', 'rows'], 'autotile.preview');
     if (source.preview.background !== undefined) parseColor(source.preview.background, palette, 'autotile.preview.background');
   }
   const shape = terrain === undefined ? undefined : readTerrain(terrain, { tile, palette, path: 'autotile.terrain' }), box = collisionBox(source.collision, { tile, mode, terrain: shape });
@@ -774,7 +856,17 @@ export function compileAutotile(source) {
   const share = new Map();
   for (const variant of variants) share.set(symbolOf(variant), (share.get(symbolOf(variant)) ?? 0) + (variant.weight ?? 1));
   const most = Math.max(...share.values()), weighted = variants.some(variant => (variant.weight ?? 1) !== 1);
-  const preview = testMapRecipe(recipe, { templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
+  // preview.rows: a map of the caller's own drawn in place of the test map, so a level laid out in characters is one
+  // picture from the template alone: # for the terrain, . for nothing, and the set's slope characters.
+  const level = source.preview?.rows;
+  if (level !== undefined) {
+    const known = `#.${(slopes ?? []).map(slope => slope.char).join('')}`, said = [...known].join(' ');
+    if (!Array.isArray(level) || !level.length || level.length > 256 || level.some(row => typeof row !== 'string') || !level[0].length) fail('autotile.preview.rows', `expected 1–256 equal-width text rows of ${said}`);
+    sameWidth(level, 'autotile.preview.rows');
+    level.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (!known.includes(row[x])) fail(`autotile.preview.rows[${y}]`, `character ${JSON.stringify(row[x])} at column ${x} is not one this set draws: ${said}${slopes ? '' : ' (a set with slopes has a character for each)'}`); });
+    if (level[0].length * tile > 4096 || level.length * tile > 4096 || level[0].length * level.length * tile * tile > 4194304) fail('autotile.preview.rows', `${level[0].length} by ${level.length} tiles of ${tile} pixels is more than one picture holds (4096 a side, 4,194,304 pixels)`);
+  }
+  const preview = testMapRecipe(recipe, { ...(level && { rows: level }), templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
   // For maps with slopes: a scene legend that draws the set (# its terrain, a foot under each slope that has one) and the
   // slopes by their characters, and a map holding every slope.
   const setEntry = source.variants === undefined ? { frame: source.frame } : { frames: variants.map(variant => source.frame.replaceAll('{variant}', variant.name)), ...(variants.some(variant => (variant.weight ?? 1) !== 1) && { weights: variants.map(variant => variant.weight ?? 1) }) };

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt particle effects",
-  "description": "Start sparks, fire, explosions, splashes and spells from a preset where one fits (pixel_help topic presets, then pixel_compile with preset); for fewer frames keep N evenly spaced frames with one pixel_patch call (the quick start shows it), never by lowering frames in the source, which cuts the effect off. Seeded particle emitters and shape layers (shockwave rings, slashes, beams, lightning, magic circles, impact stars, fireballs, streams of water) compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…). Shapes draw as one grid per frame between behind particles and the rest; particles draw with stamp, grid and line operations on these symbols. Deterministic for a given seed.",
+  "description": "Start sparks, fire, explosions, splashes and spells from a preset where one fits (pixel_help topic presets, then pixel_compile with preset); for fewer frames compile with frames (--frames), never by lowering frames in the source, which cuts the effect off. Seeded particle emitters and shape layers (shockwave rings, slashes, beams, lightning, magic circles, impact stars, fireballs, streams of water) compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…). Shapes draw as one grid per frame between behind particles and the rest; particles draw with stamp, grid and line operations on these symbols. Deterministic for a given seed.",
   "type": "object",
   "properties": {
     "format": {
@@ -118,7 +118,7 @@
       },
       "maxItems": 2,
       "minItems": 2,
-      "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+      "description": "Default pivot for every frame, exported to the atlas as anchorPx (exported pixels) and as anchor and pivot (anchor / source size, the 0-1 origin Phaser and PixiJS read)."
     },
     "effects": {
       "type": "object",
@@ -3085,7 +3085,7 @@
         },
         "trim": {
           "type": "boolean",
-          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns. Frames whose visible pictures are the same (a hold, a frame moved whole) share one rectangle."
         }
       },
       "required": [],

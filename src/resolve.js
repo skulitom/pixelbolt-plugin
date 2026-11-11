@@ -3,9 +3,8 @@
 // paths resolve from `baseDir`; when `root` is set (the MCP server), every referenced file must stay inside it.
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { PixelError, inlineSharedPalette } from './core.js';
+import { PixelError, inlineSharedPalette, fail, isObject } from './core.js';
 
-const fail = (where, message) => { throw new PixelError(where, message); };
 const within = (parent, child) => { const relative = path.relative(parent, child); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 /**
  * Throws a PixelError at `where` unless `file` is inside `root`, both as written and once links are followed, so a
@@ -17,7 +16,6 @@ export async function assertInside(file, root, where, message = `must stay insid
   const real = await realpath(file).catch(() => null);
   if (real !== null && !within(await realpath(root), real)) fail(where, `${message}; ${path.resolve(file)} is a link that leads out of it`);
 }
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 async function readJSON(file, where) {
   let text;
   try { text = await readFile(file, 'utf8'); } catch (error) { fail(where, `could not read ${file} (${error.code ?? error.message})`); }

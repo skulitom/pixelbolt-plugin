@@ -5,19 +5,13 @@ import { compileEffects } from '/fx.js';
 import { renderProject, buildAtlas } from '/core.js';
 import { animationGIF } from '/gif.js';
 import { EFFECT_PRESETS, EFFECT_SLIDERS, effectOf, editedEffects } from '/effects-controls.js';
+import { $, toast, download, playButton } from '/page.js';
 
-const $ = id => document.getElementById(id);
 const canvas = $('canvas'), context = canvas.getContext('2d');
 const HOLD = 600, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // Settings belong to an effect of the chosen source: { strength, speed, seed } by effect name, kept while you switch.
-let preset = null, animation = '', settings = {}, metadata = null, project = null, recipe = null, warnings = [], frames = [], position = 0, nextAt = 0, playing = !reducedMotion, timer, toastTimer, version = 0;
+let preset = null, animation = '', settings = {}, metadata = null, project = null, recipe = null, warnings = [], frames = [], position = 0, nextAt = 0, playing = !reducedMotion, timer, version = 0;
 
-function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
-function download(data, filename, type) {
-  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
-  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
 // The effect the controls edit: the one chosen, or the effect a turned copy or a back or front part was made from.
 const base = () => (metadata ? effectOf(metadata, animation) : Object.keys(preset.source.effects)[0]);
 const restOf = name => ({ strength: 1, speed: 1, seed: preset.source.effects[name].seed ?? 1 });
@@ -49,7 +43,7 @@ function tick(now) {
   }
   requestAnimationFrame(tick);
 }
-function playState() { $('play').textContent = playing ? 'Ⅱ' : '▶'; $('play').setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation'); }
+const playState = () => playButton(playing);
 
 function commands() {
   const file = preset.file, background = $('backdrop').value, scale = $('scale').value;

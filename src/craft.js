@@ -171,9 +171,14 @@ const FOUR = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 // `allowed(index)` limits which pixels may change. `walls(index)` marks pixels that are neither the shape nor the space
 // around it, such as an obstacle a liquid rests against: a corner pixel tucked against one is not a step in the shape's
 // edge, so it stays. Returns [{ index, x, y, id, kind }] in scan order.
-export function cleanupIds(ids, width, height, { corners = false, strays = false, allowed = () => true, walls = () => false } = {}) {
+// `allowed` and `walls` are asked as the passes go. A caller whose answers come from masks kept beside the ids (which
+// pixels are outline, which are fill) passes `took(index, from, id)`: it is told each change as it is made, the pixel
+// at `index` taking the colour `id` of the in-canvas pixels at `from`, and moves its masks there, so the rest of the
+// passes see the pixel as what it now is.
+export function cleanupIds(ids, width, height, { corners = false, strays = false, allowed = () => true, walls = () => false, took = null } = {}) {
   const work = Uint32Array.from(ids), kinds = new Map();
   const at = (x, y) => (x < 0 || y < 0 || x >= width || y >= height ? -1 : work[y * width + x]);
+  const inCanvas = ([x, y]) => x >= 0 && y >= 0 && x < width && y < height, indexOf = ([x, y]) => y * width + x;
   if (strays) for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const i = y * width + x;
     if (!allowed(i)) continue;
@@ -183,7 +188,10 @@ export function cleanupIds(ids, width, height, { corners = false, strays = false
       if (n < 0) continue;
       if (shared < 0) shared = n; else if (n !== shared) { uniform = false; break; }
     }
-    if (uniform && shared >= 0 && shared !== work[i]) { work[i] = shared; kinds.set(i, 'stray'); }
+    if (uniform && shared >= 0 && shared !== work[i]) {
+      work[i] = shared; kinds.set(i, 'stray');
+      if (took) took(i, [[x - 1, y - 1], [x, y - 1], [x + 1, y - 1], [x - 1, y], [x + 1, y], [x - 1, y + 1], [x, y + 1], [x + 1, y + 1]].filter(inCanvas).map(indexOf), shared);
+    }
   }
   if (corners) for (let pass = 0; pass < 4; pass++) {
     let changed = false;
@@ -202,6 +210,7 @@ export function cleanupIds(ids, width, height, { corners = false, strays = false
       const outside = beyond.map(([px, py]) => at(px, py)).filter(n => n >= 0);
       if (!outside.length || outside.some(n => n !== outside[0])) continue;
       work[i] = outside[0]; kinds.set(i, 'corner'); changed = true;
+      if (took) took(i, beyond.filter(inCanvas).map(indexOf), outside[0]);
     }
     if (!changed) break;
   }
@@ -457,7 +466,7 @@ function shearDraft(rows, phi, anchor, points) {
       let end = i;
       while (end + 1 < kept.length && column(kept[end + 1]) === column(kept[i])) end++;
       const live = kept.slice(i, end + 1), far = live.filter(c => c !== anchor[0]).sort((a, b) => Math.abs(b - anchor[0]) - Math.abs(a - anchor[0]) || b - a)[0];
-      if (live.length > 1 && far !== undefined && (live.length > run || (live.length === run && Math.abs(far - anchor[0]) > Math.abs(pick - anchor[0])))) { pick = far; run = live.length; }
+      if (live.length > 1 && (live.length > run || (live.length === run && Math.abs(far - anchor[0]) > Math.abs(pick - anchor[0])))) { pick = far; run = live.length; }
       i = end + 1;
     }
     if (pick < 0) break;
@@ -658,6 +667,14 @@ const widthAt = (widths, t) => {
   if (widths.length === 2) return widths[0] + (widths[1] - widths[0]) * t;
   return t < .5 ? widths[0] + (widths[1] - widths[0]) * t * 2 : widths[1] + (widths[2] - widths[1]) * (t * 2 - 1);
 };
+// A part keeps, beside each pixel's colour, what the pixel is: fill (`fill`), outline (`line`) or neither. A cleanup
+// pass that gives a pixel the colour of pixels round it makes it what they are, so the passes after it, and the
+// compilers that read the masks, see the pixel as it is drawn: empty with them, outline when every one of them is
+// outline, fill otherwise (where the outline shares a colour with a shade, a pixel between the two is the body's).
+const takeKind = (fill, line, i, colour, from) => {
+  const outline = colour !== 0 && from.length > 0 && from.every(n => line[n]);
+  line[i] = outline ? 1 : 0; fill[i] = colour && !outline ? 1 : 0;
+};
 // The same corner criterion as cleanupIds, applied in-place to a fresh part. No change objects or working copy are
 // needed here; checking the second pixel of each arm is enough to know whether both arms are longer than one.
 function cleanPartCorners(codes, mask, edge, spine, w, h, neutral, spans) {
@@ -679,8 +696,7 @@ function cleanPartCorners(codes, mask, edge, spine, w, h, neutral, spans) {
       if (codes[i + a * 2] === color && codes[i + b * 2] === color) continue;
       const outside = codes[i - a];
       if (codes[i - b] !== outside || codes[i - a - b] !== outside) continue;
-      codes[i] = outside;
-      if (!outside) { mask[i] = 0; edge[i] = 0; }
+      codes[i] = outside; takeKind(mask, edge, i, outside, [i - a, i - b, i - a - b]);
       changed = true;
     }
     if (!changed) break;
@@ -739,14 +755,16 @@ function finishPart(mask, w, h, left, top, { ramp, base, outline, light, thick, 
     if ((x > x0 && codes[i - 1] === codes[i]) || (x < x1 && codes[i + 1] === codes[i])
       || (y > y0 && codes[i - w] === codes[i]) || (y < y1 && codes[i + w] === codes[i])) continue;
     let shared = -1, uniform = true;
+    const around = [];
     for (let ny = Math.max(y0, y - 1); ny <= Math.min(y1, y + 1) && uniform; ny++) {
       for (let nx = Math.max(x0, x - 1); nx <= Math.min(x1, x + 1); nx++) {
         if (nx === x && ny === y) continue;
         const color = codes[ny * w + nx];
         if (shared < 0) shared = color; else if (shared !== color) { uniform = false; break; }
+        around.push(ny * w + nx);
       }
     }
-    if (uniform && shared >= 0 && shared !== codes[i]) { codes[i] = shared; if (!shared) mask[i] = 0; }
+    if (uniform && shared >= 0 && shared !== codes[i]) { codes[i] = shared; takeKind(mask, edge, i, shared, around); }
   }
   const width = x1 - x0 + 1, height = y1 - y0 + 1, rows = [], fill = new Uint8Array(width * height), outlineMask = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
@@ -766,11 +784,12 @@ function finishPart(mask, w, h, left, top, { ramp, base, outline, light, thick, 
     const cropped = Uint32Array.from(rows.join(''), c => c === '.' ? 0 : c.charCodeAt(0));
     const keep = new Uint8Array(width * height);
     for (const [x, y] of spine) keep[(y - top - y0) * width + x - left - x0] = 1;
+    const took = (i, from, id) => takeKind(fill, outlineMask, i, id, from);
     for (let pass = 0; pass < 4; pass++) {
-      const corners = cleanupIds(cropped, width, height, { corners: true, allowed: i => Boolean(outlineMask[i] || keep[i]) });
-      for (const change of corners) { cropped[change.index] = change.id; if (!change.id) { fill[change.index] = 0; outlineMask[change.index] = 0; } }
-      const strays = cleanupIds(cropped, width, height, { strays: true, allowed: i => Boolean(fill[i] && !keep[i]) });
-      for (const change of strays) { cropped[change.index] = change.id; if (!change.id) fill[change.index] = 0; }
+      const corners = cleanupIds(cropped, width, height, { corners: true, allowed: i => Boolean(outlineMask[i] || keep[i]), took });
+      for (const change of corners) cropped[change.index] = change.id;
+      const strays = cleanupIds(cropped, width, height, { strays: true, allowed: i => Boolean(fill[i] && !keep[i]), took });
+      for (const change of strays) cropped[change.index] = change.id;
       if (!corners.length && !strays.length) break;
     }
     for (let y = 0; y < height; y++) rows[y] = Array.from(cropped.subarray(y * width, (y + 1) * width), c => c ? String.fromCharCode(c) : '.').join('');

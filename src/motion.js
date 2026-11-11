@@ -58,7 +58,7 @@ function poseData(metadata, frame) {
   if (new Set(markers.map(m => m.name)).size !== markers.length) fail('metadata', `duplicate markers for ${frame.name}`);
   if (contacts !== undefined && (!Array.isArray(contacts) || contacts.length > 64 || new Set(contacts).size !== contacts.length || contacts.some(name => !markers.some(m => m.name === name)))) fail('metadata', `invalid contacts for ${frame.name}`);
   const parts = pose.parts ?? {};
-  if (!parts || Array.isArray(parts) || typeof parts !== 'object' || Object.keys(parts).length > 64) fail('metadata', `invalid parts for ${frame.name}`);
+  if (Array.isArray(parts) || typeof parts !== 'object' || Object.keys(parts).length > 64) fail('metadata', `invalid parts for ${frame.name}`);
   for (const part of Object.values(parts)) if (!part || (part.worldAngle !== undefined && (!Number.isInteger(part.worldAngle) || part.worldAngle < 0 || part.worldAngle > 359))) fail('metadata', `invalid joint angle for ${frame.name}`);
   return { contacts, markers, parts };
 }

@@ -2,25 +2,12 @@
 // fields, not a water/obstacle solver. Sum signed sources before colour thresholds so
 // opposite phases cancel. Integer cycles close the loop without blending its ends.
 // Browser-compatible: craft's polynomial trigonometry and fixed-order arithmetic only.
-import { PixelError, renderProject, readRows, parseColor } from './core.js';
-import { fields } from './authoring.js';
+import { renderProject, readRows, parseColor, fail } from './core.js';
+import { fields, number as num, integer as int, pair } from './authoring.js';
 import { sinDeg, cosDeg } from './craft.js';
 import { HOLD } from './shapes.js';
 
 export const WAVE_KINDS = ['radial', 'directional'];
-const fail = (path, message) => { throw new PixelError(path, message); };
-const num = (v, path, min, max) => {
-  if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail(path, `expected a number from ${min} to ${max}`);
-  return v;
-};
-const int = (v, path, min, max) => {
-  if (!Number.isInteger(v) || v < min || v > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return v;
-};
-const pair = (v, path, min, max) => {
-  if (!Array.isArray(v) || v.length !== 2) fail(path, 'expected [x, y]');
-  return v.map((n, i) => num(n, `${path}[${i}]`, min, max));
-};
 const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 
 function readEffect(effect, path, source) {

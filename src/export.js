@@ -74,7 +74,10 @@ export async function createBundle(spec) {
   const still = Boolean(tiles) && spec.animations === undefined;
   const godot = still ? null : spriteFrames(atlas.metadata);
   if (godot) files.set(`${name}.tres`, Buffer.from(godot.text));
-  if (godot?.approximate.length) project.warnings.push(`${name}.tres: the frame times of ${godot.approximate.length === 1 ? 'animation' : 'animations'} ${godot.approximate.slice(0, 8).join(', ')}${godot.approximate.length > 8 ? ', …' : ''} share no step of 9 ms or more, so Godot gets fractional frame durations, kept as 32-bit floats: each frame plays within a ten-millionth of its length. Frame times in multiples of 10 ms are exact.`);
+  // Frame times Godot holds as fractions play within a ten-millionth of their length: a fact for whoever opens the
+  // .tres, written in README.txt and kept in `notes`, not a warning for every reply to carry.
+  const notes = [];
+  if (godot?.approximate.length) notes.push(`${name}.tres: the frame times of ${godot.approximate.length === 1 ? 'animation' : 'animations'} ${godot.approximate.slice(0, 8).join(', ')}${godot.approximate.length > 8 ? ', …' : ''} share no step of 9 ms or more, so Godot gets fractional frame durations, kept as 32-bit floats: each frame plays within a ten-millionth of its length. Frame times in multiples of 10 ms are exact.`);
   files.set(`${name}.pixel.json`, Buffer.from(json(spec)));
   if (!still) files.set(`${name}.css`, Buffer.from(generateCSS(project, atlas)));
   const scaledFrames = frames.map(f => ({ ...f, data: scalePixels(f.data, width, height, sheet.scale) }));
@@ -91,11 +94,11 @@ export async function createBundle(spec) {
   if (raised.size) project.warnings.push(`${raised.size} frame${raised.size === 1 ? '' : 's'} of 10 ms or less (${[...raised].slice(0, 8).join(', ')}${raised.size > 8 ? ', …' : ''}) last 11 ms in the animated PNGs: browsers play such short frames at 100 ms. The atlas, CSS and player keep the exact durations.`);
   if (!still) files.set('player.js', await readFile(new URL('./runtime.js', import.meta.url)));
   files.set('preview.html', Buffer.from(still ? sheetHTML(project) : previewHTML(project)));
-  files.set('README.txt', Buffer.from(tiles ? tilesetReadme(project, tiles, still) : spriteReadme(project)));
+  files.set('README.txt', Buffer.from((tiles ? tilesetReadme(project, tiles, still) : spriteReadme(project)) + notes.map(note => `\nGodot: ${note}\n`).join('')));
   // A forced export over an earlier export of this recipe removes the frame and animation PNGs that export's atlas
   // lists and this one no longer has. Another recipe's export in the same folder keeps its PNGs, and so does a PNG
   // put in frames/ by hand.
-  return { project, atlas, files, owns: { marker: `${name}.atlas.json`, folders: ['frames', 'animations'], match: /^(?:frames|animations)\/[^/]+\.png$/, listed: atlasFiles, peers: /\.atlas\.json$/, resources: bundleResources(name) } };
+  return { project, atlas, files, notes, owns: { marker: `${name}.atlas.json`, folders: ['frames', 'animations'], match: /^(?:frames|animations)\/[^/]+\.png$/, listed: atlasFiles, peers: /\.atlas\.json$/, resources: bundleResources(name) } };
 }
 // The top-level files an export writes only sometimes (a tile set's TileSet and Tiled tileset; an animated recipe's
 // SpriteFrames, CSS and player), each with how to tell that an export of this recipe wrote it: the text Pixelbolt writes
@@ -202,13 +205,16 @@ function stillTileSet(spec, project) {
   }
   return true;
 }
-// A reply's `animationFps`: the frame rate of each animation whose frames all last the same (animationFps), by name,
-// for the first 16 such animations (README.txt times every animation of two or more frames); no field when none has
-// one, or for a still tile set. `spec` is the recipe the project was rendered from.
-export function withRates(project, spec) {
-  if (stillTileSet(spec, project)) return {};
-  const rates = Object.keys(project.animations).map(key => [key, animationFps(project, key)]).filter(([, fps]) => fps !== undefined).slice(0, 16);
-  return rates.length ? { animationFps: Object.fromEntries(rates) } : {};
+// What a reply says about a project's animations, the same from every command and tool: by name, how many frames each
+// plays, how long that takes, whether it loops and, where its frames all last the same (and it is not a still tile
+// set), its frame rate, which Godot, Unity, Aseprite and video editors ask for. Past 16 animations the rest are named
+// in `moreAnimations`. `spec` is the recipe the project was rendered from.
+export function describeAnimations(project, spec) {
+  const names = Object.keys(project.animations), still = stillTileSet(spec, project);
+  // A still tile set's only animation is the flipbook of every tile, which no export animates: nothing to describe.
+  if (still && names.length === 1) return {};
+  const entry = key => { const { frames, duration, loop } = project.animations[key], fps = still ? undefined : animationFps(project, key); return [key, { frames: frames.length, duration, loop, ...(fps !== undefined && { fps }) }]; };
+  return { animations: Object.fromEntries(names.slice(0, 16).map(entry)), ...(names.length > 16 && { moreAnimations: names.slice(16) }) };
 }
 const popcount = mask => { let bits = 0; for (let m = mask; m; m &= m - 1) bits++; return bits; };
 // The frame and animation PNGs an export wrote, as its atlas metadata names them. Anything else lists nothing.
@@ -386,9 +392,15 @@ export function outputSummary(out, files, listFiles) {
   const relative = files.map(file => path.relative(out, file).split(path.sep).join('/'));
   const count = prefix => relative.filter(file => file.startsWith(`${prefix}/`)).length;
   const animations = count('animations');
+  // What the preview page runs on (its player, a scene's copies of the modules it draws with) and the README are in
+  // the folder for the page, not to deliver: a reply lists what a game, a site or a post takes.
+  const support = file => !file.includes('/') && (file.endsWith('.js') || file === 'README.txt');
+  // The two files a game takes first, by what they are: among a dozen names an agent asked which one was the sheet.
+  const atlas = relative.find(file => !file.includes('/') && file.endsWith('.atlas.json')), sheet = atlas && `${atlas.slice(0, -'.atlas.json'.length)}.png`;
   return {
-    files: listFiles ? relative : relative.filter(file => !file.startsWith('frames/') && !(file.startsWith('animations/') && animations > 16)),
-    frames: { directory: 'frames', count: count('frames') }, animations: { directory: 'animations', count: animations },
+    ...(atlas && relative.includes(sheet) && { sheet, atlas }),
+    files: listFiles ? relative : relative.filter(file => !file.startsWith('frames/') && !(file.startsWith('animations/') && animations > 16) && !support(file)),
+    folders: { frames: count('frames'), animations },
     ...(files.removed && { removed: files.removed.map(file => path.relative(out, file).split(path.sep).join('/')) })
   };
 }
@@ -402,7 +414,7 @@ export async function writeBundle(bundle, directory, { force = false, inputs = [
   // Preflight all output collisions before writing any artifact.
   if (!force) for (const filename of bundle.files.keys()) {
     try { await access(path.join(root, filename)); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-    throw new Error(`Output already exists: ${path.join(root, filename)}. Choose a new folder or pass --force.`);
+    throw new Error(`Output already exists: ${path.join(root, filename)}. Nothing was written, so that folder holds an earlier export, not this one. Choose a new folder or pass --force.`);
   }
   const stale = force ? await leftovers(bundle, root) : [];
   if (force) for (const filename of await respelled(bundle, root)) await rm(path.join(root, filename), { force: true });

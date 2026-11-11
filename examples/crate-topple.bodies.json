@@ -34,7 +34,7 @@
   },
   "effects": {
     "crate-topple": {
-      "frames": 190,
+      "frames": 140,
       "duration": 40,
       "gravity": [0, 0.14],
       "walls": ["left", "right"],

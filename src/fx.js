@@ -7,45 +7,17 @@
 // shockwave rings, slashes, beams, lightning, magic circles, impact stars, fireballs) bake into one grid per frame
 // between `behind` particles and the rest. Browser-compatible and deterministic: seeded hashing and polynomial
 // trigonometry, no Math.random.
-import { PixelError, parseColor, renderProject, FRAME_AREA, joinErrors } from './core.js';
-import { fields, point, compilePoses } from './authoring.js';
+import { PixelError, parseColor, renderProject, FRAME_AREA, joinErrors, fail, isObject, sameWidth } from './core.js';
+import { fields, point, compilePoses, number, integer, range, pair, pick, pickWhole } from './authoring.js';
 import { patternProblem, ditherThreshold, traceLine, random, hash, sinDeg, cosDeg, ease, EASINGS, rotateRows } from './craft.js';
 import { readShapes, renderShapes, holdBands, settleHolds, tween, sample, sequenceFrame, atan2Deg, pathWalker } from './shapes.js';
 import { compileFluid } from './fluid.js';
 import { compileWaves } from './wave.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value, path) => {
   if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of letters, digits, hyphens or underscores, starting with a letter');
   return value;
 };
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
-};
-const integer = (value, path, min, max) => {
-  if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
-  return value;
-};
-// A number, or [min, max] sampled per particle.
-const range = (value, path, min, max, whole = false) => {
-  const check = whole ? integer : number;
-  if (Array.isArray(value)) {
-    if (value.length !== 2) fail(path, 'expected a number or [min, max]');
-    const [a, b] = [check(value[0], `${path}[0]`, min, max), check(value[1], `${path}[1]`, min, max)];
-    if (a > b) fail(path, 'min must not exceed max');
-    return [a, b];
-  }
-  const v = check(value, path, min, max);
-  return [v, v];
-};
-const pair = (value, path, min, max) => {
-  if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
-  return [number(value[0], `${path}[0]`, min, max), number(value[1], `${path}[1]`, min, max)];
-};
-const pick = ([a, b], r) => a + (b - a) * r;
-const pickWhole = ([a, b], r) => a + Math.min(b - a, Math.floor(r * (b - a + 1)));
 // Salts keep each sampled property independent, so changing one range does not reshuffle the others.
 const SALT = { x: 1, y: 2, angle: 3, speed: 4, life: 5, variant: 6, remap: 7, phase: 8, offset: 9, ring: 10, radius: 11, along: 12, pixel: 13, release: 14, share: 15, size: 16, turn: 17, spin: 18 };
 // Which of a sprite's pixels its emitter spawns from: every visible pixel, the visible pixels on its edge, or the empty
@@ -529,13 +501,15 @@ function simulate(effect, context) {
       const r = salt => random(q.tag, index, q.age, k, salt), back = spread && q.px !== undefined && k < count - 1;
       const x = back ? q.px + (q.x - q.px) * (k + 1) / count : q.x, y = back ? q.py + (q.y - q.py) * (k + 1) / count : q.y;
       add(launch(e, index, x + ox, y + oy, k, count, r, hash(q.tag, index, q.age, k), born, q));
-      if (born >= first && born <= total) stats[index].spawned++;
+      // Counted as its parents' spawns are: born in one of the effect's own frames, not in the one after a loop's last.
+      if (born >= first && born < total) stats[index].spawned++;
     }
     if (count) mark(e, born, q.x + ox, q.y + oy);
   };
   const layered = emitters.some(e => e.behind);
   let counted = null;
-  for (let t = 0; t < total + (loop ? 1 : 0); t++) {
+  const end = total + (loop ? 1 : 0);
+  for (let t = 0; t < end; t++) {
     // recording: one of the effect's own frames; the frame after a loop's last is drawn but not counted.
     const cycle = t % frames, drawing = t >= first, recording = drawing && t < total;
     if (t === total) counted = { operations, culled };
@@ -708,8 +682,9 @@ function simulate(effect, context) {
         }
       }
     }
-    // In the parents' drawing order.
-    for (let k = events.length - 1; k >= 0; k--) { const [q, when] = events[k]; for (const index of children[q.index][when]) spawnChildren(index, q, emitters[index].burst, t + 1); }
+    // In the parents' drawing order. After the last frame there is no next one to appear in, so an effect that plays
+    // once is not held to the limit on particles alive by children it never shows.
+    if (t + 1 < end) for (let k = events.length - 1; k >= 0; k--) { const [q, when] = events[k]; for (const index of children[q.index][when]) spawnChildren(index, q, emitters[index].burst, t + 1); }
     if (counted) ({ operations, culled } = counted);
     if (operations > LIMITS.operations) fail(context.path, `the effect needs more than ${LIMITS.operations} drawing operations; lower counts or frames`);
   }
@@ -916,7 +891,8 @@ export function compileEffects(source, { stats = false } = {}) {
       if (sprite.frames) { sequences[name] = sprite.frames; delete symbols[name]; } else symbols[name] = sprite.rows;
       continue;
     }
-    if (!Array.isArray(rows) || !rows.length || rows.length > 256 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string' || row.length !== rows[0].length)) fail(`fx.symbols.${name}`, 'expected 1–256 equal-width text rows, or { recipe, frame } or { recipe, animation }: a frame or an animation of a recipe or pose source');
+    if (!Array.isArray(rows) || !rows.length || rows.length > 256 || typeof rows[0] !== 'string' || !rows[0].length || rows.some(row => typeof row !== 'string')) fail(`fx.symbols.${name}`, 'expected 1–256 equal-width text rows, or { recipe, frame } or { recipe, animation }: a frame or an animation of a recipe or pose source');
+    sameWidth(rows, `fx.symbols.${name}`);
     // Every character is a palette key or a clear one ('.' or a space), checked here so the error names the fx source.
     rows.forEach((row, j) => { for (const char of row) if (char !== '.' && char !== ' ' && !Object.hasOwn(palette, char)) fail(`fx.symbols.${name}[${j}]`, `unknown palette character ${JSON.stringify(char)}; the palette has ${Object.keys(palette).join(' ')}, and . or a space is clear`); });
   }

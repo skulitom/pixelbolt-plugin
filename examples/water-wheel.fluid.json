@@ -10,12 +10,58 @@
     "b": "#2f6fc0",
     "c": "#5fb4e8",
     "w": "#dff6ff",
-    "s": "#8a8f99",
-    "S": "#5d626b",
+    "m": "#b4bdd8",
+    "n": "#a5683a",
     "y": "#ffd23f",
     "k": "#14141c",
     "h": "#c98c4f",
     "o": "#3b2414"
+  },
+  "symbols": {
+    "paddle": [
+      "ooo",
+      "hhn",
+      "hhn",
+      "hhn",
+      "hhn",
+      "ooo",
+      ".n.",
+      ".n.",
+      ".n.",
+      "mmm",
+      "mkm",
+      "mmm",
+      ".n.",
+      ".n.",
+      ".n.",
+      "ooo",
+      "hhn",
+      "hhn",
+      "hhn",
+      "hhn",
+      "ooo"
+    ],
+    "paddle-across": [
+      "ohhhho...mmm...ohhhho",
+      "ohhhhonnnmkmnnnohhhho",
+      "onnnno...mmm...onnnno"
+    ],
+    "duck": [
+      "..kk..",
+      ".kyyk.",
+      ".kykhh",
+      "kyyyyk",
+      "kyyyyk",
+      ".kkkk."
+    ],
+    "crate": [
+      "oooooo",
+      "ohhhno",
+      "ohhnho",
+      "ohnhho",
+      "onhhho",
+      "oooooo"
+    ]
   },
   "effects": {
     "water-wheel": {
@@ -35,26 +81,10 @@
         { "field": "depth", "colors": ["w", "c", "b", "B"], "thresholds": [1, 2, 5, 10], "dither": 0 }
       ],
       "bodies": [
-        { "shape": "box", "size": [2, 20], "at": [28, 27], "fixed": true, "spin": 4.5, "fill": "s", "outline": "S" },
-        { "shape": "box", "size": [20, 2], "at": [28, 27], "fixed": true, "spin": 4.5, "fill": "s", "outline": "S" },
-        {
-          "name": "duck",
-          "shape": "circle",
-          "radius": 2.5,
-          "at": [14, 14],
-          "density": 0.4,
-          "fill": "y",
-          "outline": "k"
-        },
-        {
-          "name": "crate",
-          "shape": "box",
-          "size": [6, 6],
-          "at": [42, 13],
-          "density": 0.15,
-          "fill": "h",
-          "outline": "o"
-        }
+        { "shape": "box", "size": [2, 20], "at": [28, 27], "fixed": true, "spin": 4.5, "symbol": "paddle" },
+        { "shape": "box", "size": [20, 2], "at": [28, 27], "fixed": true, "spin": 4.5, "symbol": "paddle-across" },
+        { "name": "duck", "shape": "circle", "radius": 2.5, "at": [14, 14], "density": 0.4, "symbol": "duck" },
+        { "name": "crate", "shape": "box", "size": [6, 6], "at": [42, 13], "density": 0.15, "symbol": "crate" }
       ]
     }
   }

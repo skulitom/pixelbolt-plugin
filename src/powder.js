@@ -11,19 +11,14 @@
 // a fixed scan order, and there is no Math.random and no trigonometry of its own (tumbling pieces turn by craft.js's
 // polynomial sines and bodies.js's solver, + − × ÷ and sqrt). Temperatures are kept in sixteenths of a degree and
 // velocities in 256ths of a pixel per frame.
-import { PixelError, parseColor, renderProject, CANVAS_SIDE, FRAME_AREA } from './core.js';
+import { parseColor, renderProject, CANVAS_SIDE, FRAME_AREA, fail, isObject } from './core.js';
 import { hash, ditherThreshold, sinDeg, cosDeg } from './craft.js';
 import { atan2Deg } from './shapes.js';
-import { createBodyWorld, polygonPart, areaBeyond } from './bodies.js';
+import { createBodyWorld, polygonPart, areaBeyond, turnBetween } from './bodies.js';
+import { number } from './authoring.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
-const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const known = (object, keys, path) => {
   for (const key of Object.keys(object)) if (!keys.includes(key)) fail(`${path}.${key}`, `unknown field; expected one of ${keys.join(', ')}`);
-};
-const number = (value, path, min, max) => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
-  return value;
 };
 const integer = (value, path, min, max) => {
   if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected a whole number from ${min} to ${max}`);
@@ -66,9 +61,8 @@ const PLANS = new WeakMap();
 // and settles; what it hits, it throws up at SPLASH_UP and out at SPLASH_OUT of its speed. A piece is drawn held as
 // bodies.js draws a body: it steps back only HOLD of a pixel (or TURN_HOLD of a degree) past halfway, and if its cells
 // would land in a solid it tries NUDGES of a pixel.
-const MOST_PIECES = 128, SEARCH = 4096, SIDE = 4, REACH = 10, LIQUID_DRAG = 0.6, QUADRATIC = 1, SPLASH_UP = 0.9, SPLASH_OUT = 0.35, HOLD = 0.3, TURN_HOLD = 0.2;
+const MOST_PIECES = 128, SEARCH = 4096, SIDE = 4, REACH = 10, PARTED = 8, RESTED = 2, LIQUID_DRAG = 0.6, QUADRATIC = 1, SPLASH_UP = 0.9, SPLASH_OUT = 0.35, HOLD = 0.3, TURN_HOLD = 0.2;
 const NUDGES = [[0, 0], [0, -1], [-1, 0], [1, 0], [0, 1]];
-const turnBetween = (a, b) => ((b - a) % 360 + 540) % 360 - 180;
 // Single-character palette keys. '.' marks an empty pixel.
 const KEY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*+-=?@^~!<>/|:;,_()[]{}';
 // Salts that keep the random streams apart.
@@ -199,7 +193,8 @@ function readPowder(given) {
     const m = n + 1, def = source.materials[name], path = `powder.materials.${name}`;
     if (!isObject(def)) fail(path, 'expected a material object');
     known(def, MATERIAL_FIELDS, path);
-    if (!Object.hasOwn(STATE_CODE, def.state)) fail(`${path}.state`, `expected one of ${POWDER_STATES.join(', ')}`);
+    // A starter material named again replaces the table's whole, so one given only new colours has lost its state.
+    if (!Object.hasOwn(STATE_CODE, def.state)) fail(`${path}.state`, `expected one of ${POWDER_STATES.join(', ')}${def.state === undefined && given.base === 'sandbox' && Object.hasOwn(SANDBOX.materials, name) ? `; a material named as the starter table's replaces it whole, so repeat the fields it should keep: the table's ${name} is ${JSON.stringify(SANDBOX.materials[name])}` : ''}`);
     const state = STATE_CODE[def.state];
     t.state[m] = state;
     // A solid that falls drops as a rigid piece, with every solid that falls touching it, once no fixed solid (one
@@ -837,7 +832,8 @@ export function createLivePowder(source, options = {}) {
 
   // One frame: queued inputs, then every cell from the bottom row up (each row in alternating directions), then heat.
   const advance = () => {
-    tick = tick === 65535 ? 1 : tick + 1;
+    // The stamps are 16 bits, so they are wiped as the tick wraps: one left from 65535 frames ago would read as this frame's.
+    if (tick === 65535) { stamp.fill(0); tick = 1; } else tick++;
     script.forEach((entry, n) => { if (t >= entry.from && t <= entry.to && (t - entry.from) % entry.every === 0) { reseed(SALT.script, t, n); entry.run(); } });
     queue.forEach((input, n) => { reseed(SALT.input, t, n); input(); });
     queue = [];
@@ -1371,7 +1367,8 @@ export function createLivePowder(source, options = {}) {
   // by three shears, the place held to the whole pixel, each stepping on at once the way it last moved and back only
   // past HOLD (TURN_HOLD of a degree), so a piece rocking about a boundary holds still. If its cells would land in a
   // solid (its picture turned in whole pixels is not quite its exact shape), it tries a pixel up, left, right and down;
-  // if all of those are blocked it stays where it was drawn.
+  // if all of those are blocked it stays where it was drawn, and carry answers how many pixels its furthest cell is from
+  // where it would have gone (0 when it is drawn where its body is).
   const carry = p => {
     const b = p.body, h = p.hold, n = p.n;
     if (toX.length < n) { toX = new Int32Array(n * 2); toY = new Int32Array(n * 2); }
@@ -1394,7 +1391,7 @@ export function createLivePowder(source, options = {}) {
     }
     let same = true;
     for (let k = 0; k < n && same; k++) same = toX[k] === p.gx[k] && toY[k] === p.gy[k];
-    if (same) return;
+    if (same) return 0;
     let shift = -1;
     for (let s = 0; s < NUDGES.length && shift < 0; s++) {
       const [dx, dy] = NUDGES[s];
@@ -1406,7 +1403,11 @@ export function createLivePowder(source, options = {}) {
       }
       if (clear) shift = s;
     }
-    if (shift < 0) return;
+    if (shift < 0) {
+      let far = 1;
+      for (let k = 0; k < n; k++) { const ax = Math.abs(toX[k] - p.gx[k]), ay = Math.abs(toY[k] - p.gy[k]); if (ax > far) far = ax; if (ay > far) far = ay; }
+      return far;
+    }
     const [dx, dy] = NUDGES[shift];
     if (claimTag > 2147480000) { claim.fill(0); claimTag = 0; }
     claimTag++;
@@ -1445,6 +1446,21 @@ export function createLivePowder(source, options = {}) {
       return (x > 0 && state[mat[c - 1]] === LIQUID) || (x < W - 1 && state[mat[c + 1]] === LIQUID) || (c < N - W && state[mat[c + W]] === LIQUID && (c < W || state[mat[c - W]] === SOLID));
     });
     if (holes.length) refill(holes);
+    return 0;
+  };
+  // A piece whose cells cannot follow its body is made again from its cells as they lie: a body of exactly their shape,
+  // where they are, moving as the old one moved. Two pieces turning against each other are each drawn a little into the
+  // other, no nudge clears both sides, and each then waits for the other's cells to move: their bodies fell on, came to
+  // rest and slept, and the cells were left hanging in the air where they had stopped. One whose cells lie partly above
+  // the grid is left to come back down.
+  const reseat = p => {
+    const list = new Int32Array(p.n), b = p.body;
+    for (let k = 0; k < p.n; k++) { const x = p.gx[k], y = p.gy[k]; if (x < 0 || y < 0 || x >= W || y >= H) return; list[k] = y * W + x; }
+    const n = p.n, moves = b.asleep ? [0, 0, 0] : [b.vx, b.vy, b.w];
+    letGo(p);
+    if (glued(list, n)) return;
+    const made = makePiece(list, n).body;
+    made.vx = moves[0]; made.vy = moves[1]; made.w = moves[2];
   };
   // The obstacles the moving pieces meet, in the window round them: fixed solids and resting pieces (hard), and
   // resting powder (soft) unless it lies on a piece (sand poured on a piece rides it rather than holding it).
@@ -1505,7 +1521,11 @@ export function createLivePowder(source, options = {}) {
       // cells (above the grid, where they are not drawn) and comes back down. Only recut and letGo end a piece.
       if (world.stats.escaped.length) { for (const p of rigid) if (p.n) p.body.gone = false; world.stats.escaped.length = 0; }
       for (const p of moving) {
-        carry(p);
+        // Left more than PARTED pixels behind its body, or more than RESTED behind a body that has come to rest (which
+        // would never be tried again), it starts again from where its cells are. Less than that is a piece held up a
+        // frame or two by a corner, which frees itself.
+        const behind = carry(p);
+        if (behind > (p.body.asleep ? RESTED : PARTED)) { reseat(p); continue; }
         // A piece still moving keeps the chunks it lies in awake, so a grid isn't settled while a piece drifts.
         if (!p.body.asleep) {
           const [a, c, e, f] = p.body.box;
@@ -2086,9 +2106,12 @@ export function compilePowder(source) {
 }
 
 // ---- Recorded strokes ---------------------------------------------------------------------------------------------
-// Replays recorded strokes on a fresh runner of the same source: each on its frame, then a step, for `frames` frames.
+// Replays recorded strokes (in frame order, as recorded) on a fresh runner of the same source: each on its frame, then a
+// step, for `frames` frames. A runner already part of the way there carries on: the strokes of frames it has run are its
+// past, and are passed over.
 export function replayStrokes(live, strokes, frames) {
   let at = 0;
+  while (at < strokes.length && strokes[at].f < live.frame) at++;
   for (let f = live.frame; f < frames; f++) {
     while (at < strokes.length && strokes[at].f === f) applyStroke(live, strokes[at++]);
     live.step();

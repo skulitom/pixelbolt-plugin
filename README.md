@@ -29,7 +29,7 @@ Then restart Claude Code in your project folder and ask in your own words, for e
 
 - **What it runs:** the plugin starts `node <this plugin's folder>/bin/pixelbolt.js mcp`, running in your project
   folder. Nothing is downloaded or installed. The skill may also have Claude run Pixelbolt's command-line tool
-  (`node bin/pixelbolt.js validate|inspect|patch|compile|render|gif|sequence|gif-frames|help|preview`, from the same folder) through its shell, writing where
+  (`node bin/pixelbolt.js validate|inspect|patch|compile|presets|autotile|scene|init|import|render|gif|sequence|gif-frames|help|preview`, from the same folder) through its shell, writing where
   Claude tells it to; `preview` serves the studio pages on 127.0.0.1 only and, with `--open`, opens them in your
   browser.
 - **What the MCP server reads and writes:** only files under the folder you opened in Claude Code. It reads the recipes and PNGs

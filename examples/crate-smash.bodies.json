@@ -55,7 +55,7 @@
   },
   "effects": {
     "crate-smash": {
-      "frames": 180,
+      "frames": 152,
       "duration": 40,
       "gravity": [0, 0.2],
       "background": "b",

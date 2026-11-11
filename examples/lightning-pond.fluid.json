@@ -109,8 +109,7 @@
         "cooling": 0.12,
         "dissipation": 0.02,
         "look": [
-          { "field": "density", "colors": ["s"], "thresholds": [0.3], "dither": 0.5 },
-          { "field": "density", "colors": ["S"], "thresholds": [0.8], "dither": 0.4 },
+          { "field": "density", "colors": ["s", "S"], "thresholds": [0.12, 0.4], "dither": 0 },
           { "field": "ionization", "colors": ["v", "b"], "thresholds": [0.06, 0.35], "dither": 0.4 },
           {
             "field": "current",

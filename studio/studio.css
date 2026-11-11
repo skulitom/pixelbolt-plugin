@@ -588,6 +588,12 @@ body.stage-open{
   outline-offset:0;
   scrollbar-width:thin
 }
+#source[readonly]{
+  cursor:progress
+}
+#source::placeholder{
+  color:var(--muted)
+}
 .error{
   margin-top:10px;
   font-size:11px;

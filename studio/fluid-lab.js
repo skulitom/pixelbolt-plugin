@@ -5,20 +5,14 @@ import { compileFluid } from '/fluid.js';
 import { renderProject, buildAtlas } from '/core.js';
 import { animationGIF } from '/gif.js';
 import { FLUID_PRESETS, fluidEffect, fluidSliders, editedSource } from '/fluid-controls.js';
+import { $, toast, download, playButton } from '/page.js';
 
-const $ = id => document.getElementById(id);
 const canvas = $('canvas'), context = canvas.getContext('2d');
 const PRESETS = FLUID_PRESETS;
 const HOLD = 600, reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const round = value => Math.round(value * 1000) / 1000;
-let preset = null, effectName = '', values = {}, seed = 1, project = null, recipe = null, frames = [], position = 0, nextAt = 0, playing = !reducedMotion, timer, toastTimer, version = 0;
+let preset = null, effectName = '', values = {}, seed = 1, project = null, recipe = null, frames = [], position = 0, nextAt = 0, playing = !reducedMotion, timer, version = 0;
 
-function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4000); }
-function download(data, filename, type) {
-  const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data], { type }));
-  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-}
 const effectOf = fluidEffect;
 const sliders = () => fluidSliders(preset.source);
 // The preset with the sliders and seed applied (fluid-controls.js).
@@ -45,7 +39,7 @@ function tick(now) {
   }
   requestAnimationFrame(tick);
 }
-function playState() { $('play').textContent = playing ? 'Ⅱ' : '▶'; $('play').setAttribute('aria-label', playing ? 'Pause animation' : 'Play animation'); }
+const playState = () => playButton(playing);
 
 function commands() {
   const file = preset.file, background = $('backdrop').value, scale = $('scale').value;

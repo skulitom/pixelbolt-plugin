@@ -1,0 +1,382 @@
+{
+  "version": 1,
+  "name": "iso-tiles",
+  "width": 32,
+  "height": 64,
+  "palette": {
+    "G": "#6fb352",
+    "l": "#96d468",
+    "g": "#4a9148",
+    "f": "#32694a",
+    "E": "#b07e52",
+    "e": "#8a5a3c",
+    "d": "#63402f",
+    "k": "#432a24",
+    "h": "#e4e6ec",
+    "S": "#b9bdc9",
+    "s": "#8e93a6",
+    "x": "#666a82",
+    "q": "#45485f",
+    "K": "#2b2d44",
+    "w": "#a5e0f2",
+    "W": "#4fa6dc",
+    "u": "#3379bf",
+    "v": "#285593",
+    "A": "#6dbb5c",
+    "B": "#3f9455",
+    "C": "#2b6f50",
+    "D": "#1d4c45",
+    "o": "#152d33",
+    "Y": "#f3d597",
+    "O": "#e0b572",
+    "n": "#bd8a4c",
+    "y": "#f6dc5a",
+    "r": "#e8634f",
+    "i": "#f4f1e4"
+  },
+  "ramps": [
+    ["f", "g", "G", "l"],
+    ["k", "d", "e", "E"],
+    ["K", "q", "x", "s", "S", "h"],
+    ["v", "u", "W", "w"],
+    ["o", "D", "C", "B", "A"],
+    ["n", "O", "Y"]
+  ],
+  "symbols": {
+    "rim": [
+      "................................",
+      ".gg..........................ff.",
+      "..g..........................f..",
+      "......g...................f.....",
+      "................................",
+      "....E....gg..........ff..k......",
+      ".....E...g............f.k...k...",
+      ".............g....f.............",
+      "............E...................",
+      "...................k............",
+      "................................",
+      "..............E.................",
+      "................................"
+    ],
+    "tuft": [
+      "l.l",
+      ".g."
+    ],
+    "blade": [
+      "l",
+      "g"
+    ],
+    "pine": [
+      ".............B.............",
+      ".............B.............",
+      ".............B.............",
+      "............ABC............",
+      "............ABC............",
+      "...........AABCC...........",
+      "...........AABCC...........",
+      "..........AABBCCC..........",
+      "..........AABBCCC..........",
+      ".........AAABBBCCC.........",
+      ".........AAABBBCCC.........",
+      "........AAAABBBCCCD........",
+      "........BAAABBBCCCD........",
+      "........BBBCBBCDCD.........",
+      ".........BBCCCCDDD.........",
+      ".........DDDCCDDDD.........",
+      "........ADDDDDDDDDC........",
+      "........AAAADDBCDCC........",
+      ".......AAAABBBBCCCCC.......",
+      ".......AAAABBBBCCCCC.......",
+      ".......AAAABBBBCCCCC.......",
+      "......AAAAABBBBCCCCCC......",
+      "......AAAAABBBBCCCCCC......",
+      ".....AAAAAABBBBBCCCCCC.....",
+      ".....BBBAAABBBBBCCDDCD.....",
+      ".....BBBBACCBBCCCCDDDD.....",
+      ".......DBBCCCCCCDDDDD......",
+      "......DDDBDDCCDDDDDDD......",
+      "......AADDDDDDDDDDCCD......",
+      ".....AAAADABDDBBDDCCCC.....",
+      ".....AAAAAABBBBBCCCCCC.....",
+      ".....AAAAAABBBBBCCCCCC.....",
+      "....AAAAAABBBBBBCCCCCCC....",
+      "....AAAAAABBBBBBCCCCCCC....",
+      "...AAAAAAABBBBBBCCCCCCCC...",
+      "...AAAAAAABBBBBBCCCCCCCC...",
+      "..BBAAAAAABBBBBBCCCCCCCDC..",
+      "..BBAABAAABBBBBBCCCCCCDDD..",
+      "....BBBBAACCBBCCBCDDDDD.D..",
+      "....BB.BBBCCCCCCCDDDDD.....",
+      "........BC.dCCk.CD.........",
+      "...........ddkk............",
+      "...........ddkk............",
+      "...........ddkk............",
+      "...........eedd............",
+      "...........eedd............",
+      "...........eedd............",
+      "...........eedd............",
+      "..........eeeddd..........."
+    ],
+    "sapling": [
+      ".........B.........",
+      ".........B.........",
+      ".........B.........",
+      "........ABC........",
+      "........ABC........",
+      ".......AABCC.......",
+      ".......AABCC.......",
+      "......AABBCCC......",
+      "......AABBCCC......",
+      ".....AAABBBCCC.....",
+      ".....ABABBBCCC.....",
+      "....BBBBBBCDDD.....",
+      ".....BDBCCCDDD.....",
+      ".....DDDCCDDDD.....",
+      ".....DADDDDDDD.....",
+      "....AAAADDBCCCC....",
+      "....AAAABBBCCCC....",
+      "...AAAABBBBCCCCC...",
+      "...AAAABBBBCCCCC...",
+      "..BAAAABBBBCCCCCC..",
+      "..BBAAABBBBCCCDDD..",
+      "...BBABCBBCCCCDDD..",
+      "....BBBCCCCCDD.....",
+      ".....B..CC..DD.....",
+      "........dk.........",
+      "........dk.........",
+      "........dk.........",
+      "........ed.........",
+      "........ed.........",
+      ".......eedd........"
+    ],
+    "bush": [
+      ".....AAAABBB.....",
+      "...AAAAAABBBBC...",
+      "..AAAAAAABBBBCC..",
+      ".AAAAAAABBBBBCCC.",
+      "AAAAAABBBBBBCCCCD",
+      "AAAAABBBBBBCCCCDD",
+      "AAAABBBBBBCCCCDDD",
+      "AAABBBBBBCCCCDDDD",
+      ".AABBBBBCCCCDDDD.",
+      "..ABBBBCCCDDDDD..",
+      "....BBBCCDDDD...."
+    ],
+    "rock": [
+      ".......hhhh......",
+      ".....hhSSSSh.....",
+      "...hhSSSSSSSs....",
+      "..hSSSSSSSSSsx...",
+      ".hSSSSSSSSSsxxx..",
+      ".ssSSSSSSssxxxxx.",
+      "sssssSSsssxxxxxx.",
+      "sssssssssxxxxxxxx",
+      "ssssqssssxxxxxxxq",
+      ".sssqsssxxxxxxqq.",
+      "..sssssxxxxqqqq.."
+    ]
+  },
+  "frames": [
+    {
+      "name": "turf",
+      "ops": [
+        { "op": "box", "x": 0, "y": 38, "w": 16, "d": 16, "h": 10, "top": "G", "left": "k", "right": "k" },
+        { "op": "box", "x": 0, "y": 38, "w": 16, "d": 16, "h": 9, "top": "G", "left": "e", "right": "d" },
+        { "op": "box", "x": 0, "y": 38, "w": 16, "d": 16, "h": 3, "top": "G", "left": "g", "right": "f" },
+        { "op": "stamp", "x": 0, "y": 49, "symbol": "rim" }
+      ]
+    },
+    {
+      "name": "grass",
+      "from": "turf",
+      "ops": [
+        { "op": "stamp", "x": 8, "y": 45, "symbol": "tuft" },
+        { "op": "stamp", "x": 21, "y": 47, "symbol": "blade" },
+        { "op": "stamp", "x": 15, "y": 42, "symbol": "blade" }
+      ]
+    },
+    {
+      "name": "grass-tufts",
+      "from": "turf",
+      "ops": [
+        { "op": "stamp", "x": 13, "y": 41, "symbol": "tuft" },
+        { "op": "stamp", "x": 6, "y": 46, "symbol": "tuft" },
+        { "op": "stamp", "x": 19, "y": 44, "symbol": "tuft" },
+        { "op": "stamp", "x": 14, "y": 49, "symbol": "tuft" },
+        { "op": "stamp", "x": 24, "y": 46, "symbol": "blade" },
+        { "op": "stamp", "x": 10, "y": 44, "symbol": "blade" }
+      ]
+    },
+    {
+      "name": "grass-flowers",
+      "from": "turf",
+      "ops": [
+        { "op": "stamp", "x": 10, "y": 47, "symbol": "tuft" },
+        { "op": "pixel", "x": 15, "y": 42, "color": "y" },
+        { "op": "pixel", "x": 21, "y": 46, "color": "y" },
+        { "op": "pixel", "x": 12, "y": 44, "color": "i" },
+        { "op": "pixel", "x": 15, "y": 43, "color": "g" },
+        { "op": "pixel", "x": 21, "y": 47, "color": "g" },
+        { "op": "pixel", "x": 12, "y": 45, "color": "g" }
+      ]
+    },
+    {
+      "name": "paver",
+      "from": "turf",
+      "ops": [
+        { "op": "ellipse", "x": 6, "y": 42, "w": 20, "h": 10, "color": "x" },
+        { "op": "ellipse", "x": 6, "y": 41, "w": 20, "h": 10, "color": "h" },
+        { "op": "ellipse", "x": 7, "y": 42, "w": 19, "h": 9, "color": "S" },
+        { "op": "pixel", "x": 13, "y": 45, "color": "s" },
+        { "op": "pixel", "x": 14, "y": 46, "color": "s" },
+        { "op": "pixel", "x": 15, "y": 46, "color": "s" },
+        { "op": "pixel", "x": 20, "y": 44, "color": "s" }
+      ]
+    },
+    {
+      "name": "paver-worn",
+      "from": "turf",
+      "ops": [
+        { "op": "ellipse", "x": 5, "y": 43, "w": 14, "h": 7, "color": "x" },
+        { "op": "ellipse", "x": 5, "y": 42, "w": 14, "h": 7, "color": "h" },
+        { "op": "ellipse", "x": 6, "y": 43, "w": 13, "h": 6, "color": "S" },
+        { "op": "ellipse", "x": 16, "y": 46, "w": 11, "h": 6, "color": "x" },
+        { "op": "ellipse", "x": 16, "y": 45, "w": 11, "h": 6, "color": "h" },
+        { "op": "ellipse", "x": 17, "y": 46, "w": 10, "h": 5, "color": "S" },
+        { "op": "pixel", "x": 10, "y": 45, "color": "s" },
+        { "op": "pixel", "x": 11, "y": 45, "color": "s" },
+        { "op": "pixel", "x": 21, "y": 48, "color": "s" },
+        { "op": "stamp", "x": 20, "y": 42, "symbol": "blade" }
+      ]
+    },
+    {
+      "name": "water-0",
+      "duration": 330,
+      "ops": [
+        { "op": "box", "x": 0, "y": 41, "w": 16, "d": 16, "h": 7, "top": "W", "left": "u", "right": "v" },
+        { "op": "rect", "x": 7, "y": 49, "w": 1, "h": 1, "color": "w" },
+        { "op": "rect", "x": 18, "y": 45, "w": 3, "h": 1, "color": "w" },
+        { "op": "rect", "x": 21, "y": 52, "w": 4, "h": 1, "color": "w" },
+        { "op": "rect", "x": 15, "y": 54, "w": 2, "h": 1, "color": "w" },
+        { "op": "rect", "x": 9, "y": 47, "w": 2, "h": 1, "color": "u" },
+        { "op": "rect", "x": 20, "y": 49, "w": 3, "h": 1, "color": "u" },
+        { "op": "rect", "x": 13, "y": 51, "w": 4, "h": 1, "color": "u" }
+      ]
+    },
+    {
+      "name": "water-1",
+      "duration": 330,
+      "ops": [
+        { "op": "box", "x": 0, "y": 41, "w": 16, "d": 16, "h": 7, "top": "W", "left": "u", "right": "v" },
+        { "op": "rect", "x": 8, "y": 49, "w": 3, "h": 1, "color": "w" },
+        { "op": "rect", "x": 19, "y": 45, "w": 4, "h": 1, "color": "w" },
+        { "op": "rect", "x": 22, "y": 52, "w": 2, "h": 1, "color": "w" },
+        { "op": "rect", "x": 12, "y": 54, "w": 1, "h": 1, "color": "w" },
+        { "op": "rect", "x": 8, "y": 47, "w": 2, "h": 1, "color": "u" },
+        { "op": "rect", "x": 19, "y": 49, "w": 4, "h": 1, "color": "u" },
+        { "op": "rect", "x": 12, "y": 51, "w": 2, "h": 1, "color": "u" }
+      ]
+    },
+    {
+      "name": "water-2",
+      "duration": 330,
+      "ops": [
+        { "op": "box", "x": 0, "y": 41, "w": 16, "d": 16, "h": 7, "top": "W", "left": "u", "right": "v" },
+        { "op": "rect", "x": 9, "y": 49, "w": 4, "h": 1, "color": "w" },
+        { "op": "rect", "x": 20, "y": 45, "w": 2, "h": 1, "color": "w" },
+        { "op": "rect", "x": 19, "y": 52, "w": 1, "h": 1, "color": "w" },
+        { "op": "rect", "x": 13, "y": 54, "w": 3, "h": 1, "color": "w" },
+        { "op": "rect", "x": 11, "y": 47, "w": 3, "h": 1, "color": "u" },
+        { "op": "rect", "x": 18, "y": 49, "w": 2, "h": 1, "color": "u" },
+        { "op": "rect", "x": 11, "y": 51, "w": 2, "h": 1, "color": "u" }
+      ]
+    },
+    {
+      "name": "water-3",
+      "duration": 330,
+      "ops": [
+        { "op": "box", "x": 0, "y": 41, "w": 16, "d": 16, "h": 7, "top": "W", "left": "u", "right": "v" },
+        { "op": "rect", "x": 10, "y": 49, "w": 2, "h": 1, "color": "w" },
+        { "op": "rect", "x": 17, "y": 45, "w": 1, "h": 1, "color": "w" },
+        { "op": "rect", "x": 20, "y": 52, "w": 3, "h": 1, "color": "w" },
+        { "op": "rect", "x": 14, "y": 54, "w": 4, "h": 1, "color": "w" },
+        { "op": "rect", "x": 10, "y": 47, "w": 4, "h": 1, "color": "u" },
+        { "op": "rect", "x": 17, "y": 49, "w": 2, "h": 1, "color": "u" },
+        { "op": "rect", "x": 14, "y": 51, "w": 3, "h": 1, "color": "u" }
+      ]
+    },
+    {
+      "name": "block",
+      "ops": [
+        { "op": "box", "x": 0, "y": 36, "w": 16, "d": 16, "h": 12, "top": "S", "left": "q", "right": "q" },
+        { "op": "box", "x": 0, "y": 36, "w": 16, "d": 16, "h": 11, "top": "S", "left": "s", "right": "x", "edge": "h" },
+        { "op": "box", "x": 0, "y": 36, "w": 16, "d": 16, "h": 6, "top": "S", "left": "x", "right": "q" },
+        { "op": "box", "x": 0, "y": 36, "w": 16, "d": 16, "h": 5, "top": "S", "left": "s", "right": "x", "edge": "h" },
+        { "op": "rect", "x": 2, "y": 51, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 8, "y": 54, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 13, "y": 57, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 18, "y": 57, "w": 1, "h": 5, "color": "q" },
+        { "op": "rect", "x": 23, "y": 54, "w": 1, "h": 5, "color": "q" },
+        { "op": "rect", "x": 29, "y": 51, "w": 1, "h": 5, "color": "q" },
+        { "op": "rect", "x": 5, "y": 47, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 11, "y": 50, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 20, "y": 50, "w": 1, "h": 5, "color": "q" },
+        { "op": "rect", "x": 26, "y": 47, "w": 1, "h": 5, "color": "q" },
+        { "op": "pixel", "x": 12, "y": 42, "color": "s" },
+        { "op": "pixel", "x": 13, "y": 42, "color": "s" },
+        { "op": "pixel", "x": 20, "y": 46, "color": "s" }
+      ]
+    },
+    {
+      "name": "step",
+      "ops": [
+        { "op": "box", "x": 0, "y": 42, "w": 16, "d": 16, "h": 6, "top": "S", "left": "q", "right": "q" },
+        { "op": "box", "x": 0, "y": 42, "w": 16, "d": 16, "h": 5, "top": "S", "left": "s", "right": "x", "edge": "h" },
+        { "op": "rect", "x": 5, "y": 53, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 11, "y": 56, "w": 1, "h": 5, "color": "x" },
+        { "op": "rect", "x": 20, "y": 56, "w": 1, "h": 5, "color": "q" },
+        { "op": "rect", "x": 26, "y": 53, "w": 1, "h": 5, "color": "q" },
+        { "op": "pixel", "x": 10, "y": 49, "color": "g" },
+        { "op": "pixel", "x": 11, "y": 49, "color": "g" },
+        { "op": "pixel", "x": 11, "y": 50, "color": "g" },
+        { "op": "pixel", "x": 22, "y": 47, "color": "g" },
+        { "op": "pixel", "x": 17, "y": 51, "color": "s" },
+        { "op": "pixel", "x": 18, "y": 51, "color": "s" }
+      ]
+    },
+    {
+      "name": "crate",
+      "ops": [
+        { "op": "box", "x": 6, "y": 41, "w": 10, "d": 10, "h": 10, "top": "O", "left": "k", "right": "k" },
+        { "op": "box", "x": 6, "y": 41, "w": 10, "d": 10, "h": 9, "top": "O", "left": "n", "right": "e", "edge": "Y" },
+        { "op": "box", "x": 6, "y": 41, "w": 10, "d": 10, "h": 5, "top": "O", "left": "e", "right": "d" },
+        { "op": "box", "x": 6, "y": 41, "w": 10, "d": 10, "h": 4, "top": "O", "left": "n", "right": "e", "edge": "Y" },
+        { "op": "box", "x": 10, "y": 43, "w": 6, "d": 6, "h": 0, "top": "n" },
+        { "op": "outline", "color": "k" }
+      ]
+    },
+    { "name": "pine", "ops": [{ "op": "stamp", "x": 2, "y": 9, "symbol": "pine" }, { "op": "outline", "color": "o" }] },
+    {
+      "name": "sapling",
+      "ops": [{ "op": "stamp", "x": 6, "y": 28, "symbol": "sapling" }, { "op": "outline", "color": "o" }]
+    },
+    {
+      "name": "bush",
+      "ops": [
+        { "op": "stamp", "x": 7, "y": 47, "symbol": "bush" },
+        { "op": "pixel", "x": 11, "y": 51, "color": "r" },
+        { "op": "pixel", "x": 17, "y": 50, "color": "r" },
+        { "op": "pixel", "x": 14, "y": 54, "color": "r" },
+        { "op": "outline", "color": "o" }
+      ]
+    },
+    { "name": "rock", "ops": [{ "op": "stamp", "x": 8, "y": 48, "symbol": "rock" }, { "op": "outline", "color": "K" }] },
+    { "name": "shadow", "ops": [{ "op": "ellipse", "x": 7, "y": 51, "w": 22, "h": 10, "color": "k" }] },
+    { "name": "shadow-small", "ops": [{ "op": "ellipse", "x": 9, "y": 54, "w": 18, "h": 7, "color": "k" }] }
+  ],
+  "animations": {
+    "water": { "frames": ["water-0", "water-1", "water-2", "water-3"] },
+    "water-late": { "frames": ["water-2", "water-3", "water-0", "water-1"] }
+  },
+  "sheet": { "columns": 6 }
+}

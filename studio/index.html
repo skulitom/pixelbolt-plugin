@@ -43,7 +43,7 @@
       <p class="source-description">An editable recipe for every sprite.<br>Changes appear as you type.</p>
       <div id="draft" class="draft" role="status" hidden><p id="draft-text"></p><div class="draft-actions"><button id="draft-restore" class="text-button">Restore draft</button><button id="draft-discard" class="text-button">Discard draft</button></div></div>
       <div class="source-toolbar"><span id="source-filename">forest-spirit.json</span><span>JSON</span></div>
-      <textarea id="source" aria-label="Project JSON source" aria-describedby="source-keys" spellcheck="false" wrap="off"></textarea>
+      <textarea id="source" aria-label="Project JSON source" aria-describedby="source-keys" aria-busy="true" placeholder="Loading the recipe…" spellcheck="false" wrap="off" readonly></textarea>
       <span id="source-keys" class="sr-only">Tab indents. Press Escape and then Tab to move to the next control, or Shift and Tab to move back.</span>
       <div id="error" class="error" role="alert" hidden></div>
       <div class="palette-section"><div class="section-heading"><h2>Palette</h2><span id="color-count"></span></div><div id="palette" class="palette"></div><p id="color-info">Select a swatch to inspect its color.</p></div>

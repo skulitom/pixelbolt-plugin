@@ -1,12 +1,11 @@
 // Image sequences for video editors: one numbered PNG per video frame at a constant frame rate, on a canvas of the
 // video's size. Editors read these directly and keep the alpha; nothing here encodes video. Timing is exact integer
 // arithmetic on the frame rate as a fraction, so 29.97 means 30000/1001 and a sequence is the same on every machine.
-import { PixelError, parseColor } from './core.js';
+import { parseColor, fail } from './core.js';
 import { renderScene } from './scene.js';
 import { bodiesFrames } from './bodies.js';
 import { encodePNG } from './png.js';
 
-const fail = (path, message) => { throw new PixelError(path, message); };
 export const MAX_SEQUENCE_FRAMES = 18000;
 const MAX_UNIQUE_PIXELS = 4294967296;
 export const VIDEO_SIZES = { '720p': [1280, 720], '1080p': [1920, 1080], '1440p': [2560, 1440], '4k': [3840, 2160], vertical: [1080, 1920], square: [1080, 1080] };
@@ -285,8 +284,11 @@ export function createBodiesSequence(source, options = {}, { budget = Infinity, 
   }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, stream);
   const notes = [];
   if (built.place.cropped) notes.push(cropNote('match', built.info));
-  const steps = plan.timing.filter(entry => entry.frames > 0).length;
-  if (steps < match.frames && options.seconds === undefined) notes.push(`${match.frames - steps} of the match's ${match.frames} frames (${match.duration} ms each) fall between video frames at ${rate.label} frames per second and are not shown; give the effect a duration of at least one video frame (${Math.ceil(1000 * rate.denominator / rate.numerator)} ms at this rate).`);
+  // A clip that `seconds` ends before the match does (fewer video frames than the match fills) cuts the frames after
+  // the last one it shows: those are not skipped, so the skipped ones are counted up to it. Any other clip, held past
+  // the match's end or not, is counted over the whole match.
+  const reach = plan.count < Math.ceil(plan.exactFrames) ? plan.poses[plan.poses.length - 1] + 1 : match.frames, missed = reach - different;
+  if (missed > 0) notes.push(`${missed} of the match's ${reach < match.frames ? `first ${reach}` : match.frames} frames (${match.duration} ms each) ${missed === 1 ? 'falls' : 'fall'} between video frames at ${rate.label} frames per second and ${missed === 1 ? 'is' : 'are'} not shown; give the effect a duration of at least one video frame (${Math.ceil(1000 * rate.denominator / rate.numerator)} ms at this rate).`);
   built.info.loop = { loops: 1, plays: 'once', passFrames: Math.round(plan.exactFrames * 1e6) / 1e6, seamless: false };
   return finish(built, notes, () => { built.info.figures = match.figures(); });
 }

@@ -12,7 +12,7 @@ const SKILL_SOURCE = 'skills/pixel-art/SKILL.md';
 export const SKILL_NAME = 'pixelbolt-pixel-art';
 export const SKILL_MANIFEST = '.pixelbolt-skill.json';
 // The agent-facing guides the skill and the quick start cite; a test fails when the skill names one not listed here.
-const DOCS = ['docs/agent-quick-start.md', 'docs/agent-guide.md', 'docs/art-workflow.md', 'docs/wave-effects.md', 'docs/game-integration.md'];
+const DOCS = ['docs/agent-quick-start.md', 'docs/agent-craft.md', 'docs/agent-guide.md', 'docs/art-workflow.md', 'docs/wave-effects.md', 'docs/game-integration.md'];
 const REPOSITORY = 'https://github.com/skulitom/Pixelbolt';
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 
@@ -51,7 +51,7 @@ function standaloneSkill(text, version) {
   const command = skillCommand(version);
   const end = text.startsWith('---') ? text.indexOf('\n---', 3) + 4 : 0;
   const head = text.slice(0, end), paragraphs = text.slice(end).split(/\n{2,}/);
-  const intro = `This copy of the skill was installed on its own by \`pixelbolt skill install\` from Pixelbolt ${version}, with no checkout and no MCP server. Run every command as written below, through \`${command}\` (Node.js 20 or newer; npm downloads the package on first use), or through \`pixelbolt\` when Pixelbolt ${version} is installed globally. The guides, schemas and examples it names are copied beside this file, so \`docs/\`, \`schema.json\`, the \`*.schema.json\` files and \`examples/\` mean this skill's directory (\`${command} schema\` also prints the recipe schema). Commands run in the user's project, where those paths don't exist: copy an example into the project before editing or compiling it, together with the files it names (a scene's assets, a normals source's recipe, a shared palette), or pass its absolute path. Where the text below names an MCP tool, the command line does the same: \`pixel_validate\` is \`validate\`, \`pixel_inspect\` is \`inspect\`, \`pixel_patch\` is \`patch\`, \`pixel_render\` is \`render\` (for GIFs, \`gif\`, whose \`--scale\` is \`gif.scale\`), \`pixel_compile\` is \`compile <source> --out <recipe.json>\` (\`compile --preset <name> --out <recipe.json>\` for a preset), \`pixel_scene\` is \`scene\` and \`pixel_import\` is \`import\`, each run as above. A revision is the recipe file you saved, and \`pixel_help\` and its topics are the copied \`docs/agent-quick-start.md\`, \`docs/agent-guide.md\` (guide), \`docs/art-workflow.md\` (workflow) and the schema files; its \`presets\` and \`preset\` topics are \`presets\` and \`presets <name>\`, run as above. If Pixelbolt's MCP tools are configured as well, you may use them as described below.`;
+  const intro = `This copy of the skill was installed on its own by \`pixelbolt skill install\` from Pixelbolt ${version}, with no checkout and no MCP server. Run every command as written below, through \`${command}\` (Node.js 20 or newer; npm downloads the package on first use), or through \`pixelbolt\` when Pixelbolt ${version} is installed globally. The guides, schemas and examples it names are copied beside this file, so \`docs/\`, \`schema.json\`, the \`*.schema.json\` files and \`examples/\` mean this skill's directory (\`${command} schema\` also prints the recipe schema). Commands run in the user's project, where those paths don't exist: copy an example into the project before editing or compiling it, together with the files it names (a scene's assets, a normals source's recipe, a shared palette), or pass its absolute path. Where the text below names an MCP tool, the command line does the same: \`pixel_validate\` is \`validate\`, \`pixel_inspect\` is \`inspect\`, \`pixel_patch\` is \`patch\`, \`pixel_render\` is \`render\` (for GIFs, \`gif\`, whose \`--scale\` is \`gif.scale\`), \`pixel_compile\` is \`compile <source> --out <recipe.json>\` (\`compile --preset <name> --out <recipe.json>\` for a preset), \`pixel_scene\` is \`scene\` and \`pixel_import\` is \`import\`, each run as above. A revision is the recipe file you saved, and \`pixel_help\` and its topics are the copied \`docs/agent-quick-start.md\`, \`docs/agent-guide.md\` (guide), \`docs/art-workflow.md\` (workflow), \`docs/agent-craft.md\` (craft) and the schema files; its \`presets\` and \`preset\` topics are \`presets\` and \`presets <name>\`, run as above. If Pixelbolt's MCP tools are configured as well, you may use them as described below.`;
   const body = [];
   for (const paragraph of paragraphs) {
     // The plugin's server, the portable build and the SKILL.md-only copy (`npx skills add`) don't apply to this copy.
@@ -74,7 +74,9 @@ export function standaloneProblems(text, { skill = true } = {}) {
 export async function skillFiles(version) {
   const { files } = JSON.parse(await readFile(path.join(ROOT, 'package.json'), 'utf8'));
   const schemas = files.filter(file => /(?:^|\.)schema\.json$/.test(file)).sort();
-  const sources = [...DOCS, ...schemas, ...(await filesUnder('examples')).filter(file => file.endsWith('.json')).sort(), 'LICENSE'];
+  // The examples the package ships: an entry starting with "!" names a folder it leaves out, in a checkout too.
+  const left = files.filter(file => file.startsWith('!')).map(file => `${file.slice(1)}/`);
+  const sources = [...DOCS, ...schemas, ...(await filesUnder('examples')).filter(file => file.endsWith('.json') && !left.some(folder => file.startsWith(folder))).sort(), 'LICENSE'];
   const copied = new Map([[SKILL_SOURCE, 'SKILL.md'], ...sources.map(file => [file, file])]), command = skillCommand(version), out = new Map();
   for (const [source, target] of copied) {
     let data = await readFile(path.join(ROOT, source));

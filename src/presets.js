@@ -12,7 +12,7 @@ import { availableParallelism } from 'node:os';
 import { measurePresets } from './preset-pool.js';
 import { PixelError, renderProject } from './core.js';
 import { resolveReferences } from './resolve.js';
-import { compilePoses } from './authoring.js';
+import { compilePoses, compileAutotile, compileNormals } from './authoring.js';
 import { compileEffects } from './fx.js';
 import { compileFluid } from './fluid.js';
 import { compileWaves } from './wave.js';
@@ -25,12 +25,13 @@ import { POWDER_PRESETS } from '../studio/powder-controls.js';
 
 export const PRESET_FOLDER = fileURLToPath(new URL('../examples/', import.meta.url));
 const SOURCE = /^(.+)\.(fluid|fx|wave|crystal|powder|bodies|poses)\.json$/;
-const COMPILERS = { 'pixelforge-fluid': compileFluid, 'pixelforge-fx': compileEffects, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-poses': compilePoses };
+// What compiles each source format: the one table, which the CLI and the MCP server use too.
+export const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
 const TITLES = new Map([...FLUID_PRESETS.map(entry => [`fluid:${entry.file}`, entry]), ...EFFECT_PRESETS.map(entry => [`fx:${entry.file}`, entry]), ...POWDER_PRESETS.map(entry => [`powder:${entry.file}`, entry])]);
 
-// How to use the listing, and the one way to get fewer frames: a source's own `frames` is its simulation or timeline
-// length, so lowering it cuts the effect off before it ends instead of sampling it.
-export const PRESET_GUIDE = 'Start fire, smoke, explosions, splashes, spells and other effects from one of these rather than drawing them: pixel_compile {"preset": "<name>"} compiles one as it ships (pixelbolt compile --preset <name> --out <new.json> from a shell), and pixel_help {"topic": "preset", "name": "<name>"} returns its source to edit and compile (a recipe preset is already a recipe: edit it and send it as project). Fluid presets are simulations: a liquid preset (honey, slime, water) is liquid falling, pouring or splashing, not a character; for a character\'s squash, stretch or breathing idle, compile a pixelforge-poses source with one mass body and motions.idle (example: slime-idle). For fewer frames, never lower the source\'s frames (that stops the effect before it ends): compile the preset, then, per animation, keep N evenly spaced frames with one pixel_patch call that removes the others and lists the kept ones in the animation. Of an animation\'s F frames (its entry under animations), keep frame floor(i x F / N) for i = 0 to N - 1; for a one-shot that must end on its last frame, keep round(i x (F - 1) / (N - 1)) instead. The quick start has the call for 8 of smoke-puff\'s 19.';
+// How to use the listing. Fewer frames come from compiling with `frames`: a source's own `frames` is its simulation
+// or timeline length, so lowering it cuts the effect off before it ends instead of sampling it.
+export const PRESET_GUIDE = 'Start fire, smoke, explosions, splashes, spells and other effects from one of these rather than drawing them: pixel_compile {"preset": "<name>"} compiles one as it ships (pixelbolt compile --preset <name> --out <new.json> from a shell), with "size": "32x32" and "frames": 8 (--size, --frames) for the canvas and frame count asked for, and pixel_help {"topic": "preset", "name": "<name>"} returns its source to edit and compile (a recipe preset is already a recipe: edit it and send it as project). Fluid presets are simulations: a liquid preset (honey, slime, water) is liquid falling, pouring or splashing, not a character; for a character that squashes, stretches or breathes, compile a pixelforge-poses source with one mass body and motions.idle (example: slime-idle).';
 
 // What to do with a preset's source: a source compiles; a plain recipe already is one.
 export const presetNext = (entry, shell = false) => entry.kind === 'recipe'
@@ -119,7 +120,7 @@ function about(entry, source, animations) {
     const rest = Array.isArray(source.poses) ? source.poses.find(pose => pose?.name === source.rig?.rest) : undefined;
     const held = (Array.isArray(rest?.parts) ? rest.parts : []).filter(part => hands.has(part?.attach?.part) && source.parts?.[part.part]?.rows
       && !/hand/i.test(`${part.name} ${part.part}`)).map(part => part.name);
-    return templates.length ? `A ${source.rig?.fore ? 'four-legged ' : ''}rig whose motion templates make ${listNames(templates)}${held.length ? `, with ${listNames(held)} in hand` : ''}.` : `Posed parts: ${listNames(names)}.`;
+    return templates.length ? `A ${source.rig?.fore ? 'four-legged animal' : 'character'} rig whose motion templates make ${listNames(templates)}${held.length ? `, with ${listNames(held)} in hand` : ''}.` : `Posed parts: ${listNames(names)}.`;
   }
   if (entry.kind === 'fx') return `Particles and effect shapes: ${listNames(names)}.`;
   if (entry.kind === 'wave') return `A looping wave pattern: ${listNames(names)}.`;
@@ -137,16 +138,28 @@ function about(entry, source, animations) {
     return titled ? `${titleLine({ ...titled, note: titled.note.replace(/:\s*/g, ', ') })} Falling sand${of}.` : `A falling-sand sandbox${of}.`;
   }
   if (entry.kind === 'bodies') {
-    // What falls, bounces and topples: each shape counted with its copies on a ring or a grid.
-    const counts = new Map();
-    for (const effect of Object.values(source.effects ?? {})) for (const body of effect?.bodies ?? []) {
+    // What falls, bounces and topples: each shape counted with its copies on a ring or a grid, then its joints, ropes and cloth.
+    const counts = new Map(), effects = Object.values(source.effects ?? {});
+    for (const effect of effects) for (const body of effect?.bodies ?? []) {
       const copies = body?.ring?.count ?? (Array.isArray(body?.grid?.count) ? body.grid.count[0] * body.grid.count[1] : 1);
       counts.set(body?.shape, (counts.get(body?.shape) ?? 0) + copies);
     }
     const parts = [...counts].filter(([shape]) => typeof shape === 'string').map(([shape, n]) => `${n} ${shape}${n === 1 ? '' : shape === 'box' ? 'es' : 's'}`);
-    return `Simulated rigid bodies: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'none'}.`;
+    const joints = effects.reduce((n, effect) => n + (effect?.joints?.length ?? 0), 0);
+    const ropes = effects.reduce((n, effect) => n + (effect?.ropes?.length ?? 0), 0);
+    const cloths = effects.reduce((n, effect) => n + (effect?.cloths?.length ?? 0), 0);
+    const extras = [joints && `${joints} joint${joints === 1 ? '' : 's'}`, ropes && `${ropes} rope${ropes === 1 ? '' : 's'}`, cloths && `${cloths} cloth${cloths === 1 ? '' : 's'}`].filter(Boolean);
+    if (!parts.length && cloths) {
+      const others = extras.filter(extra => !/ cloth/.test(extra));
+      return `Cloth${cloths === 1 ? '' : ` (${cloths})`}${others.length ? ` with ${others.join(' and ')}` : ''}.`;
+    }
+    const bodies = `Simulated rigid bodies: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'none'}.`;
+    return extras.length ? `${bodies.slice(0, -1)}, with ${extras.join(' and ')}.` : bodies;
   }
-  return `A hand-drawn recipe: ${listNames(names)}.`;
+  // Frames no animation plays are pictures of their own: the tiles of a set beside its one animated tile.
+  const played = new Set(Object.values(source.animations ?? {}).flatMap(item => (Array.isArray(item?.frames) ? item.frames : []).map(frame => frame?.frame ?? frame)));
+  const stills = (Array.isArray(source.frames) ? source.frames : []).map(frame => frame?.name).filter(name => typeof name === 'string' && !played.has(name));
+  return `A hand-drawn recipe: ${listNames(names)}${stills.length ? `; stills ${listNames(stills)}` : ''}.`;
 }
 
 // One line of facts per preset, from compiling it: what an agent compares with the request before picking one.
@@ -235,13 +248,14 @@ async function openCache(directory) {
 // The cache only ever saves time: when it can't be read or written, the listing measures as it would without it.
 // `concurrency: 1` uses the original in-thread path. Larger values are capped at eight and leave one available core
 // free (at least one); cached facts and a lone miss never need a pool.
-export async function listPresets({ budget = 20000, cache, concurrency = Math.max(1, Math.min(8, availableParallelism() - 1)) } = {}) {
+// `only`, a test of an entry, lists just those presets (a shell's `presets --find`, which has no cache to fill).
+export async function listPresets({ budget = 20000, cache, only, concurrency = Math.max(1, Math.min(8, availableParallelism() - 1)) } = {}) {
   if (!Number.isInteger(concurrency) || concurrency < 1) throw new RangeError('concurrency must be a positive integer');
   concurrency = Math.min(concurrency, Math.max(1, Math.min(8, availableParallelism() - 1)));
   const presets = [], store = cache === undefined ? undefined : await openCache(cache).catch(() => undefined), kept = {};
   // Start the budget after setup (hashing the engine, reading the folder); source resolution and worker startup
   // count toward it, and only work already in flight can finish past it.
-  const entries = await presetEntries(), start = Date.now();
+  const entries = only ? (await presetEntries()).filter(only) : await presetEntries(), start = Date.now();
   // Resolve and check the cache before making a pool: a warm listing, or a single miss, needs no workers. The
   // explicit serial path keeps its original load/measure order. A non-positive budget uses that path too: at zero,
   // its inclusive clock check can admit the first preset before loading it. Pool preparation would lose that turn.
@@ -263,7 +277,7 @@ export async function listPresets({ budget = 20000, cache, concurrency = Math.ma
     }
   }
   // Only presets in this listing are kept, so the file never grows past the folder.
-  if (store && (added || Object.keys(kept).length !== Object.keys(store.cached).length)) await store.save(kept).catch(() => {});
+  if (store && !only && (added || Object.keys(kept).length !== Object.keys(store.cached).length)) await store.save(kept).catch(() => {});
   return { guide: PRESET_GUIDE, presets, ...(unmeasured && { note: `${unmeasured} presets were listed without measuring them, to keep this call short; pixel_compile one by name to see it.` }) };
 }
 
@@ -279,6 +293,41 @@ export function briefListing({ guide, presets, note }) {
     return `${entry.kind}, ${entry.size}, ${entry.frames} frames${count > 1 ? ` in ${count} animations` : ''}, ${entry.plays}, ${entry.colors} colours. ${entry.for}`;
   };
   return { guide: `${guide} ${BRIEF_NOTE}`, presets: Object.fromEntries(presets.map(entry => [entry.name, line(entry)])), ...(note && { note }) };
+}
+
+// The presets a few words mean, so an agent reads the lines it can use and not the whole listing (8 KB for 73 presets,
+// read for one line): the presets whose names hold the most of the words, or, when no name holds any, those whose
+// lines do. Words are matched as written, ignoring case.
+export const FIND_NOTE = 'Matched by name, or by description when no name matches. Each reads: kind, size, frames, loop or one-shot, colours, what it is for. pixel_compile {"preset": "<name>"} (pixelbolt compile --preset <name> --out <new.json>) compiles one as it ships, with size and frames (--size, --frames) for the canvas and frame count asked for; pixel_help {"topic": "preset", "name": "<name>"} (pixelbolt presets <name>) returns its source to edit. A colour is changed after compiling, with a patch of the palette: pixel_inspect with palette: true (inspect --palette) says which keys colour what.';
+export function presetWords(query, where = 'find') {
+  const words = typeof query === 'string' ? query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean) : [];
+  if (!words.length) throw new PixelError(where, 'expected words to look for, such as "fire" or "water splash"');
+  return words;
+}
+const closest = (items, text, words) => {
+  const scored = items.map(item => ({ item, score: words.filter(word => text(item).toLowerCase().includes(word)).length })), top = Math.max(0, ...scored.map(entry => entry.score));
+  return top ? scored.filter(entry => entry.score === top).map(entry => entry.item) : [];
+};
+const NOT_A_CHARACTER = /,? not a character/g;
+export const namedLike = (entries, words) => closest(entries, entry => entry.name, words);
+// What each kind of preset is called, for a search word that names a kind rather than a preset.
+const KIND_WORDS = { powder: 'sand powder sandbox grains falling', bodies: 'bodies body rigid physics ball balls box boxes crate crates', wave: 'wave waves ripple ripples portal', crystal: 'crystal crystals gem gems', fluid: 'fluid liquid gas smoke', fx: 'particles particle spell spells', poses: 'character rig' };
+// `all` is every preset by name and kind, where the listing holds only those measured for this search.
+export function findListing(listing, query, where = 'find', all = listing.presets) {
+  const words = presetWords(query, where), lines = briefListing(listing).presets;
+  // A liquid's line says it is not a character, which is no reason to list it for "character".
+  const named = namedLike(listing.presets, words), found = named.length ? named : closest(listing.presets, entry => lines[entry.name].replace(NOT_A_CHARACTER, ''), words);
+  if (!found.length) {
+    // Nothing ships for most characters, and the way to one is a rig redrawn, so the reply names the rigs.
+    const rigs = listing.presets.filter(entry => entry.kind === 'poses' && /rig whose/.test(entry.for ?? '')).map(entry => entry.name);
+    return { guide: `No preset matches "${query}": try another word, or draw it (the quick start says how).${rigs.length ? ` For a character or creature, start from a rig and redraw it (${rigs.join(', ')}; pixel_help {"topic": "craft", "name": "Characters"}, pixelbolt help craft "Characters").` : ''} Every preset by name:`, names: listing.presets.map(entry => entry.name).join(', ') };
+  }
+  // Names come first, and a kind of preset the words also stand for is named with its presets: "sand" is three
+  // liquids by name, and falling sand is a kind of its own with five.
+  const kinds = new Set(found.map(entry => entry.kind));
+  const also = Object.entries(KIND_WORDS).filter(([kind, text]) => !kinds.has(kind) && words.some(word => text.split(' ').includes(word)))
+    .map(([kind]) => [kind, all.filter(entry => entry.kind === kind).map(entry => entry.name)]).filter(([, names]) => names.length).map(([kind, names]) => `${kind}: ${names.join(', ')}`).join('; ');
+  return { guide: FIND_NOTE, presets: Object.fromEntries(found.map(entry => [entry.name, lines[entry.name]])), ...(also && { also: `Kinds of preset those words also name: ${also}.` }), ...(listing.note && { note: listing.note }) };
 }
 
 async function parallelSummaries(entries, store, deadline, concurrency) {

@@ -40,8 +40,11 @@ const routes = new Map([
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
   ['/electric.js', ['./electric.js', 'text/javascript; charset=utf-8']],
   ['/bodies.js', ['./bodies.js', 'text/javascript; charset=utf-8']],
+  ['/constraints.js', ['./constraints.js', 'text/javascript; charset=utf-8']],
+  ['/cloth.js', ['./cloth.js', 'text/javascript; charset=utf-8']],
   ['/territory.js', ['./territory.js', 'text/javascript; charset=utf-8']],
   ['/wave.js', ['./wave.js', 'text/javascript; charset=utf-8']],
+  ['/page.js', ['../studio/page.js', 'text/javascript; charset=utf-8']],
   ['/effects.html', ['../studio/effects.html', 'text/html; charset=utf-8']],
   ['/effects-lab.js', ['../studio/effects-lab.js', 'text/javascript; charset=utf-8']],
   ['/effects-controls.js', ['../studio/effects-controls.js', 'text/javascript; charset=utf-8']],
@@ -60,11 +63,13 @@ const routes = new Map([
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
-  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'tesla-coil', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
+  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
 export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/scene-source.json', '/project.json', '/shared-palette.json'];
 export const STUDIO_PORT = 4747;
+// The ports from 1024 up that browsers refuse to open (the Fetch standard's bad ports).
+export const REFUSED_PORTS = new Set([1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080]);
 // The most the studio sends back as one ZIP of frames; longer or larger clips belong on the command line.
 const SEQUENCE_ZIP_BYTES = 512 * 1048576;
 // The program and arguments that hand an address to the system's default browser, without a shell to quote for.
@@ -145,7 +150,17 @@ export async function startStudio({ port = STUDIO_PORT, fallback = false, projec
     } catch (error) { reply(400, 'application/json', JSON.stringify({ error: error.message })); }
   });
   const listen = number => new Promise((resolve, reject) => { server.once('error', reject); server.listen(number, '127.0.0.1', () => { server.off('error', reject); resolve(); }); });
-  await listen(port).catch(error => { if (!fallback || error.code !== 'EADDRINUSE') throw error; return listen(0); });
+  // Any free port, but not one a browser (and fetch) refuses to open: the system hands those out too where its range
+  // of free ports starts low, as on Windows with WSL or Hyper-V (from 1024), and it hands them out in order, so the
+  // next try is the next port.
+  const anyPort = async () => {
+    for (let tries = 0; ; tries++) {
+      await listen(0);
+      if (!REFUSED_PORTS.has(server.address().port) || tries === 8) return;
+      await new Promise(resolve => server.close(resolve));
+    }
+  };
+  await (port === 0 ? anyPort() : listen(port).catch(error => { if (!fallback || error.code !== 'EADDRINUSE') throw error; return anyPort(); }));
   // One write, so anything reading the output sees the whole message at once.
   if (!quiet) console.log(`Pixelbolt studio: http://127.0.0.1:${server.address().port}\n${port && server.address().port !== port ? `Port ${port} is in use, so this studio has another address. A draft kept at the usual address is not shown here.\n` : ''}Press Ctrl+C to stop.`);
   return server;

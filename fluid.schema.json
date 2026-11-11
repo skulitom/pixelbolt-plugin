@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Pixelbolt fluid effects",
-  "description": "Start fire, smoke, explosions and splashes from a preset (pixel_help topic presets, then pixel_compile with preset); for fewer frames keep N evenly spaced frames with one pixel_patch call (the quick start shows it), never by lowering frames in the source, which stops the simulation early. A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
+  "description": "Start fire, smoke, explosions and splashes from a preset (pixel_help topic presets, then pixel_compile with preset); for fewer frames compile with frames (--frames), never by lowering frames in the source, which stops the simulation early. A deterministic fluid simulation compiled into an ordinary recipe: one frame sequence and animation per effect (frames <effect>-0, <effect>-1…), each frame a palette grid operation, with obstacles stamped from symbols. Gases (smoke, fire, steam, explosions, magic) run stable fluids with buoyancy, vorticity confinement, dissipation and cooling; liquids (splashes, waterfalls, drips, potions) run FLIP particles on the same grid. Either may be viscous (honey, syrup, tar), and a liquid may have a yield stress (mud, slime). Look layers map fields onto palette ramps through ordered dither, so no colour outside the palette can appear. Looping effects warm up for whole cycles and blend their closing frames toward the frames before frame 0, so the last frame flows into the first. The same source gives the same recipe on every machine.",
   "type": "object",
   "properties": {
     "format": {
@@ -67,7 +67,7 @@
       },
       "maxItems": 2,
       "minItems": 2,
-      "description": "Default pivot for every frame, exported to the atlas as anchor (exported pixels) and pivot (anchor / source size)."
+      "description": "Default pivot for every frame, exported to the atlas as anchorPx (exported pixels) and as anchor and pivot (anchor / source size, the 0-1 origin Phaser and PixiJS read)."
     },
     "effects": {
       "type": "object",
@@ -788,6 +788,20 @@
                   "additionalProperties": false,
                   "description": "The emitter circles at (or follows an ellipse round it); a negative period turns anticlockwise. A rate emitter is laid along the path it covered since the last frame, so a fast orbit leaves a smooth trail."
                 },
+                "follow": {
+                  "oneOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 31
+                    },
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  ],
+                  "description": "An obstacle this emitter stays beside: its index in obstacles, or the symbol exactly one of them stamps. Write at for where the obstacle starts (its own x and y); as the obstacle's keys move it, the emitter moves the same whole pixels, so a nozzle's flame leaves with its rocket. A rate emitter is laid along the way between frames (not across a key with no over, which is a cut). It emits whether or not the obstacle shows; end stops it."
+                },
                 "carry": {
                   "type": "object",
                   "properties": {
@@ -1432,7 +1446,7 @@
                   },
                   "maxItems": 8,
                   "minItems": 3,
-                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid."
+                  "description": "polygon: 3–8 convex points [x, y] around the body's centre, recentred on their centroid (at places the centroid). A symbol stays where the points were written: its middle on the point they are written around."
                 },
                 "sides": {
                   "type": "integer",
@@ -2274,7 +2288,7 @@
         },
         "trim": {
           "type": "boolean",
-          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns."
+          "description": "Pack each frame by its visible bounds; the atlas reports trimmed rectangles with spriteSourceSize. Ignores columns. Frames whose visible pictures are the same (a hold, a frame moved whole) share one rectangle."
         }
       },
       "required": [],

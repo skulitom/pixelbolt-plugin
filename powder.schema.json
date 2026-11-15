@@ -354,6 +354,7 @@
             "additionalProperties": false
           },
           "above": {
+            "description": "A phase change above a temperature (melting, boiling).",
             "type": "object",
             "properties": {
               "temperature": {
@@ -386,6 +387,7 @@
             "additionalProperties": false
           },
           "below": {
+            "description": "A phase change below a temperature (freezing, condensing, crusting).",
             "type": "object",
             "properties": {
               "temperature": {

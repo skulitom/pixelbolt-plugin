@@ -21,6 +21,10 @@ export function number(value, path, min, max) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
   return value;
 }
+export function boolean(value, path) {
+  if (typeof value !== 'boolean') fail(path, 'expected true or false');
+  return value;
+}
 export function integer(value, path, min, max) {
   if (!Number.isInteger(value) || value < min || value > max) fail(path, `expected an integer from ${min} to ${max}`);
   return value;
@@ -165,6 +169,8 @@ export function compilePoses(source, within) {
   if (motions !== undefined) { const input = source; source = expandPoses(source); written = writtenPoses(input, source); }
   fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'innerLines', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
   if (source.format !== 'pixelforge-poses' || source.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
+  // Before anything is sized by it: the pass that shades inner lines made its arrays from a width nothing had checked.
+  for (const side of ['width', 'height']) if (!Number.isInteger(source[side]) || source[side] < 1 || source[side] > 256) fail(`project.${side}`, `${source[side] === undefined ? 'missing; ' : ''}expected an integer from 1 to 256`);
   if (source.light !== undefined && (!Number.isInteger(source.light) || source.light < 0 || source.light > 359)) fail('poses.light', 'expected whole degrees from 0 to 359');
   if (source.innerLines !== undefined && !['shade', 'outline'].includes(source.innerLines)) fail('poses.innerLines', 'expected shade (the default) or outline');
   if (source.ramps !== undefined && (!Array.isArray(source.ramps) || source.ramps.length > 64)) fail('poses.ramps', 'expected at most 64 colour ramps');
@@ -405,7 +411,7 @@ export function compilePoses(source, within) {
         point(instance.reach, `${ip}.reach`);
         if (instance.rotate !== undefined || instance.angle !== undefined) fail(`${ip}.reach`, 'reach replaces the last bone angle');
         const parent = spec.parts[instances.get(instance.attach?.part)], first = source.parts[parent?.part], second = source.parts[instance.part];
-        if (!first?.bone || !second?.bone || first.points?.[instance.attach?.point] !== 'end') fail(`${ip}.reach`, 'reach needs a bone attached to the end point of another bone');
+        if (!instance.attach || !first?.bone || !second?.bone || first.points?.[instance.attach.point] !== 'end') fail(`${ip}.reach`, 'reach needs a bone attached to the end point of another bone');
         if (instance.at !== undefined && point(instance.at, `${ip}.at`).some(Boolean)) fail(`${ip}.at`, 'a reach chain must meet at its shared joint; omit at or use [0, 0]');
         if (owners.has(parent.name) || parent.reach !== undefined) fail(`${ip}.reach`, 'reach chains cannot overlap or share their first bone');
         owners.set(parent.name, instance);
@@ -812,6 +818,8 @@ export function compileAutotile(source) {
     symbols[`template-${variant.name}`] = rows;
   });
   if (source.animation !== undefined && (typeof source.animation !== 'string' || !source.animation.includes('{mask}'))) fail('autotile.animation', 'expected an animation name template containing {mask}');
+  // Variants that differ only in their palette or how long they show are the frames of one tile, not tiles to scatter.
+  const cycled = source.animation === undefined && Array.isArray(source.variants) && source.variants.length > 1 && source.variants.every(variant => variant !== null && typeof variant === 'object' && (variant.palette !== undefined || variant.duration !== undefined) && Object.keys(variant).every(key => ['name', 'palette', 'duration'].includes(key)));
   if (source.preview !== undefined) {
     fields(source.preview, ['background', 'rows'], 'autotile.preview');
     if (source.preview.background !== undefined) parseColor(source.preview.background, palette, 'autotile.preview.background');
@@ -850,11 +858,37 @@ export function compileAutotile(source) {
   const recipe = { version: 1, name: source.name, width: tile, height: tile, palette, ...(source.ramps !== undefined && { ramps: source.ramps }), symbols, frames, ...(source.animation !== undefined && { animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
   renderProject(recipe);
   const report = templateSeams(templates, tile, mode, drawn), warnings = seamWarnings(report, tile);
+  if (cycled) warnings.push(`autotile.variants: the ${source.variants.length} variants differ only in palette or duration, which are the frames of an animation, but with no \`animation\` each cell picks one of them at random and never changes. Add "animation": "${source.name}-{mask}" and every tile plays them in turn (an animated tile in the Godot TileSet and in Tiled).`);
   const count = kind => report.seams.reduce((sum, seam) => sum + seam.pixels.filter(p => (kind === 'corner' ? seam.corner : !seam.corner && (kind === 'shape') === p.shape)).length, 0);
   // At 84 pixels a tile the test map is 1680 × 1176 (2016 × 1596 with slopes), inside the size of a still. It mixes
   // the templates the frames draw, each as often as the variants that draw it.
+  // A variant that only recolours draws the shared template in its own palette, which one frame of one palette can't
+  // do: there it is a copy of the template in spare keys that hold its colours. (Every variant was drawn in the base
+  // palette, so a red set with a blue variant showed a test map all red.) The frames of an animation stay one template.
+  // A colour the palette already has keeps its key, each new colour gets one spare key however many variants use it, and
+  // a variant whose colours would take the palette past its 256 is drawn in the base palette, as all were.
+  const shown = { ...recipe, palette: { ...palette }, symbols: { ...symbols } }, spares = new Map();
+  let spare = 0x2460;
+  const drawnAs = variant => {
+    const base = symbolOf(variant);
+    if (variant.palette === undefined || source.animation !== undefined) return base;
+    const swap = new Map(), fresh = [];
+    for (const [key, value] of Object.entries(variant.palette)) {
+      if (Object.hasOwn(palette, value)) { swap.set(key, value); continue; }
+      if (!spares.has(value)) {
+        while (Object.hasOwn(shown.palette, String.fromCharCode(spare))) spare++;
+        spares.set(value, String.fromCharCode(spare++)); fresh.push(value);
+      }
+      swap.set(key, spares.get(value));
+    }
+    if (Object.keys(shown.palette).length + fresh.length > 256) { for (const value of fresh) spares.delete(value); return base; }
+    for (const value of fresh) shown.palette[spares.get(value)] = value;
+    const name = `${base}-as-${variant.name}`;
+    shown.symbols[name] = symbols[base].map(row => [...row].map(key => swap.get(key) ?? key).join(''));
+    return name;
+  };
   const share = new Map();
-  for (const variant of variants) share.set(symbolOf(variant), (share.get(symbolOf(variant)) ?? 0) + (variant.weight ?? 1));
+  for (const variant of variants) { const symbol = drawnAs(variant); share.set(symbol, (share.get(symbol) ?? 0) + (variant.weight ?? 1)); }
   const most = Math.max(...share.values()), weighted = variants.some(variant => (variant.weight ?? 1) !== 1);
   // preview.rows: a map of the caller's own drawn in place of the test map, so a level laid out in characters is one
   // picture from the template alone: # for the terrain, . for nothing, and the set's slope characters.
@@ -866,7 +900,7 @@ export function compileAutotile(source) {
     level.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (!known.includes(row[x])) fail(`autotile.preview.rows[${y}]`, `character ${JSON.stringify(row[x])} at column ${x} is not one this set draws: ${said}${slopes ? '' : ' (a set with slopes has a character for each)'}`); });
     if (level[0].length * tile > 4096 || level.length * tile > 4096 || level[0].length * level.length * tile * tile > 4194304) fail('autotile.preview.rows', `${level[0].length} by ${level.length} tiles of ${tile} pixels is more than one picture holds (4096 a side, 4,194,304 pixels)`);
   }
-  const preview = testMapRecipe(recipe, { ...(level && { rows: level }), templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
+  const preview = testMapRecipe(shown, { ...(level && { rows: level }), templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
   // For maps with slopes: a scene legend that draws the set (# its terrain, a foot under each slope that has one) and the
   // slopes by their characters, and a map holding every slope.
   const setEntry = source.variants === undefined ? { frame: source.frame } : { frames: variants.map(variant => source.frame.replaceAll('{variant}', variant.name)), ...(variants.some(variant => (variant.weight ?? 1) !== 1) && { weights: variants.map(variant => variant.weight ?? 1) }) };
@@ -934,8 +968,17 @@ function compileLayers(source, { tile, mode, palette }) {
     fail('autotile.frame', `makes ${JSON.stringify(name)} for corners ${corners}, which is no frame name: names are 1–64 letters, digits, underscores or hyphens, starting with a letter${/^[0-9]/.test(name) && source.frame.startsWith('{corners}') ? '; a layer key is a digit, so put a letter before {corners}, as in tiles-{corners}' : ''}`);
   };
   if (source.preview !== undefined) {
-    fields(source.preview, ['background'], 'autotile.preview');
+    fields(source.preview, ['background', 'rows'], 'autotile.preview');
     if (source.preview.background !== undefined) parseColor(source.preview.background, palette, 'autotile.preview.background');
+  }
+  // preview.rows: a map of the caller's own, a layer's key in each cell, drawn in place of the test map.
+  const level = source.preview?.rows;
+  if (level !== undefined) {
+    const keys = read.map(layer => layer.key), said = keys.map((key, i) => `${key} for ${read[i].name}`).join(', ');
+    if (!Array.isArray(level) || !level.length || level.length > 256 || level.some(row => typeof row !== 'string') || !level[0].length) fail('autotile.preview.rows', `expected 1–256 equal-width text rows of the layers' keys: ${said}`);
+    sameWidth(level, 'autotile.preview.rows');
+    level.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (!keys.includes(row[x])) fail(`autotile.preview.rows[${y}]`, `character ${JSON.stringify(row[x])} at column ${x} is no layer's key: ${said}`); });
+    if (level[0].length * tile > 4096 || level.length * tile > 4096 || level[0].length * level.length * tile * tile > 4194304) fail('autotile.preview.rows', `${level[0].length} by ${level.length} tiles of ${tile} pixels is more than one picture holds (4096 a side, 4,194,304 pixels)`);
   }
   // Codes count in base n, NW the lowest digit.
   const n = read.length, places = [1, n, n * n, n * n * n], frames = [], variantFrames = [], weighed = weight => (weight !== 1 ? { weight } : {});
@@ -958,9 +1001,9 @@ function compileLayers(source, { tile, mode, palette }) {
     seams.joins += report.checked;
     for (const seam of report.seams) for (const pixel of seam.pixels) seams[pixel.shape ? 'shape' : 'texture']++;
   }
-  const preview = layeredTestMapRecipe(recipe, read, { background: source.preview?.background });
+  const preview = layeredTestMapRecipe(recipe, read, { background: source.preview?.background, rows: level });
   const listed = read.map(({ name, key, weight, variants, collision }) => ({ name, key, ...(variants && { weight, variants: variants.map(variant => ({ name: variant.name, weight: variant.weight })) }), ...(collision && { solid: true }) }));
-  return plain({ recipe, metadata: { format: 'pixelforge-autotile-metadata', version: 1, mode, layers: listed, corners: ['nw', 'ne', 'sw', 'se'], tiles: frames.length, seams }, ...(warnings.length && { warnings }), preview });
+  return plain({ recipe, metadata: { format: 'pixelforge-autotile-metadata', version: 1, mode, layers: listed, frame: source.frame, corners: ['nw', 'ne', 'sw', 'se'], tiles: frames.length, seams }, ...(warnings.length && { warnings }), preview });
 }
 
 // A layer's variants of its plain tile, the tile with it at all four corners. Each redraws the layer's template from its
@@ -1156,9 +1199,13 @@ const encodeNormal = vector => '#' + vector.map(v => Math.round((v + 1) * 127.5)
 // The output is an ordinary recipe aligned with the colour recipe: same size, frame names and durations, animations
 // and atlas layout. Mirrored frames get mirrored normals because they are derived from the drawn pixels.
 // `faces` gives pixels drawn in chosen palette keys one direction each instead (the top, front and side of a box,
-// a wall or a building, which a cushion cannot describe); every other pixel is rounded as before.
+// a wall or a building, which a cushion cannot describe); every other pixel is rounded as before. `axis` rounds a
+// cylinder instead of a cushion: with "vertical" (a barrel, a pillar, a trunk standing up) each row of a shape is
+// rounded from its left end to its right, so the surface leans left and right and never up or down; "horizontal" (a
+// log lying down) rounds each column.
 export function compileNormals(source) {
-  fields(source, ['format', 'version', 'name', 'recipe', 'bevel', 'detail', 'faces'], 'normals');
+  fields(source, ['format', 'version', 'name', 'recipe', 'bevel', 'detail', 'faces', 'axis'], 'normals');
+  if (source.axis !== undefined && !['vertical', 'horizontal'].includes(source.axis)) fail('normals.axis', 'expected vertical (a barrel or a pillar standing up) or horizontal (a log lying down); omit it to round each shape like a cushion');
   if (source.format !== 'pixelforge-normals' || source.version !== 1) fail('normals', 'expected version-1 pixelforge-normals');
   const spec = source.recipe;
   if (typeof spec === 'string' || (spec && typeof spec === 'object' && spec.revision !== undefined && spec.version === undefined)) fail('normals.recipe', 'file and revision references are resolved by the CLI and MCP; inline the recipe to compile here');
@@ -1219,10 +1266,29 @@ export function compileNormals(source) {
       }
       thickest.push(deepest);
     }
+    // A cylinder: each run of solid pixels across the axis is a slice of it, rounded about the run's middle with the
+    // radius of the shape's widest run. A narrower run (a rounded end, a notch) is the same cylinder cut shorter, so
+    // its ends stand above the rim and the surface still never leans along the axis.
+    const half = source.axis ? new Float64Array(size) : null;
+    if (half) {
+      const upright = source.axis === 'vertical', span = upright ? w : h, lines = upright ? h : w, index = (k, line) => (upright ? line * w + k : k * w + line), runs = [], radius = thickest.map(() => 0);
+      for (let line = 0; line < lines; line++) for (let k = 0; k < span; k++) {
+        if (!solid(index(k, line))) continue;
+        let end = k;
+        while (end + 1 < span && solid(index(end + 1, line))) end++;
+        runs.push([line, k, end]);
+        radius[shape[index(k, line)]] = Math.max(radius[shape[index(k, line)]], (end - k + 1) / 2);
+        k = end;
+      }
+      for (const [line, k, end] of runs) {
+        const whole = radius[shape[index(k, line)]], inset = whole - (end - k + 1) / 2;
+        for (let j = k; j <= end; j++) { distance[index(j, line)] = 3 * (inset + Math.min(j - k + 0.5, end - j + 0.5)); half[index(j, line)] = whole; }
+      }
+    }
     const height = new Float64Array(size);
     for (let i = 0; i < size; i++) if (solid(i)) {
       // A shape with no transparent pixel around it (a filled tile) has no rim and stays flat apart from detail.
-      const reach = source.bevel ?? (Number.isFinite(thickest[shape[i]]) ? thickest[shape[i]] / 3 : 0);
+      const whole = half ? half[i] : Number.isFinite(thickest[shape[i]]) ? thickest[shape[i]] / 3 : 0, reach = source.bevel === undefined ? whole : half ? Math.min(source.bevel, whole) : source.bevel;
       const t = reach ? Math.min(distance[i] / 3, reach) / reach : 1;
       height[i] = reach * Math.sqrt(1 - (1 - t) * (1 - t)) + detail * 2 * brightness(data, i * 4);
     }
@@ -1240,8 +1306,10 @@ export function compileNormals(source) {
         // Sobel slopes in pixels of height per pixel; the surface normal leans downhill.
         const gx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)) / 8;
         const gy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 8;
+        // A cylinder never leans along its axis, at its cut ends least of all.
+        const sx = source.axis === 'horizontal' ? 0 : gx, sy = source.axis === 'vertical' ? 0 : gy;
         let best = '5', score = -Infinity;
-        for (const key of keys) { const [nx, ny, nz] = NORMAL_DIRECTIONS[key], s = -gx * nx - gy * ny + nz; if (s > score) { score = s; best = key; } }
+        for (const key of keys) { const [nx, ny, nz] = NORMAL_DIRECTIONS[key], s = -sx * nx - sy * ny + nz; if (s > score) { score = s; best = key; } }
         row += best; counts[best] = (counts[best] ?? 0) + 1;
       }
       rows.push(row);
@@ -1253,6 +1321,6 @@ export function compileNormals(source) {
   renderProject(recipe);
   // A faced key that no frame draws is usually a typo or a key recoloured by a frame palette.
   const unmatched = Object.keys(facedBy).filter(key => !facedBy[key].pixels);
-  return plain({ recipe, metadata: { format: 'pixelforge-normals-metadata', version: 1, encoding: 'RGB = (XYZ + 1) × 127.5; +X right, +Y down, +Z toward the viewer', bevel: source.bevel ?? 'each shape to its thickest point', detail, ...(source.faces !== undefined && { faces: Object.fromEntries(Object.entries(facedBy).map(([key, face]) => [key, { direction: face.way, pixels: face.pixels }])) }), directions: Object.fromEntries(keys.map(key => [key, NORMAL_DIRECTIONS[key].map(v => Math.round(v * 1e4) / 1e4)])), pixels: Object.fromEntries(used.map(key => [key, counts[key]])) },
+  return plain({ recipe, metadata: { format: 'pixelforge-normals-metadata', version: 1, encoding: 'RGB = (XYZ + 1) × 127.5; +X right, +Y down, +Z toward the viewer', bevel: source.bevel ?? 'each shape to its thickest point', detail, ...(source.axis && { axis: source.axis }), ...(source.faces !== undefined && { faces: Object.fromEntries(Object.entries(facedBy).map(([key, face]) => [key, { direction: face.way, pixels: face.pixels }])) }), directions: Object.fromEntries(keys.map(key => [key, NORMAL_DIRECTIONS[key].map(v => Math.round(v * 1e4) / 1e4)])), pixels: Object.fromEntries(used.map(key => [key, counts[key]])) },
     ...(unmatched.length && { warnings: unmatched.map(key => `faces.${key}: no pixel is drawn in ${JSON.stringify(key)}'s colour, so it faces nothing; check the key, or a frame palette that recolours it.`) }) });
 }

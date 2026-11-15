@@ -83,7 +83,7 @@ function sceneTilemap(tilemap, project, path) {
     if (iso) fail(`${path}.legend`, 'corner tiles sit where four square cells meet; an iso map takes frames and animations without autotile corner');
     if (w % 2 || h % 2) fail(`${path}.tile`, 'corner tiles sit where four cells meet, half a cell up and left of one; use an even cell width and height');
   }
-  if (!iso) return { tile, width: columns * w, height: rows * h, cells: expanded.cells.map(cell => ({ x: cell.x * w, y: cell.y * h, bottom: cell.y * h + project.height, [cell.kind]: cell.name })), columns, rows };
+  if (!iso) return { tile, width: columns * w, height: rows * h, ...(expanded.cells.some(cell => cell.corner) && { corner: true }), cells: expanded.cells.map(cell => ({ x: cell.x * w, y: cell.y * h, bottom: cell.y * h + project.height, [cell.kind]: cell.name })), columns, rows };
   const cells = isoLayout(expanded.cells, rows, tile).map(cell => ({ x: cell.left + Math.floor((w - project.width) / 2), y: cell.top + h - project.height, bottom: cell.top + h / 2, [cell.kind]: cell.name }));
   return { tile, width: (columns + rows) * w / 2, height: (columns + rows) * h / 2, cells, columns, rows, iso };
 }
@@ -539,7 +539,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
   const hazed = sceneHaze(scene);
   // Shadows (below): per light, the rank of the last-drawn caster shadowing each pixel, or nothing when none does.
   let shadowMasks = [];
-  const drawFrame = (id, index, left, top, s, label, shade = null, unlit, entry, fade = 0, rank) => {
+  const drawFrame = (id, index, left, top, s, label, shade = null, unlit, entry, fade = 0, rank, within = null) => {
     const asset = assets[id], shift = shifts[id], project = asset.recipe, frame = project.frames[index];
     const normal = asset.normal?.frames[index].data, emission = asset.emissive?.frames[index].data;
     const light = !shade && !unlit && lit && lighting && (normal || emission || lighting.scope === 'all') && (lighting.mode === 'multiply' || shift);
@@ -584,7 +584,11 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
       if (fade) rgba.set(hazed(fade, rgba));
       for (let sy = 0; sy < s; sy++) for (let sx = 0; sx < s; sx++) {
         const tx = left + x * s + sx, ty = top + y * s + sy;
-        if (tx < 0 || ty < 0 || tx >= width || ty >= height) { clipped.set(label, (clipped.get(label) ?? 0) + 1); continue; }
+        if (tx < 0 || ty < 0 || tx >= width || ty >= height) {
+          // Corner tiles reach half a cell past their map on every side; that fringe off the scene is no drawing lost.
+          if (!within || (tx >= within.x && ty >= within.y && tx < within.x + within.w && ty < within.y + within.h)) clipped.set(label, (clipped.get(label) ?? 0) + 1);
+          continue;
+        }
         const to = (ty * width + tx) * 4;
         if (shade) { const next = data[to + 3] ? shift(pixelId(data, to), shade) : null; if (next) data.set(next, to); }
         else {
@@ -778,14 +782,14 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
           entry = entries.length - 1;
         }
         record(i, item.cell, frameIndex(project, cell, 0), x, y);
-        drawFrame(instance.asset, frameIndex(project, cell, 0), x, y, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+        drawFrame(instance.asset, frameIndex(project, cell, 0), x, y, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank, tilemap.corner ? box : null);
         continue;
       }
       if (!item.record) {
         const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted: false, covers: false }) - 1 : -1;
         for (const [k, cell] of tilemap.cells.entries()) {
           record(i, k, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s);
-          drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+          drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank, tilemap.corner ? box : null);
         }
       }
       placements.push({ name: label, tilemap: true, ...box, tiles: tilemap.cells.length, scale: s, ...(instance.haze && { haze: instance.haze }) });

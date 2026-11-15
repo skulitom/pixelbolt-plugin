@@ -156,7 +156,7 @@ export function rampShifter(palette, ramps) {
   };
 }
 
-function blend(data, i, color, opacity = 1) {
+export function blend(data, i, color, opacity = 1) {
   const a = color[3] / 255 * opacity;
   if (a === 0) return;
   if (a === 1) { data.set(color, i); return; }
@@ -308,6 +308,8 @@ export function renderProject(spec, options = {}) {
   // Clipping is counted per source location so an agent can find the operation that overhangs.
   const clipped = new Map();
   const clip = (path, pixels = 1) => clipped.set(path, (clipped.get(path) ?? 0) + pixels);
+  // Outlines that found nothing in their buffer to surround, by the operation's path.
+  const hollow = [];
   const rendered = new Map(), frameNames = new Set();
   // Colours a frame takes from an earlier frame as exact RGBA, which its own palettes need not name: what the frame it
   // continues (`from`) or copies from recoloured with a frame or layer palette, and what that frame took the same way.
@@ -642,6 +644,7 @@ export function renderProject(spec, options = {}) {
         spend(width * height * size);
         const solid = new Uint8Array(width * height), paint = new Uint8Array(width * height);
         for (let i = 0; i < solid.length; i++) solid[i] = data[i * 4 + 3] ? 1 : 0;
+        if (!solid.includes(1)) hollow.push(p);
         const within = (px, py) => px >= 0 && py >= 0 && px < width && py < height;
         const outer = position === 'inside' ? 0 : position === 'outside' ? size : Math.ceil(size / 2);
         const inner = position === 'outside' ? 0 : position === 'inside' ? size : Math.floor(size / 2);
@@ -889,6 +892,11 @@ export function renderProject(spec, options = {}) {
   const sheet = checked(() => readSheet(spec, frames, width, height));
   if (noted.length) throw together();
   const warnings = [], clipping = [...clipped].map(([path, pixels]) => ({ path, pixels }));
+  // An outline surrounds what its own buffer holds: a frame's ops and each of its layers are buffers apart, so an
+  // outline among the ops of a frame drawn in layers has nothing to surround. In a frame that draws nothing at all
+  // (an effect's empty frame) it is no mistake.
+  const idle = hollow.filter(path => frames[Number(/frames\[(\d+)\]/.exec(path)?.[1])]?.data.some((value, i) => i % 4 === 3 && value));
+  if (idle.length) warnings.push(`An outline drew nothing: ${idle[0]}${idle.length > 1 ? ` and ${idle.length - 1} more` : ''} surrounds what its own buffer holds, and a frame's ops and each of its layers are buffers apart. Put the outline at the end of the layer it should surround.`);
   if (clipping.length) warnings.push(`Some drawing falls outside the canvas and is clipped: ${clipping[0].path} (${clipping[0].pixels} px)${clipping.length > 1 ? ` and ${clipping.length - 1} more location${clipping.length > 2 ? 's' : ''}` : ''}.`);
   return {
     name: projectName, width, height, frames, animations, palette, ramps,
@@ -1482,11 +1490,11 @@ export function pictureSheet({ palette = {}, headings = [], rows: lines, scale =
 export function paletteUse(project) {
   if (!project.ownerNames) fail('inspect.palette', 'palette needs the project rendered with { owners: true }, which records the layer that drew each pixel');
   const pack = (r, g, b, a) => ((r * 256 + g) * 256 + b) * 256 + a, keyOf = new Map(), use = new Map();
-  const same = [];
+  const same = [], twins = new Set();
   for (const [key, value] of Object.entries(project.palette)) {
     const color = parseColor(value), id = pack(...color);
     if (!color[3]) continue;
-    if (keyOf.has(id)) same.push(`${key} is the colour of ${keyOf.get(id)}, and counted there`); else keyOf.set(id, key);
+    if (keyOf.has(id)) { twins.add(key); same.push(`${key} is the colour of ${keyOf.get(id)}, and counted there`); } else keyOf.set(id, key);
   }
   let blended = 0;
   for (const { data, owners } of project.frames) for (let i = 0; i < owners.length; i++) {
@@ -1502,7 +1510,7 @@ export function paletteUse(project) {
     return `${key} ${project.palette[key]}: ${pixels} px${parts.length ? ` on ${parts.slice(0, 4).join(', ')}${parts.length > 4 ? ` and ${parts.length - 4} more` : ''}` : ''}`;
   };
   const ramps = (project.ramps ?? []).map(ramp => ramp.filter(key => use.has(key))).filter(ramp => ramp.length), ramped = new Set(ramps.flat());
-  const others = [...use.keys()].filter(key => !ramped.has(key)).sort((a, b) => use.get(b).pixels - use.get(a).pixels), twins = new Set(same.map(text => text.split(' ')[0])), unused = Object.keys(project.palette).filter(key => !use.has(key) && !twins.has(key));
+  const others = [...use.keys()].filter(key => !ramped.has(key)).sort((a, b) => use.get(b).pixels - use.get(a).pixels), unused = Object.keys(project.palette).filter(key => !use.has(key) && !twins.has(key));
   return { ...(ramps.length && { ramps: ramps.map(ramp => ramp.map(line)) }), ...(others.length && { [ramps.length ? 'others' : 'keys']: others.map(line) }), ...(same.length && { same }), ...(unused.length && { unused }), ...(blended && { blended }), layers: project.ownerNames.join(', '), counted: `every pixel of ${project.frames.length === 1 ? 'the one frame' : `all ${project.frames.length} frames`}, whatever the view shows` };
 }
 
@@ -1767,11 +1775,14 @@ export function analyzeProject(project) {
 // Diagnostics as a reply carries them. Up to DIAGNOSTIC_ROWS frames keep a row each; past that the rows are added up
 // (`frameTotals`: ranges of visible pixels and colours, cleanup counts summed) and `frames` keeps only the three rows
 // with the most corners and strays, since thirty rows of near-equal counts tell a reader nothing a total does not.
-// Animations and findings are kept whole. `analyzeProject` still measures every frame.
+// Animations are kept whole, and so are findings but for `duplicate`: a pose a cycle passes twice, or a hold, is no
+// finding to act on, and two cold runs read the list as noise (`--full` keeps them). `analyzeProject` still measures
+// every frame.
 export const DIAGNOSTIC_ROWS = 8;
 export function briefDiagnostics(diagnostics) {
   const { frames, ...rest } = diagnostics;
-  if (frames.length <= DIAGNOSTIC_ROWS) return diagnostics;
+  rest.findings = rest.findings.filter(finding => finding.code !== 'duplicate');
+  if (frames.length <= DIAGNOSTIC_ROWS) return { advisory: rest.advisory, frames, animations: rest.animations, findings: rest.findings };
   const range = key => [Math.min(...frames.map(row => row[key])), Math.max(...frames.map(row => row[key]))], sum = key => frames.reduce((total, row) => total + row[key], 0);
   const most = frames.map((row, index) => ({ row, index, count: row.corners + row.strays })).filter(entry => entry.count).sort((a, b) => b.count - a.count || a.index - b.index).slice(0, 3).map(entry => entry.row);
   return { advisory: rest.advisory, frameTotals: { frames: frames.length, visible: range('visible'), colors: range('colors'), corners: sum('corners'), strays: sum('strays') }, frames: most, omitted: frames.length - most.length, animations: rest.animations, findings: rest.findings };

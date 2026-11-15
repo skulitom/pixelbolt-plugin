@@ -12,7 +12,7 @@ node bin/pixelbolt.js gif output/portal.json --animation open --out output/porta
 node bin/pixelbolt.js inspect examples/portal.wave.json
 ```
 
-The studio opens the wave source, recompiles edits and saves the source as `.wave.json`. Asset exports contain compiled frames. Save the source separately to retain the controls; changes painted into compiled frames do not flow back into the source. Existing files require an explicit `--force` to replace. `share` bakes a wave source into ordinary grids so the current hosted playground can open the link.
+The studio opens the wave source, recompiles edits and saves the source as `.wave.json`. Asset exports contain compiled frames. Save the source separately to retain the controls; changes painted into compiled frames do not flow back into the source. Existing files require an explicit `--force` to replace. `share` links the wave source itself; the playground compiles it with Pixelbolt 0.9.2 or newer and keeps its controls editable.
 
 MCP: `pixel_help` with `topic: "wave"` returns the schema; `pixel_compile` with `source` returns a revision. Use that revision with `pixel_inspect` and `pixel_render`. JavaScript: `compileWaves(source)` from `pixelbolt/wave` returns `{ recipe, metadata, warnings }`. Shared palette files resolve through the CLI or MCP; the browser-compatible compiler takes an inline palette.
 

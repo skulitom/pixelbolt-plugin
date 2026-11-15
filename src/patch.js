@@ -112,11 +112,11 @@ function locate(root, segments, where, verb) {
   for (const [i, segment] of segments.entries()) {
     const last = i === segments.length - 1, owner = path || 'the project';
     let slot;
-    if (segment.any) fail(where, '[*] is every item of a list, for set and remove: frames[*].layers[cape].palette');
+    if (segment.any) fail(where, '[*] is every item of a list, for set, remove and insert: frames[*].layers[cape].palette');
     if (Array.isArray(node)) {
       if (segment.key !== undefined) fail(where, `${owner} is a list; select an item with [index] or [name]`);
       if (segment.end) {
-        if (!last || verb !== 'insert') fail(where, '[-] is the end of a list and can only end an insert path');
+        if (!last || verb !== 'insert') fail(where, END_ONLY);
         slot = node.length;
       } else if (segment.index !== undefined) slot = segment.index;
       else {
@@ -141,11 +141,15 @@ function locate(root, segments, where, verb) {
   }
 }
 
+const END_ONLY = '[-] is the end of a list and can only end an insert path';
 // frames[*].layers[cape].palette: [*] stands for every item of a list, so one change reaches a layer in every frame.
 // Returns the path of each match. An item that lacks what the rest of the path names (a frame without that layer, or
-// for a remove without that field) is passed over; no match at all is an error.
+// for a remove without that field) is passed over; no match at all is an error. An insert's path ends at a place in a
+// list, frames[*].ops[0], and matches every item that has the list, or that may start it ([0] or [-] of a list an
+// insert creates): a prop drawn behind every frame of a compiled effect.
 function everyMatch(root, segments, where, verb) {
   if (segments.at(-1).any) fail(where, '[*] is followed by what to change in each item, such as frames[*].duration');
+  if (segments.some((segment, i) => segment.end && (verb !== 'insert' || i !== segments.length - 1))) fail(where, END_ONLY);
   const text = taken => taken.map((segment, i) => (segment.key !== undefined ? `${i ? '.' : ''}${segment.key}` : segment.index !== undefined ? `[${segment.index}]` : `[${JSON.stringify(segment.name)}]`)).join('');
   const child = (node, segment) => (Array.isArray(node) ? (segment.index !== undefined ? node[segment.index] : node.find(item => (isObject(item) ? item.name : item) === segment.name))
     : isObject(node) ? node[segment.key ?? segment.name ?? String(segment.index)] : undefined);
@@ -156,8 +160,10 @@ function everyMatch(root, segments, where, verb) {
       if (!Array.isArray(node)) fail(where, `[*] needs a list, and ${text(taken) || 'the project'} is not one`);
       node.forEach((item, index) => walk(item, i + 1, [...taken, { index }]));
     } else if (i === segments.length - 1) {
-      if (verb === 'set' ? isObject(node) || Array.isArray(node) : child(node, segment) !== undefined) matches.push(text([...taken, segment]));
+      if (verb === 'insert') { if (Array.isArray(node)) matches.push(`${text(taken)}${segment.end ? '[-]' : text([segment])}`); }
+      else if (verb === 'set' ? isObject(node) || Array.isArray(node) : child(node, segment) !== undefined) matches.push(text([...taken, segment]));
     } else if (child(node, segment) !== undefined) walk(child(node, segment), i + 1, [...taken, segment]);
+    else if (verb === 'insert' && i === segments.length - 2 && isObject(node) && (segments[i + 1].end || segments[i + 1].index === 0)) matches.push(`${text([...taken, segment])}${segments[i + 1].end ? '[-]' : '[0]'}`);
   };
   walk(root, 0, []);
   if (!matches.length) fail(where, 'no item has what this path names');
@@ -182,7 +188,7 @@ export function patchRecipe(recipe, changes) {
   const apply = (change, i) => {
     const where = `changes[${i}]`;
     if (!isObject(change)) fail(where, 'expected an object such as {"set": "frames[idle].duration", "value": 120}');
-    for (const key of Object.keys(change)) if (![...VERBS, 'scope', 'value'].includes(key)) fail(`${where}.${key}`, 'unknown field in patch');
+    for (const key of Object.keys(change)) if (![...VERBS, 'scope', 'value'].includes(key)) fail(`${where}.${key}`, 'unknown field in patch: a change is {"set": "<path>", "value": …}, {"insert": "<path>", "value": …} or {"remove": "<path>"}, or paint, grid, move, recolor or cleanup with a frame path');
     const verbs = VERBS.filter(verb => change[verb] !== undefined);
     if (verbs.length !== 1) fail(where, 'use exactly one of set, insert, remove, paint, grid, move, recolor or cleanup');
     const [verb] = verbs, target = `${where}.${verb}`;
@@ -250,7 +256,7 @@ export function patchRecipe(recipe, changes) {
     return edit;
   };
   changes.forEach((change, i) => {
-    const verb = isObject(change) ? ['set', 'remove'].find(key => typeof change[key] === 'string' && change[key].includes('[*]')) : undefined;
+    const verb = isObject(change) ? ['set', 'remove', 'insert'].find(key => typeof change[key] === 'string' && change[key].includes('[*]')) : undefined;
     if (!verb) { edits.push(apply(change, i)); return; }
     const matches = everyMatch(next, parsePath(change[verb], `changes[${i}].${verb}`), `changes[${i}].${verb}`, verb);
     for (const path of matches) apply({ ...change, [verb]: path }, i);

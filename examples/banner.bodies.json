@@ -1,0 +1,90 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "banner",
+  "width": 48,
+  "height": 48,
+  "palette": {
+    "k": "#14141c",
+    "r": "#8f2433",
+    "R": "#b23a48",
+    "l": "#e06c5a",
+    "G": "#a8802f",
+    "g": "#d7b56d",
+    "y": "#f2dc9b"
+  },
+  "effects": {
+    "banner": {
+      "frames": 24,
+      "duration": 60,
+      "loop": true,
+      "gravity": [0, 0.15],
+      "bodies": [
+        { "name": "rod", "shape": "box", "size": [32, 3], "at": [24, 7.5], "fixed": true, "fill": "g", "outline": "k" }
+      ],
+      "cloths": [
+        {
+          "name": "banner",
+          "at": [14, 9],
+          "size": [21, 28],
+          "cell": 1,
+          "fill": { "r": ["r", "R", "l"], "g": ["G", "g", "y"] },
+          "outline": "k",
+          "light": [-1, 0],
+          "mask": [
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrr.rrrrrr",
+            "rrrrrrrrrgggrr.rrrrrr",
+            "rrrrrrrrrgggrr.rrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrr.rrgggrrrrrrrrr",
+            "rrrrrr.rrgggrrrrrrrrr",
+            "rrrrrr.rrgggrrrrrrrrr",
+            "rrrrrr.rrgggrrrrrrrrr",
+            "rrrrrr.rrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            "rrrrrrrrrgggrrrrrrrrr",
+            ".rrrrrrr.gggrr.rrrrrr",
+            "..rrrrr..gggrr..rrrr.",
+            "..rrrrr...ggr...rrrr.",
+            "...rrr....ggr....rrr.",
+            "....rr.....g.....rr.."
+          ],
+          "wind": [0.1, 0],
+          "gust": 1,
+          "ripple": 3,
+          "waves": 1.25,
+          "slack": 0.1,
+          "stiffness": 0.5,
+          "shear": 0.25,
+          "bend": 0.05,
+          "collide": false,
+          "pins": [
+            { "at": [0, 0], "x": 14, "y": 9 },
+            { "at": [2, 0], "x": 16, "y": 9 },
+            { "at": [4, 0], "x": 18, "y": 9 },
+            { "at": [6, 0], "x": 20, "y": 9 },
+            { "at": [8, 0], "x": 22, "y": 9 },
+            { "at": [10, 0], "x": 24, "y": 9 },
+            { "at": [12, 0], "x": 26, "y": 9 },
+            { "at": [14, 0], "x": 28, "y": 9 },
+            { "at": [16, 0], "x": 30, "y": 9 },
+            { "at": [18, 0], "x": 32, "y": 9 },
+            { "at": [20, 0], "x": 34, "y": 9 }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -46,6 +46,13 @@
       "maximum": 64,
       "description": "Pixels from the edge to the flat top. Default: each shape rounds all the way to its thickest point, like a cushion."
     },
+    "axis": {
+      "enum": [
+        "vertical",
+        "horizontal"
+      ],
+      "description": "A cylinder instead of a cushion. vertical: a barrel, pillar or trunk standing up, each row rounded from its left end to its right, so it leans left and right and never up or down. horizontal: a log lying down."
+    },
     "detail": {
       "type": "number",
       "minimum": 0,

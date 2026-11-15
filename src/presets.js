@@ -2,7 +2,7 @@
 // They are read from examples/ whenever they are asked for, so the listing always matches the folder. A preset is a
 // top-level examples/*.fluid.json, *.fx.json, *.wave.json, *.crystal.json, *.powder.json, *.bodies.json or *.poses.json source, or a
 // plain recipe whose animations all loop (a coin spin, a flickering ember) and that no source there compiles to. Titles
-// and notes come from the Fluid and Effects labs' lists where those have one; anything else is described from its own
+// and notes come from the Fluid, Effects and Powder labs' lists where those have one; anything else is described from its own
 // name and animations.
 import { readdir, readFile, writeFile, mkdir, rename, rm, stat } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -24,7 +24,10 @@ import { FLUID_PRESETS } from '../studio/fluid-controls.js';
 import { POWDER_PRESETS } from '../studio/powder-controls.js';
 
 export const PRESET_FOLDER = fileURLToPath(new URL('../examples/', import.meta.url));
-const SOURCE = /^(.+)\.(fluid|fx|wave|crystal|powder|bodies|poses)\.json$/;
+const SOURCE = /^(.+)\.(fluid|fx|wave|crystal|powder|bodies|poses|autotile)\.json$/;
+// A shipped scene is no preset (nothing compiles it to a recipe), but it is the example to start a scene from, so its
+// name finds its source too.
+const SCENE = /^(.+)\.scene\.json$/;
 // What compiles each source format: the one table, which the CLI and the MCP server use too.
 export const COMPILERS = { 'pixelforge-poses': compilePoses, 'pixelforge-autotile': compileAutotile, 'pixelforge-fx': compileEffects, 'pixelforge-fluid': compileFluid, 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies, 'pixelforge-normals': compileNormals };
 const TITLES = new Map([...FLUID_PRESETS.map(entry => [`fluid:${entry.file}`, entry]), ...EFFECT_PRESETS.map(entry => [`fx:${entry.file}`, entry]), ...POWDER_PRESETS.map(entry => [`powder:${entry.file}`, entry])]);
@@ -34,9 +37,11 @@ const TITLES = new Map([...FLUID_PRESETS.map(entry => [`fluid:${entry.file}`, en
 export const PRESET_GUIDE = 'Start fire, smoke, explosions, splashes, spells and other effects from one of these rather than drawing them: pixel_compile {"preset": "<name>"} compiles one as it ships (pixelbolt compile --preset <name> --out <new.json> from a shell), with "size": "32x32" and "frames": 8 (--size, --frames) for the canvas and frame count asked for, and pixel_help {"topic": "preset", "name": "<name>"} returns its source to edit and compile (a recipe preset is already a recipe: edit it and send it as project). Fluid presets are simulations: a liquid preset (honey, slime, water) is liquid falling, pouring or splashing, not a character; for a character that squashes, stretches or breathes, compile a pixelforge-poses source with one mass body and motions.idle (example: slime-idle).';
 
 // What to do with a preset's source: a source compiles; a plain recipe already is one.
-export const presetNext = (entry, shell = false) => entry.kind === 'recipe'
-  ? (shell ? `It is already a recipe: save source to a file, edit it, then validate, inspect or render that file (pixelbolt compile --preset ${entry.name} --out <new.json> saves it as it ships).` : `It is already a recipe: edit source and send it as project to pixel_validate, pixel_inspect or pixel_render, or use pixel_compile {"preset": "${entry.name}"} for a revision of it as it ships.`)
-  : (shell ? `Compile it as it ships with pixelbolt compile --preset ${entry.name} --out <new.json>, or save source to a file, edit it and compile that.` : `Compile it as it ships with pixel_compile {"preset": "${entry.name}"}, or edit source and send it as pixel_compile's source.`);
+export const presetNext = (entry, shell = false) => entry.kind === 'scene'
+  ? (shell ? `A scene: pixelbolt presets ${entry.name} --out <new.scene.json> saves it, and each file its assets name is a preset to save beside it under that name (pixelbolt presets <asset> --out <that file>); then pixelbolt scene <new.scene.json> --image <view.png>.` : 'A scene: send source as pixel_scene\'s scene, with each asset\'s file name replaced by its recipe (pixel_compile {"preset": "<asset>"} gives a revision to name as {"revision": id}).')
+  : entry.kind === 'recipe'
+  ? (shell ? `It is already a recipe: pixelbolt presets ${entry.name} --out <new.json> saves it to edit, then validate, inspect or render that file.` : `It is already a recipe: edit source and send it as project to pixel_validate, pixel_inspect or pixel_render, or use pixel_compile {"preset": "${entry.name}"} for a revision of it as it ships.`)
+  : (shell ? `Compile it as it ships with pixelbolt compile --preset ${entry.name} --out <new.json>, or save its source to edit (pixelbolt presets ${entry.name} --out <new source.json>) and compile that.` : `Compile it as it ships with pixel_compile {"preset": "${entry.name}"}, or edit source and send it as pixel_compile's source.`);
 
 // The plain recipes are only known once read; each file is read once per call.
 async function readJSON(file) {
@@ -68,9 +73,11 @@ export async function presetEntries() {
 
 // The preset a name means: its name, `<name>.<kind>` or its file name (as the listing gives it, examples/ and all),
 // ignoring case. Names are matched against the folder's own listing, never used as a path.
-export async function findPreset(name, where = 'preset') {
+export async function findPreset(name, where = 'preset', scenes = false) {
   if (typeof name !== 'string' || !name.trim()) throw new PixelError(where, 'expected a preset name such as "smoke-puff"; pixel_help {"topic": "presets"} lists them');
   const wanted = name.trim().toLowerCase().replace(/^examples\//, ''), entries = await presetEntries();
+  // Where a source is read, not compiled, a shipped scene answers to its name as well.
+  if (scenes) for (const file of await readdir(PRESET_FOLDER)) { const match = SCENE.exec(file); if (match && [match[1], file].some(alias => alias.toLowerCase() === wanted)) return { file, base: match[1], name: match[1], kind: 'scene' }; }
   const found = entries.filter(entry => [entry.name, `${entry.base}.${entry.kind}`, entry.file].some(alias => alias.toLowerCase() === wanted));
   if (found.length === 1) return found[0];
   const shared = entries.filter(entry => entry.base.toLowerCase() === wanted);
@@ -84,6 +91,8 @@ export async function findPreset(name, where = 'preset') {
 export async function loadPreset(entry) {
   const document = entry.document ?? await readJSON(entry.file);
   if (document === null) throw new PixelError('preset', `examples/${entry.file} could not be read`);
+  // A scene keeps its assets as the files it names: inlined, the glade is 18 KB of tiles before its 2 KB of scene.
+  if (entry.kind === 'scene') return { source: document, inlined: [] };
   const { document: resolved, files } = await resolveReferences(document, { baseDir: PRESET_FOLDER, root: PRESET_FOLDER });
   return { source: resolved, inlined: files.map(file => `examples/${path.relative(PRESET_FOLDER, file).split(path.sep).join('/')}`) };
 }
@@ -97,6 +106,24 @@ export function compilePreset(source) {
 const plays = animations => {
   const loops = animations.filter(([, item]) => item.loop).length;
   return loops === animations.length ? 'loop' : loops ? 'loops and one-shots' : 'one-shot';
+};
+// What each shipped rigid-body preset shows: a count of its shapes says what it is made of, not what to start from it,
+// and "a sign that swings" is found by these words. A test holds that every bodies preset has its line.
+const BODIES_SHOW = {
+  'ring-escape': 'A ball knocks its way out of a ring of blocks',
+  'bouncing-pixel': 'A pixel bounces round a room with a ledge and steps and comes to rest',
+  'spinning-hoop': 'Three balls bounce in a turning hoop until each falls out through its gap',
+  'crate-topple': 'A heavy ball thrown into a pyramid of crates, which topples',
+  territory: 'Two teams of balls claim each other\'s ground, with pickups and a score',
+  'blade-bloom': 'A turning sword cuts the balls dropped on it into pieces that fill a ring',
+  'crate-smash': 'An iron ball thrown through a pane of glass into crates that break apart',
+  'rope-bridge': 'Planks hung on ropes between two posts sag under a dropped crate',
+  'wrecking-ball': 'A heavy ball on a rope swings into a pyramid of crates',
+  lantern: 'A lantern on a chain swings and settles: what hangs from a beam, such as a sign or a pendulum',
+  ragdoll: 'A figure of six hinged blocks falls into a heap',
+  flag: 'A flag waves on its pole',
+  banner: 'A tattered banner with a stripe sways on its rod',
+  cape: 'A cape trails behind a walking figure'
 };
 const listNames = names => names.length <= 6 ? names.join(', ') : `${names.slice(0, 6).join(', ')} and ${names.length - 6} more`;
 // A lab's title and note ("Campfire", "gas · loop"), without the loop or one-shot the listing already gives.
@@ -121,6 +148,11 @@ function about(entry, source, animations) {
     const held = (Array.isArray(rest?.parts) ? rest.parts : []).filter(part => hands.has(part?.attach?.part) && source.parts?.[part.part]?.rows
       && !/hand/i.test(`${part.name} ${part.part}`)).map(part => part.name);
     return templates.length ? `A ${source.rig?.fore ? 'four-legged animal' : 'character'} rig whose motion templates make ${listNames(templates)}${held.length ? `, with ${listNames(held)} in hand` : ''}.` : `Posed parts: ${listNames(names)}.`;
+  }
+  if (entry.kind === 'autotile') {
+    // A tile set: its terrains, how its tiles are chosen, and what else it carries.
+    const layers = Array.isArray(source.layers) ? source.layers.map(layer => layer?.name).filter(Boolean) : [], extras = [source.animation !== undefined && 'animated', source.slopes !== undefined && 'with slopes', (source.collision !== undefined || source.layers?.some?.(layer => layer?.collision)) && 'with collision'].filter(Boolean);
+    return `A tile set for a terrain brush (Godot TileSet, Tiled tileset): ${layers.length ? `${listNames(layers)} and the tiles where they meet` : `one terrain, ${source.mode ?? 'blob'} tiles`}${extras.length ? `, ${extras.join(', ')}` : ''}.`;
   }
   if (entry.kind === 'fx') return `Particles and effect shapes: ${listNames(names)}.`;
   if (entry.kind === 'wave') return `A looping wave pattern: ${listNames(names)}.`;
@@ -149,11 +181,12 @@ function about(entry, source, animations) {
     const ropes = effects.reduce((n, effect) => n + (effect?.ropes?.length ?? 0), 0);
     const cloths = effects.reduce((n, effect) => n + (effect?.cloths?.length ?? 0), 0);
     const extras = [joints && `${joints} joint${joints === 1 ? '' : 's'}`, ropes && `${ropes} rope${ropes === 1 ? '' : 's'}`, cloths && `${cloths} cloth${cloths === 1 ? '' : 's'}`].filter(Boolean);
+    const shows = Object.hasOwn(BODIES_SHOW, entry.base) ? `${BODIES_SHOW[entry.base]}. ` : '';
     if (!parts.length && cloths) {
       const others = extras.filter(extra => !/ cloth/.test(extra));
-      return `Cloth${cloths === 1 ? '' : ` (${cloths})`}${others.length ? ` with ${others.join(' and ')}` : ''}.`;
+      return `${shows}Cloth${cloths === 1 ? '' : ` (${cloths})`}${others.length ? ` with ${others.join(' and ')}` : ''}.`;
     }
-    const bodies = `Simulated rigid bodies: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'none'}.`;
+    const bodies = `${shows}Simulated rigid bodies: ${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0] ?? 'none'}.`;
     return extras.length ? `${bodies.slice(0, -1)}, with ${extras.join(' and ')}.` : bodies;
   }
   // Frames no animation plays are pictures of their own: the tiles of a set beside its one animated tile.
@@ -311,22 +344,23 @@ const closest = (items, text, words) => {
 const NOT_A_CHARACTER = /,? not a character/g;
 export const namedLike = (entries, words) => closest(entries, entry => entry.name, words);
 // What each kind of preset is called, for a search word that names a kind rather than a preset.
-const KIND_WORDS = { powder: 'sand powder sandbox grains falling', bodies: 'bodies body rigid physics ball balls box boxes crate crates', wave: 'wave waves ripple ripples portal', crystal: 'crystal crystals gem gems', fluid: 'fluid liquid gas smoke', fx: 'particles particle spell spells', poses: 'character rig' };
+const KIND_WORDS = { powder: 'sand powder sandbox grains falling', bodies: 'bodies body rigid physics ball balls box boxes crate crates rope ropes chain chains joint joints hinge hinges pendulum swinging hanging cloth', wave: 'wave waves ripple ripples portal', autotile: 'tile tiles tileset tilesets terrain terrains autotile ground floor platform', crystal: 'crystal crystals gem gems', fluid: 'fluid liquid gas smoke', fx: 'particles particle spell spells', poses: 'character rig' };
 // `all` is every preset by name and kind, where the listing holds only those measured for this search.
 export function findListing(listing, query, where = 'find', all = listing.presets) {
   const words = presetWords(query, where), lines = briefListing(listing).presets;
   // A liquid's line says it is not a character, which is no reason to list it for "character".
   const named = namedLike(listing.presets, words), found = named.length ? named : closest(listing.presets, entry => lines[entry.name].replace(NOT_A_CHARACTER, ''), words);
-  if (!found.length) {
-    // Nothing ships for most characters, and the way to one is a rig redrawn, so the reply names the rigs.
-    const rigs = listing.presets.filter(entry => entry.kind === 'poses' && /rig whose/.test(entry.for ?? '')).map(entry => entry.name);
-    return { guide: `No preset matches "${query}": try another word, or draw it (the quick start says how).${rigs.length ? ` For a character or creature, start from a rig and redraw it (${rigs.join(', ')}; pixel_help {"topic": "craft", "name": "Characters"}, pixelbolt help craft "Characters").` : ''} Every preset by name:`, names: listing.presets.map(entry => entry.name).join(', ') };
-  }
   // Names come first, and a kind of preset the words also stand for is named with its presets: "sand" is three
-  // liquids by name, and falling sand is a kind of its own with five.
+  // liquids by name, and falling sand is a kind of its own with five; "chain" is in no name, and bodies hang on ropes.
   const kinds = new Set(found.map(entry => entry.kind));
   const also = Object.entries(KIND_WORDS).filter(([kind, text]) => !kinds.has(kind) && words.some(word => text.split(' ').includes(word)))
     .map(([kind]) => [kind, all.filter(entry => entry.kind === kind).map(entry => entry.name)]).filter(([, names]) => names.length).map(([kind, names]) => `${kind}: ${names.join(', ')}`).join('; ');
+  if (!found.length && also) return { guide: `No preset is named or described by "${query}". Kinds of preset those words name: ${also}. pixel_help {"topic": "presets", "find": "<a name>"} (pixelbolt presets --find <a name>) says what one is.` };
+  if (!found.length) {
+    // Nothing ships for most characters, and the way to one is a rig redrawn, so the reply names the rigs.
+    const rigs = listing.presets.filter(entry => entry.kind === 'poses' && /rig whose/.test(entry.for ?? '')).map(entry => entry.name);
+    return { guide: `No preset matches "${query}". Presets are effects, simulations, tile sets and character rigs; an icon, a prop or a piece of UI is drawn by hand (the quick start says how).${rigs.length ? ` For a character or creature, start from a rig and redraw it (${rigs.join(', ')}; pixel_help {"topic": "craft", "name": "Characters"}, pixelbolt help craft "Characters").` : ''} Every preset by name:`, names: listing.presets.map(entry => entry.name).join(', ') };
+  }
   return { guide: FIND_NOTE, presets: Object.fromEntries(found.map(entry => [entry.name, lines[entry.name]])), ...(also && { also: `Kinds of preset those words also name: ${also}.` }), ...(listing.note && { note: listing.note }) };
 }
 

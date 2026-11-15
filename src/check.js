@@ -11,13 +11,23 @@ const CANVAS = 256, SCALE = 16, SOURCE_FRAMES = 256, FRAME_AREA = 4194304, ATLAS
 // The pixels one export's APNG animations hold (export.js), and all of one render's GIFs (mcp.js, gif.js).
 const EXPORT_PIXELS = 67108864, GIF_PIXELS = 67108864;
 const LIMITS = { width: CANVAS * SCALE, height: CANVAS * SCALE, frames: PLAYED, colors: 65536, gifScale: SCALE };
+// The sprite sheet the user named: its size in pixels, or its grid (a one-row strip is { "rows": 1 }).
+const SHEET = { width: ATLAS, height: ATLAS, columns: SOURCE_FRAMES, rows: SOURCE_FRAMES };
 
 export function readExpect(expect) {
   if (expect === undefined) return undefined;
   if (expect === null || typeof expect !== 'object' || Array.isArray(expect)) throw new PixelError('expect', 'expected an object such as { "width": 32, "height": 32, "frames": 8 }');
   for (const [key, value] of Object.entries(expect)) {
     if (key === 'transparent' || key === 'loop') { if (typeof value !== 'boolean') throw new PixelError(`expect.${key}`, 'expected true or false'); continue; }
-    if (!Object.hasOwn(LIMITS, key)) throw new PixelError(`expect.${key}`, 'unknown field; use width, height, frames, colors, transparent, loop or gifScale');
+    if (key === 'sheet') {
+      if (value === null || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length) throw new PixelError('expect.sheet', 'expected the sprite sheet the user asked for, such as { "width": 640, "height": 64 } or { "rows": 1 } for a one-row strip');
+      for (const [field, count] of Object.entries(value)) {
+        if (!Object.hasOwn(SHEET, field)) throw new PixelError(`expect.sheet.${field}`, 'unknown field; use width, height, columns or rows');
+        if (!Number.isInteger(count) || count < 1 || count > SHEET[field]) throw new PixelError(`expect.sheet.${field}`, `expected a whole number from 1 to ${SHEET[field]}`);
+      }
+      continue;
+    }
+    if (!Object.hasOwn(LIMITS, key)) throw new PixelError(`expect.${key}`, 'unknown field; use width, height, frames, colors, transparent, loop, gifScale or sheet');
     // frames: one count for every animation, or a count per animation name.
     if (key === 'frames' && value !== null && typeof value === 'object' && !Array.isArray(value)) {
       if (!Object.keys(value).length) throw new PixelError('expect.frames', 'expected a whole number, or animation names with their counts such as { "idle": 4, "walk": 8 }');
@@ -51,6 +61,40 @@ function exportBudget({ frames, animations, sheet }, w, h, k, recipe) {
   return null;
 }
 const tooBig = (reason, sheet) => `${reason}: ask for fewer frames or a smaller size${reason.includes('an atlas') && !sheet.trim ? ', or set sheet.trim if the frames have empty margins' : ''}`;
+
+// The sprite sheet against expect.sheet. A grid sheet is sheet.columns cells across (8 at most by default) and as many
+// rows as the frames need; a trimmed atlas packs each frame's visible bounds, so its size follows the drawing and it
+// has no grid. The fix is the column count that makes the asked sheet with the fewest empty cells, at the frame size
+// expect asks for (a frame-size fix may change sheet.scale, and its cells with it).
+function sheetProblem(project, expect, recipe) {
+  const { name, width, height, frames, sheet } = project, want = expect.sheet, n = frames.length, rows = c => Math.ceil(n / c);
+  const got = sheet.trim ? { width: sheet.width, height: sheet.height, trimmed: true } : { width: sheet.width, height: sheet.height, columns: sheet.columns, rows: rows(sheet.columns) };
+  if (Object.entries(want).every(([key, value]) => got[key] === value)) return null;
+  const problem = fix => ({ file: `${name}.png`, asked: want, got, fix });
+  let k = expect.width !== undefined || expect.height !== undefined ? wholeScale([[expect.width, width], [expect.height, height]], SCALE) : sheet.scale;
+  // A frame size no whole scale makes, or one the export refuses: a sheet asked by its size waits for it, while a
+  // grid asked by columns or rows alone doesn't depend on the cells' size.
+  if (k === null || (k !== sheet.scale && exportBudget(project, width, height, k, recipe))) {
+    if (want.width !== undefined || want.height !== undefined) return problem(k === null ? 'no whole sheet.scale makes the frame size asked for yet: fix the frame size first (its own problem), then render and check the sheet again' : `the frame size asked for is refused at sheet.scale ${k} (its own problem says why): settle the frame size first, then render and check the sheet again`);
+    k = sheet.scale;
+  }
+  const cellW = (width + sheet.padding * 2) * k, cellH = (height + sheet.padding * 2) * k;
+  const cells = `${cellW}x${cellH} cells${sheet.padding ? ` (each frame with ${sheet.padding * k} px of padding a side)` : ''}`;
+  const fits = c => (want.width === undefined || c * cellW === want.width) && (want.height === undefined || rows(c) * cellH === want.height) && (want.columns === undefined || c === want.columns) && (want.rows === undefined || rows(c) === want.rows);
+  let best = null;
+  for (let c = 1; c <= SOURCE_FRAMES; c++) if (fits(c) && (best === null || c * rows(c) < best * rows(best))) best = c;
+  if (best === null) return problem(`no grid of these ${n} frames makes that sheet: with ${cells}, c columns make a sheet c × ${cellW} px wide and ⌈${n} / c⌉ × ${cellH} px tall. Check the frame size and count the user asked for (expect width, height and frames) against the sheet's`);
+  const sheetW = best * cellW, sheetH = rows(best) * cellH, empty = best * rows(best) - n;
+  if (sheetW * sheetH > ATLAS) return problem(`a ${sheetW}x${sheetH} sheet passes the 16,777,216 pixels an atlas holds: ask for fewer frames or a smaller size`);
+  const shape = `${best} column${best === 1 ? '' : 's'} by ${rows(best)} row${rows(best) === 1 ? '' : 's'} of ${cells}, a ${sheetW}x${sheetH} sheet${empty ? ` with ${empty} empty cell${empty === 1 ? '' : 's'}` : ''}`;
+  if (best === sheet.columns && !sheet.trim) return problem(`the frame-size fix (sheet.scale ${k}) makes it: ${shape}`);
+  // A recipe without a sheet field gets one, carrying the frame-size fix's scale so neither patch undoes the other.
+  const whole = recipe !== undefined && recipe.sheet === undefined;
+  const changes = whole ? [{ set: 'sheet', value: { ...(k !== sheet.scale && { scale: k }), columns: best } }] : [...(sheet.trim ? [{ set: 'sheet.trim', value: false }] : []), { set: 'sheet.columns', value: best }];
+  const trimmed = sheet.trim ? 'a trimmed atlas packs each frame\'s visible bounds, so its size follows the drawing, while a grid of whole frames makes the asked sheet: ' : '';
+  const scaled = k === sheet.scale ? '' : whole ? `, at the frame-size fix's sheet.scale ${k}, which this patch carries (apply it instead of that one)` : `, with the frame-size fix (sheet.scale ${k}) applied too`;
+  return problem(`${trimmed}${shape}${scaled}: pixel_patch ${JSON.stringify(changes.length === 1 ? changes[0] : changes)}, then render again`);
+}
 
 // A size with a side over 256 px is a smaller canvas exported at a whole sheet.scale. Offers the canvas nearest the
 // current one (the least redrawing) and, when it differs, the one with the most detail. A still (one frame) may also
@@ -393,7 +437,10 @@ export function checkDelivery(project, { recipe, gifs, expect, animation } = {})
     animations: played, ...(names.length > 16 && { animationsOmitted: names.length - 16 }),
     colors: colors.size, transparent: clearOpen.length === open.length ? true : clearOpen.length ? 'some frames' : false,
     ...(seeThrough.length && { partlyTransparent: seeThrough.length === frames.length ? true : 'some frames' }),
-    ...(gifs?.length && { gifs: [gifs[0].width, gifs[0].height] })
+    ...(gifs?.length && { gifs: [gifs[0].width, gifs[0].height] }),
+    // A default grid that wraps into more rows is said, since a one-row strip is what a sheet of frames often means;
+    // not when the recipe chose its columns, or when expect.sheet checks the sheet (its problem says what came out).
+    ...(!sheet.trim && project.frames.length > sheet.columns && recipe?.sheet?.columns === undefined && expect?.sheet === undefined && { sheet: { size: [sheet.width, sheet.height], columns: sheet.columns, rows: Math.ceil(project.frames.length / sheet.columns) } })
   };
   const frameFiles = `${name}.png, frames/ and animations/`;
   // Nothing visible at all is never a delivery, whatever was asked: it is a problem even without expect. A few empty
@@ -414,7 +461,7 @@ export function checkDelivery(project, { recipe, gifs, expect, animation } = {})
   const tileSet = recipe?.animations === undefined && (set || project.frames.some(frame => frame.tile));
   const { motion, notes: moves } = tileSet ? { notes: [] } : reviewMotion(project, names.slice(0, 16), boxes, drawn, recipe);
   notes.push(...moves);
-  const fields = gifs === undefined ? 'width, height, frames, colors, transparent, loop' : 'width, height, frames, colors, transparent, loop, gifScale';
+  const fields = gifs === undefined ? 'width, height, frames, colors, transparent, loop, sheet' : 'width, height, frames, colors, transparent, loop, gifScale, sheet';
   if (!expect) return { ...(blank && { ok: false }), delivered, ...(motion && { motion }), ...(blank && { problems: [blank] }), ...(notes.length && { notes }), hint: `Pass expect with what the user asked for (${fields}) to check every file against it.` };
 
   const problems = [], named = recipe?.animations !== undefined;
@@ -430,6 +477,8 @@ export function checkDelivery(project, { recipe, gifs, expect, animation } = {})
       : `the canvas is ${width}x${height}${scale !== 1 ? ` at sheet.scale ${scale}` : ''}: change the recipe's ${Object.keys(asked).join(' and ')} (pixel_patch { "set": "${Object.keys(asked)[0]}", "value": ${Object.values(asked)[0]} }${scale !== 1 ? ' and sheet.scale 1' : ''}), fit the drawing to it, pixel_inspect, then render again`;
     problems.push({ file: frameFiles, asked, got: { width: width * scale, height: height * scale }, fix });
   }
+  const sheetMiss = expect.sheet === undefined ? null : sheetProblem(project, expect, recipe);
+  if (sheetMiss) problems.push(sheetMiss);
   if (gifs !== undefined) {
     // Only the GIFs of the animations being checked.
     const checked = new Set(names), scoped = gifs.filter(gif => checked.has(gif.animation));

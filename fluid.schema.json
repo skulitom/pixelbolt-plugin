@@ -744,7 +744,7 @@
                   },
                   "required": [],
                   "additionalProperties": false,
-                  "description": "Strength follows a sine wave: puffs, heaves, heartbeats."
+                  "description": "Strength follows a sine wave: puffs, heaves, heartbeats. A liquid is never fuller than full, so a liquid emitter at rate 1 only dips: its stream thins and falls short in the low half of a cycle, and never passes its steady reach."
                 },
                 "orbit": {
                   "type": "object",
@@ -1599,7 +1599,11 @@
                 },
                 "symbol": {
                   "type": "string",
-                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns)."
+                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns). A circle's stays upright unless it rolls."
+                },
+                "rolls": {
+                  "type": "boolean",
+                  "description": "A circle with a symbol: turn the symbol as the ball rolls (a wheel, a boulder), its round outline kept as drawn. Without it the symbol stays upright (a face)."
                 },
                 "trail": {
                   "type": "object",
@@ -2257,7 +2261,7 @@
             },
             "required": [],
             "additionalProperties": false,
-            "description": "De-Stray (specks and pinholes take their surroundings' colour; a liquid's lone pixel is a drop, and stays) and De-Corner cleanup of the fluid before outline and sparks."
+            "description": "De-Stray (specks and pinholes take their surroundings' colour, the commonest where bands meet; a liquid's lone pixel is a drop, and stays) and De-Corner cleanup of the fluid before outline and sparks."
           }
         },
         "required": [

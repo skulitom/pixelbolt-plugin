@@ -616,7 +616,9 @@ function simulate(effect, context) {
       // pixel kept on the particle.
       const k = e.spin ? (((Math.round((p.turn + p.spin * (p.still ?? p.age)) / 45) % 8) + 8) % 8) : 0, turned = k ? spun(sequence[step], view?.mirror ? 8 - k : k) : null;
       const symbol = turned ? turned.name : sequence[step], rows = turned ? turned.rows : symbols[symbol], w = rows[0].length, h = rows.length;
-      const left = X - (turned ? turned.pivot[0] : Math.floor(w / 2)), top = Y - (turned ? turned.pivot[1] : Math.floor(h / 2));
+      // Its middle pixel is on the particle, but none of it goes below its floor: a symbol three pixels tall would hang a
+      // row under the floor it lands on, and a spinning one came to rest a row lower upright than lying on its side.
+      const left = X - (turned ? turned.pivot[0] : Math.floor(w / 2)), middle = Y - (turned ? turned.pivot[1] : Math.floor(h / 2)), top = p.floor === null ? middle : Math.min(middle, Math.floor(p.floor + 0.5) - h + 1);
       if (left >= width || top >= height || left + w <= 0 || top + h <= 0) { culled++; return; }
       const recolour = whole ? { ...p.remap, ...Object.fromEntries([...new Set(rows.join(''))].filter(char => !clear(char)).map(char => [char, stage])) } : colours;
       const remap = recolour && Object.keys(recolour).length ? { remap: recolour } : {};
@@ -1059,6 +1061,9 @@ export function compileEffects(source, { stats = false } = {}) {
   const recipe = { version: 1, name: source.name, width, height, palette, ...(Object.keys(symbols).length && { symbols }), ...(source.anchor !== undefined && { anchor: source.anchor }), frames, animations, ...(source.sheet !== undefined && { sheet: source.sheet }) };
   // A light track for game code: in each frame, where the effect's bright pixels are (weighted by brightness), how much
   // light they make (glow, in full-white pixels) and their mean colour, or null where nothing bright is drawn.
+  // An entry is built by the JSON parser and not written as an object: twice in CI, under Node 24, every entry of one
+  // compile's track came back holding the last frame's glow (its place and colour were right), which nothing written
+  // here can do. The engine's compiled code shared one number between the objects of a loop; the parser's never do.
   const lightOf = data => {
     let sum = 0, sx = 0, sy = 0, r = 0, g = 0, bl = 0;
     for (let i = 0, p = 0; i < data.length; i += 4, p++) {
@@ -1069,7 +1074,7 @@ export function compileEffects(source, { stats = false } = {}) {
     }
     if (!sum) return null;
     const hex = v => Math.round(v / sum).toString(16).padStart(2, '0');
-    return { at: [Math.round(sx / sum), Math.round(sy / sum)], glow: Math.round(sum * 100) / 100, color: `#${hex(r)}${hex(g)}${hex(bl)}` };
+    return JSON.parse(`{"at":[${Math.round(sx / sum)},${Math.round(sy / sum)}],"glow":${Math.round(sum * 100) / 100},"color":"#${hex(r)}${hex(g)}${hex(bl)}"}`);
   };
   // A review of what each animation delivers: a loop's seam (the pixels that change from its last frame to its first)
   // against its largest ordinary step, warned about when the loop jumps; a one-shot's residue, the pixels its last

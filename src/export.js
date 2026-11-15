@@ -3,7 +3,7 @@ import { encodePNG, encodeAPNG, crc32 } from './png.js';
 import { readFile, readdir, mkdir, writeFile, access, rm, rmdir, stat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { embedRecipe, recipeKind } from './share.js';
-import { spriteFrames, tileSets } from './godot.js';
+import { spriteFrames, tileSets, canvasTexture, normalsYUp } from './godot.js';
 import { tiledTileset } from './tiled.js';
 import { autotileFrames } from './autotile.js';
 
@@ -57,7 +57,11 @@ export function generateCSS(project, atlas) {
   lines.push('@media (prefers-reduced-motion: reduce) {', ...Object.keys(project.animations).map(key => `  .pf-${project.name}-${key} { animation: none; }`), '}');
   return lines.join('\n') + '\n';
 }
-export async function createBundle(spec) {
+// `normal`: a normal recipe aligned with `spec` (the same size and frame names in the same order, as compileNormals
+// makes one). Its sheet is written beside the colour sheet on the same grid, as authored (+Y down) and with green
+// flipped as Godot and Unity read a normal map, with a Godot CanvasTexture pairing the two that the SpriteFrames then
+// draws through, so an AnimatedSprite2D with it takes light from Light2D nodes.
+export async function createBundle(spec, { normal } = {}) {
   const project = renderProject(spec);
   const { width, height, sheet, frames, name } = project;
   const animationPixels = Object.values(project.animations).reduce((sum, a) => sum + a.frames.length * width * height * sheet.scale ** 2, 0);
@@ -72,7 +76,17 @@ export async function createBundle(spec) {
   // A tile set with no animations of its own has only the flipbook of every tile, which is no animation: it gets no
   // SpriteFrames, animated PNGs, CSS or player, and its preview shows the sheet.
   const still = Boolean(tiles) && spec.animations === undefined;
-  const godot = still ? null : spriteFrames(atlas.metadata);
+  if (normal !== undefined) {
+    const pass = renderProject({ ...normal, sheet: spec.sheet });
+    const differs = pass.width !== width || pass.height !== height ? `it is ${pass.width}×${pass.height} and the colour recipe ${width}×${height}` : pass.frames.length !== frames.length ? `it has ${pass.frames.length} frames and the colour recipe ${frames.length}` : pass.frames.find((frame, i) => frame.name !== frames[i].name);
+    if (differs) throw new PixelError('normal', `a normal pass shares the colour recipe's size and frames: ${typeof differs === 'string' ? differs : `its frame "${differs.name}" is "${frames[pass.frames.indexOf(differs)].name}" in the colour recipe`}. Derive it from this recipe with a pixelforge-normals source`);
+    const lit = buildAtlas(pass);
+    if (lit.width !== atlas.width || lit.height !== atlas.height) throw new PixelError('normal', 'a trimmed colour sheet packs each frame by what it draws, and the normal sheet must match it pixel for pixel: derive the normal pass from this recipe, or set sheet.trim to false');
+    files.set(`${name}.normal.png`, encodePNG(lit.data, lit.width, lit.height));
+    files.set(`${name}.normal_y_up.png`, encodePNG(normalsYUp(lit.data), lit.width, lit.height));
+    files.set(`${name}.canvas.tres`, Buffer.from(canvasTexture({ diffuse: `${name}.png`, normal: `${name}.normal_y_up.png` })));
+  }
+  const godot = still ? null : spriteFrames(atlas.metadata, normal !== undefined ? { image: `${name}.canvas.tres` } : {});
   if (godot) files.set(`${name}.tres`, Buffer.from(godot.text));
   // Frame times Godot holds as fractions play within a ten-millionth of their length: a fact for whoever opens the
   // .tres, written in README.txt and kept in `notes`, not a warning for every reply to carry.
@@ -94,7 +108,8 @@ export async function createBundle(spec) {
   if (raised.size) project.warnings.push(`${raised.size} frame${raised.size === 1 ? '' : 's'} of 10 ms or less (${[...raised].slice(0, 8).join(', ')}${raised.size > 8 ? ', …' : ''}) last 11 ms in the animated PNGs: browsers play such short frames at 100 ms. The atlas, CSS and player keep the exact durations.`);
   if (!still) files.set('player.js', await readFile(new URL('./runtime.js', import.meta.url)));
   files.set('preview.html', Buffer.from(still ? sheetHTML(project) : previewHTML(project)));
-  files.set('README.txt', Buffer.from((tiles ? tilesetReadme(project, tiles, still) : spriteReadme(project)) + notes.map(note => `\nGodot: ${note}\n`).join('')));
+  const lit = normal === undefined ? '' : `\n${name}.normal.png: the normal pass on the same grid, +Y down as Pixelbolt draws it\n${name}.normal_y_up.png: the same with green flipped, as Godot and Unity read a normal map\n${name}.canvas.tres: a Godot 4 CanvasTexture of ${name}.png and ${name}.normal_y_up.png; ${name}.tres draws through it, so an AnimatedSprite2D with ${name}.tres is shaded by PointLight2D and DirectionalLight2D nodes, and a Sprite2D takes ${name}.canvas.tres as its texture. Keep the four files together\n`;
+  files.set('README.txt', Buffer.from((tiles ? tilesetReadme(project, tiles, still) : spriteReadme(project)) + lit + notes.map(note => `\nGodot: ${note}\n`).join('')));
   // A forced export over an earlier export of this recipe removes the frame and animation PNGs that export's atlas
   // lists and this one no longer has. Another recipe's export in the same folder keeps its PNGs, and so does a PNG
   // put in frames/ by hand.
@@ -207,14 +222,26 @@ function stillTileSet(spec, project) {
 }
 // What a reply says about a project's animations, the same from every command and tool: by name, how many frames each
 // plays, how long that takes, whether it loops and, where its frames all last the same (and it is not a still tile
-// set), its frame rate, which Godot, Unity, Aseprite and video editors ask for. Past 16 animations the rest are named
-// in `moreAnimations`. `spec` is the recipe the project was rendered from.
+// set), its frame rate, which Godot, Unity, Aseprite and video editors ask for. Four or more animations that differ
+// only in the last number of their names and are alike in every fact (an animated tile set's, one for each mask) are
+// one entry, named with {n} for the number and counted: forty-six lines said one thing. Past 16 entries the rest are
+// named in `moreAnimations`. `spec` is the recipe the project was rendered from.
 export function describeAnimations(project, spec) {
   const names = Object.keys(project.animations), still = stillTileSet(spec, project);
   // A still tile set's only animation is the flipbook of every tile, which no export animates: nothing to describe.
   if (still && names.length === 1) return {};
-  const entry = key => { const { frames, duration, loop } = project.animations[key], fps = still ? undefined : animationFps(project, key); return [key, { frames: frames.length, duration, loop, ...(fps !== undefined && { fps }) }]; };
-  return { animations: Object.fromEntries(names.slice(0, 16).map(entry)), ...(names.length > 16 && { moreAnimations: names.slice(16) }) };
+  const facts = key => { const { frames, duration, loop } = project.animations[key], fps = still ? undefined : animationFps(project, key); return { frames: frames.length, duration, loop, ...(fps !== undefined && { fps }) }; };
+  const alike = new Map();
+  for (const key of names) { const group = `${key.replace(/\d+(?!.*\d)/, '{n}')} ${JSON.stringify(facts(key))}`; alike.set(group, [...(alike.get(group) ?? []), key]); }
+  const entries = [], told = new Set();
+  for (const key of names) {
+    if (told.has(key)) continue;
+    const group = alike.get(`${key.replace(/\d+(?!.*\d)/, '{n}')} ${JSON.stringify(facts(key))}`);
+    if (group.length < 4) { entries.push([key, facts(key)]); continue; }
+    for (const each of group) told.add(each);
+    entries.push([key.replace(/\d+(?!.*\d)/, '{n}'), { count: group.length, ...facts(key) }]);
+  }
+  return { animations: Object.fromEntries(entries.slice(0, 16)), ...(entries.length > 16 && { moreAnimations: entries.slice(16).map(([key]) => key) }) };
 }
 const popcount = mask => { let bits = 0; for (let m = mask; m; m &= m - 1) bits++; return bits; };
 // The frame and animation PNGs an export wrote, as its atlas metadata names them. Anything else lists nothing.
@@ -383,18 +410,15 @@ async function respelled(bundle, root) {
   }
   return found;
 }
-// Writes a bundle into `directory`. Without `force`, any existing file stops the export before anything is written.
-// With `force`, existing files are replaced and the earlier export's leftovers are removed after the new files are in
-// place; the returned list of written paths then carries `removed`, the paths it deleted. `inputs` are never written.
 // What a written bundle holds, for a reply: its files relative to `out`, without each frame (and each animation when
 // there are more than 16) unless `listFiles`, and how many of those there are. Paths an export removed are relative too.
 export function outputSummary(out, files, listFiles) {
   const relative = files.map(file => path.relative(out, file).split(path.sep).join('/'));
   const count = prefix => relative.filter(file => file.startsWith(`${prefix}/`)).length;
   const animations = count('animations');
-  // What the preview page runs on (its player, a scene's copies of the modules it draws with) and the README are in
-  // the folder for the page, not to deliver: a reply lists what a game, a site or a post takes.
-  const support = file => !file.includes('/') && (file.endsWith('.js') || file === 'README.txt');
+  // What the preview page runs on (its player, a scene's player/ folder of the modules it draws with) and the README
+  // are in the folder for the page, not to deliver: a reply lists what a game, a site or a post takes.
+  const support = file => file.startsWith('player/') || (!file.includes('/') && (file.endsWith('.js') || file === 'README.txt'));
   // The two files a game takes first, by what they are: among a dozen names an agent asked which one was the sheet.
   const atlas = relative.find(file => !file.includes('/') && file.endsWith('.atlas.json')), sheet = atlas && `${atlas.slice(0, -'.atlas.json'.length)}.png`;
   return {
@@ -405,6 +429,9 @@ export function outputSummary(out, files, listFiles) {
   };
 }
 
+// Writes a bundle into `directory`. Without `force`, any existing file stops the export before anything is written.
+// With `force`, existing files are replaced and the earlier export's leftovers are removed after the new files are in
+// place; the returned list of written paths then carries `removed`, the paths it deleted. `inputs` are never written.
 export async function writeBundle(bundle, directory, { force = false, inputs = [] } = {}) {
   const root = path.resolve(directory);
   const collisions = inputCollisions(bundle, root, inputs);

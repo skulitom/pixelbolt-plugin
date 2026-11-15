@@ -4,9 +4,6 @@ import path from 'node:path';
 import { inspectMotion } from '../src/motion.js';
 import { expandPoses } from '../src/authoring.js';
 import { compileWaves } from '../src/wave.js';
-import { compileCrystals } from '../src/crystal.js';
-import { compilePowder } from '../src/powder.js';
-import { compileBodies } from '../src/bodies.js';
 import { readExpect, checkDelivery, briefCheck } from '../src/check.js';
 import { readSize, resizeRecipe, resizeWarning, resizeMargins, keepFrames, keepAnimations } from '../src/resize.js';
 import { embedBundleRecipe, sameFiles, outputSummary, describeAnimations } from '../src/export.js';
@@ -36,19 +33,24 @@ const HELP = `Pixelbolt — text to pixels, without dependencies
                                            See every frame; writes only --out
   pixelbolt patch <file.json|-> --changes <changes.json|-> [--out new.json] [--image diff.png]
                                            Preview edits; writes only --out and --image
-  pixelbolt render <file.json|-> --out dir [--look] [--gif | --gif-scale 1-16]
-                                           Export a complete asset bundle. --look also writes look.png there, the frames
-                                           enlarged to look at; --gif a GIF of each animation in gifs/, at the frames'
-                                           own size or --gif-scale times it
+  pixelbolt render <file.json|-> --out dir [--scale 1-16] [--look] [--gif | --gif-scale 1-16] [--normal <file>]
+                                           Export a complete asset bundle. --scale enlarges every exported pixel that
+                                           many times (the recipe's sheet.scale, for this export); --look also writes
+                                           look.png there, the frames enlarged to look at; --gif a GIF of each
+                                           animation in gifs/, at the frames' own size or --gif-scale times it;
+                                           --normal a normal recipe or a pixelforge-normals source of this recipe,
+                                           exported beside the sheet with a Godot CanvasTexture that lights it
                                            --expect '{"width":32,"height":32,"frames":8}' (or a .json file) checks it
                                            against the request; --animation <name> checks only that animation
-  pixelbolt share <file.json|->           Print a playground link for the resolved recipe
+  pixelbolt share <file.json|->           Print a playground link for the resolved source recipe
   pixelbolt gif <file.json|-> --out anim.gif [--animation name] [--scale 1-16] [--background color]
                                            Share one animation as a GIF; writes only --out
   pixelbolt gif --preset <name> --out anim.gif [--size 32x32] [--frames 8] [--scale 8] [--sheet frames.png]
                                            A shipped preset straight to its GIF, in one call: --size and --frames as
                                            in compile, --sheet also writes the frames as a contact sheet to look at
                                            (all three work with a recipe file too)
+  pixelbolt gif <scene.json> --out scene.gif [--scale 1-16] [--fps 25]
+                                           A whole scene as one looping GIF, through its duration once
   pixelbolt gif-frames <folder> --fps 25 --out loop.gif [--loops 0] [--background color] [--prefix name_]
                                            A GIF from numbered PNG frames (name_0001.png ...); writes only --out
   pixelbolt sequence <recipe|source|scene.json> --out folder --fps 30 [--size 1080p|WxH] [--scale n]
@@ -80,6 +82,7 @@ const HELP = `Pixelbolt — text to pixels, without dependencies
                                            several (a,b for more than one)
   pixelbolt presets [name] [--full]        List the presets, a line each (size, frames, loop, colours, what each is
                                            for; --full adds every animation and file), or print one preset's source
+                                           (--out <new.json> saves the source alone, to edit and compile)
   pixelbolt presets --find "water splash"  Only the presets those words match: by name, else by description
   pixelbolt autotile <template.json> --out recipe.json [--metadata masks.json] [--preview map.png]
                                            Build a 47-tile blob or 16-tile cardinal set from template rows or a
@@ -144,7 +147,8 @@ Sequence writes one PNG per video frame with alpha, plus sequence.json and a REA
 (the largest that fits, or --scale; --fit cover takes the smallest that covers the canvas and crops the rest) and
 placed by --align (top-left ... bottom-right) and --offset. A scene's margins take its background colour. --step 2
 animates on twos. Rates such as 23.976 and 29.97 are exact (24000/1001, 30000/1001). A pixelforge-bodies source is
-stepped frame after frame (--animation names the effect), so a match may run past a recipe's 256 frames.
+stepped frame after frame (--animation names the effect), so a match may run past a recipe's 256 frames, and its
+bodies are drawn at the video's pixels: a picture that turns keeps every pixel.
 Command results except help and the preview server are JSON. Errors exit with code 1.
 Checkout: node bin/pixelbolt.js <command>. Portable build folder: .\\pixelbolt (Windows) or ./pixelbolt (macOS/Linux).
 `;
@@ -157,8 +161,8 @@ const OPTIONS = {
   validate: ['fps'],
   inspect: ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'out', 'force', 'view', 'native', 'diagnostics', 'full', 'max-cells', 'step', 'offset', 'every', 'layers', 'reference', 'beside', 'palette', 'guides', 'motion', 'speed', 'ground', 'metadata'],
   patch: ['changes', 'out', 'image', 'force'],
-  render: ['out', 'force', 'expect', 'animation', 'list-files', 'embed-recipe', 'gif', 'gif-scale', 'look'],
-  gif: ['out', 'animation', 'scale', 'background', 'force', 'preset', 'size', 'frames', 'sheet'],
+  render: ['out', 'force', 'expect', 'animation', 'list-files', 'embed-recipe', 'gif', 'gif-scale', 'look', 'scale', 'normal'],
+  gif: ['out', 'animation', 'scale', 'background', 'force', 'preset', 'size', 'frames', 'sheet', 'fps'],
   'gif-frames': ['out', 'fps', 'loops', 'background', 'prefix', 'force'],
   sequence: ['out', 'fps', 'animation', 'size', 'scale', 'fit', 'align', 'offset', 'background', 'loops', 'seconds', 'step', 'force'],
   preview: ['port', 'open'],
@@ -169,7 +173,7 @@ const OPTIONS = {
   scene: ['out', 'force', 'image', 'time', 'view', 'scale', 'guides', 'list-files', 'embed-recipe'],
   overlay: ['changes', 'selections', 'out', 'force'],
   import: ['out', 'name', 'atlas', 'frame', 'padding', 'metadata', 'force', 'embedded'],
-  presets: ['full', 'find'],
+  presets: ['full', 'find', 'out', 'force'],
   share: [],
   skill: ['project', 'dir', 'force']
 };
@@ -264,7 +268,7 @@ function takeStdin(input) {
   stdinTaken = input;
 }
 const STDIN_OPTIONS = { inspect: ['reference', 'metadata', 'guides'], patch: ['changes'], overlay: ['changes', 'selections'], render: ['expect'], scene: ['guides'], import: ['atlas'] };
-async function readProject(file, input = INPUT_FILE) {
+async function readProject(file, input) {
   if (!file) throw new Error('Provide a project JSON filename or - for stdin');
   let source;
   if (file === '-') { takeStdin(input); const chunks = []; for await (const chunk of process.stdin) chunks.push(chunk); source = Buffer.concat(chunks).toString('utf8'); }
@@ -328,7 +332,7 @@ async function outputPath(target) {
 // fails, the files and folders this call made are removed again, as writeBundle removes a failed export's; a file
 // replaced under --force can't be put back, so the error says which ones now hold this run's bytes.
 async function writeOutputs(targets, force, inputs = []) {
-  const entries = Object.entries(targets).map(([label, [file, data, option = label]]) => [label, path.resolve(file), data, option]);
+  const entries = Object.entries(targets).map(([label, [file, data, option]]) => [label, path.resolve(file), data, option]);
   // Windows and macOS file systems ignore case by default, so Hero.json and hero.json are one file there.
   const unique = new Set(entries.map(([, target]) => process.platform === 'win32' || process.platform === 'darwin' ? target.toLowerCase() : target));
   if (unique.size !== entries.length) throw new Error('Output paths must be distinct; no files were written.');
@@ -398,7 +402,13 @@ const referenced = input => input.resolution.files.length ? { resolved: input.re
 const engineVersion = async () => JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
 // `presets [name] [--full]`, and `help presets [--full]` or `help preset <name>`: every preset, a line each or in full,
 // or one preset's source. A shell has no time limit, so every preset is measured.
-async function presetsText(name, full = false, find) {
+// Whether a file holds a scene, which `gif` writes whole where it writes one animation of a recipe.
+async function holdsScene(file) {
+  if (!file || file === '-') return false;
+  try { return JSON.parse((await readFile(file, 'utf8')).replace(/^\uFEFF/, '')).format === 'pixelforge-scene'; } catch { return false; }
+}
+async function presetsText(name, full, find, out, force) {
+  if (out !== undefined && (name === undefined || find !== undefined)) throw new Error('--out saves one preset\'s source: pixelbolt presets <name> --out <new.json>');
   if (find !== undefined) {
     if (name !== undefined || full) throw new Error('--find goes on its own: pixelbolt presets --find "water splash" lists the presets those words match');
     // Names are known without compiling anything, so a name match measures only the presets it lists.
@@ -407,7 +417,12 @@ async function presetsText(name, full = false, find) {
   }
   if (name === undefined) { const listing = await listPresets({ budget: Infinity }); return rowsJSON(full ? listing : briefListing(listing)); }
   if (full) throw new Error('--full goes with the listing (pixelbolt presets --full); pixelbolt presets <name> prints one preset\'s source');
-  const entry = await findPreset(name, 'name'), { source, inlined } = await loadPreset(entry);
+  const entry = await findPreset(name, 'name', true), { source, inlined } = await loadPreset(entry);
+  // Saved, the source is the file alone, ready to edit: printed, it sits inside this reply and takes a script to lift out.
+  if (out !== undefined) {
+    const written = await writeOutputs({ source: [out, formatJSON(source), '--out'] }, force);
+    return rowsJSON({ name: entry.name, ...written, ...(inlined.length && { inlined }), next: entry.kind === 'scene' ? presetNext(entry, true) : entry.kind === 'recipe' ? `Edit ${shown(path.resolve(out))}, then validate, inspect or render it.` : `Edit ${shown(path.resolve(out))}, then pixelbolt compile ${shown(path.resolve(out))} --out <new recipe.json>.` });
+  }
   return rowsJSON({ name: entry.name, file: `examples/${entry.file}`, ...(inlined.length && { inlined }), next: presetNext(entry, true), source });
 }
 // `help <topic> [section]`: what MCP pixel_help returns for the topic, so a shell reads one section of a long guide
@@ -465,7 +480,7 @@ try {
       print({ ok: true, file });
     } else if (command === 'schema') process.stdout.write(await readFile(new URL('../schema.json', import.meta.url), 'utf8'));
     else if (command === 'presets') {
-      console.log(await presetsText(positional[0], options.full === true, options.find));
+      console.log(await presetsText(positional[0], options.full === true, options.find, options.out, options.force));
     } else if (command === 'skill') {
       if (positional[0] !== 'install') throw new Error('Usage: pixelbolt skill install [--project | --dir <skills folder>] [--force]');
       const { installSkill } = await import('../src/skill.js');
@@ -519,16 +534,14 @@ try {
       else process.stdout.write(formatJSON(expanded));
     } else if (command === 'share') {
       const input = await readResolved(positional[0]), version = await engineVersion();
-      // The hosted playground has no compiler for wave, crystal, powder or bodies sources, so they are shared as the
-      // ordinary grids they compile to.
-      const compile = { 'pixelforge-wave': compileWaves, 'pixelforge-crystal': compileCrystals, 'pixelforge-powder': compilePowder, 'pixelforge-bodies': compileBodies }[input.document?.format];
-      const document = compile ? compile(input.document).recipe : input.document;
+      // The playground compiles sources with the linked engine, keeping links short and their source editable.
+      const document = input.document;
       const link = await shareLink(document, version);
-      print({ ok: true, link, characters: link.length, version, kind: recipeKind(document), ...(compile && { compiledFrom: input.document.format }) });
+      print({ ok: true, link, characters: link.length, version, kind: recipeKind(document) });
     } else if (command === 'import' && options.embedded) {
       if (!options.out || !/\.json$/i.test(options.out)) throw new Error('import requires --out <new.json>');
       if (!positional[0] || positional[0] === '-') throw new Error('import requires a PNG filename');
-      for (const key of ['name', 'atlas', 'metadata']) if (options[key] !== undefined) throw new Error(`--${key} cannot be combined with --embedded`);
+      for (const key of ['name', 'atlas', 'frame', 'padding', 'metadata']) if (options[key] !== undefined) throw new Error(`--${key} cannot be combined with --embedded`);
       const embedded = await readEmbeddedRecipe(await readFile(positional[0]));
       if (!embedded) throw new Error('This PNG carries no Pixelbolt recipe; drop --embedded to import its pixels.');
       const { version, kind, recipe } = embedded;
@@ -558,7 +571,7 @@ try {
         }
         // --size: the compiled drawing on a canvas of another size (cut or given margins, never scaled).
         if (options.size !== undefined) {
-          if (command === 'autotile' || compile === compileAutotile) throw new Error('--size: a tile set\'s size is its tile, set in the source');
+          if (compile === compileAutotile) throw new Error('--size: a tile set\'s size is its tile, set in the source');
           const { recipe, resized: moved } = resizeRecipe(compiled.recipe, options.size, '--size'), cut = resizeWarning(moved, [recipe.width, recipe.height]);
           compiled.recipe = recipe; resized = moved;
           if (cut) warnings.push(cut);
@@ -597,7 +610,7 @@ try {
       // said what a map needs.
       const unsaved = metadata && !options.metadata && reviewed && !tilemap;
       const margins = resized && resizeMargins(resized, [made.width, made.height]);
-      print({ ok: true, ...written, ...made, ...(margins && { margins }), ...(kept && { kept }), ...(tilemap && { tilemap }), ...(warnings && { warnings }), ...((unsaved || (preview && !options.preview)) && { hint: [unsaved && `The metadata${warnings ? ' (what review tools read: pose contacts, joints, loop seams, tile masks)' : ''} was not saved; pass --metadata <new.json> to keep it.`, preview && !options.preview && 'Pass --preview <new.png> to see every tile in a test map.'].filter(Boolean).join(' ') }), ...(input && referenced(input)) });
+      print({ ok: true, ...written, ...made, ...(margins && { margins }), ...(kept && { kept }), ...(tilemap && { tilemap }), ...(warnings && { warnings }), ...((unsaved || (preview && !options.preview)) && { hint: [unsaved && `The metadata (what review tools read: pose contacts, joints, loop seams, tile masks) was not saved; pass --metadata <new.json> to keep it.`, preview && !options.preview && 'Pass --preview <new.png> to see every tile in a test map.'].filter(Boolean).join(' ') }), ...(input && referenced(input)) });
     } else if (command === 'scene' && options.image !== undefined) {
       // One image at one time, as MCP pixel_scene returns it: color, grayscale or depth, with optional guides.
       if (options.out !== undefined || options['embed-recipe']) throw new Error('scene --image writes one image; export a bundle with --out instead');
@@ -684,7 +697,16 @@ try {
       const files = await writeBundle(sequence, options.out, { force: options.force, inputs: inputsOf(input) }), { timing, figures, ...info } = sequence.info;
       // A match's every-frame figures stay in sequence.json; the reply carries their summary, after where the files went.
       print({ ok: true, ...info, directory: shown(path.resolve(options.out)), files: files.length, ...(files.removed && { removed: files.removed }), ...referenced(input), ...(figures && { figures: figuresSummary(figures) }) });
+    } else if (command === 'gif' && options.preset === undefined && await holdsScene(positional[0])) {
+      // A scene: the whole of it as one looping GIF, sampled through its duration.
+      if (!options.out || !/\.gif$/i.test(options.out)) throw new Error('gif requires --out <new.gif>');
+      for (const key of ['animation', 'background', 'size', 'frames', 'sheet']) if (options[key] !== undefined) throw new Error(`--${key} goes with a recipe's GIF; a scene's takes --scale and --fps`);
+      if (options.scale !== undefined && !/^\d{1,2}$/.test(options.scale)) throw new Error('--scale expects a whole number from 1 to 16');
+      const { sceneGIF } = await import('../src/scene-export.js');
+      const input = await readResolved(positional[0]), { data, ...gif } = sceneGIF(prepareScene(input.document), { ...(options.fps !== undefined && { fps: options.fps }), ...(options.scale !== undefined && { scale: Number(options.scale) }) });
+      print({ ok: true, name: input.document.name, width: gif.width, height: gif.height, frames: gif.frames, fps: gif.fps.label, duration: gif.duration, colors: gif.colors, bytes: data.length, ...await writeOutputs({ file: [options.out, data, '--out'] }, options.force, inputsOf(input)), ...(gif.notes.length && { notes: gif.notes }), ...referenced(input) });
     } else if (command === 'gif') {
+      if (options.fps !== undefined) throw new Error('--fps goes with a scene\'s GIF; a recipe\'s frames carry their own durations');
       if (!options.out || !/\.gif$/i.test(options.out)) throw new Error('gif requires --out <new.gif>');
       if (options.sheet !== undefined && !/\.png$/i.test(options.sheet)) throw new Error('--sheet must name a new .png file');
       // --preset: a shipped preset straight to its GIF, compiled as compile --preset compiles it.
@@ -717,6 +739,8 @@ try {
       print({ ok: true, ...gif, bytes: data.length, ...written });
     } else {
       const input = await readResolved(positional[0]);
+      // A source is not a recipe: read as one, its first field was "unknown", which reads as a broken file.
+      if (command === 'validate' && Object.hasOwn(COMPILERS, input.document?.format ?? '')) throw new Error(`validate checks a recipe, and this is a ${input.document.format} source; pixelbolt compile ${positional[0]} --out <new.json> checks it and writes the recipe it makes`);
       if (command === 'validate') { const project = renderProject(input.document); print({ ok: true, ...summary(project, input.document), ...(options.fps !== undefined && { frameGrid: frameGrid(project, options.fps) }), ...referenced(input) }); }
       else {
         if (!options.out) throw new Error('render requires --out <directory>');
@@ -726,7 +750,14 @@ try {
         // pixel_render's gif does. They are encoded, and the check run, before anything is written, so a refused GIF or
         // an unknown --animation writes nothing.
         if (options['gif-scale'] !== undefined && !/^\d{1,2}$/.test(options['gif-scale'])) throw new Error('--gif-scale expects a whole number from 1 to 16, such as --gif-scale 4');
-        const bundle = await createBundle(input.document), scale = options['gif-scale'] === undefined ? undefined : Number(options['gif-scale']);
+        if (options.scale !== undefined && !/^(?:[1-9]|1[0-6])$/.test(options.scale)) throw new Error('--scale expects a whole number from 1 to 16: how many times to enlarge every exported pixel');
+        // --scale: sheet.scale for this export, so "a PNG at 4x" needs no patch first. The bundle's copy of the recipe carries it.
+        if (options.scale !== undefined) input.document = { ...input.document, sheet: { ...input.document.sheet, scale: Number(options.scale) } };
+        // --normal: a normal recipe aligned with this one, or the pixelforge-normals source that derives it, exported
+        // beside the colour sheet with what Godot needs to light it.
+        const lit = options.normal === undefined ? null : await readResolved(options.normal, '--normal');
+        const normal = !lit ? undefined : lit.document?.format === 'pixelforge-normals' ? COMPILERS['pixelforge-normals'](lit.document).recipe : lit.document;
+        const bundle = await createBundle(input.document, { normal }), scale = options['gif-scale'] === undefined ? undefined : Number(options['gif-scale']);
         const gifs = options.gif || scale !== undefined ? Object.keys(bundle.project.animations).map(name => animationGIF(bundle.project, name, { ...(scale !== undefined && { scale }) })) : undefined;
         if (gifs && gifs.reduce((sum, item) => sum + item.frames * item.width * item.height, 0) > 67108864) throw new Error('--gif-scale: all animations at this scale exceed 67,108,864 pixels; use a lower scale');
         const check = checkDelivery(bundle.project, { recipe: input.document, gifs, expect, animation: options.animation });
@@ -736,7 +767,7 @@ try {
         // size for a game, too small to judge by eye.
         if (options.look) { const sheet = inspectProject(bundle.project, options.animation !== undefined ? { animation: options.animation } : {}).sheet; bundle.files.set('look.png', encodePNG(sheet.data, sheet.width, sheet.height)); }
         const expectFile = options.expect !== undefined && !String(options.expect).trimStart().startsWith('{') ? filesRead(options.expect) : [];
-        const files = await writeBundle(bundle, options.out, { force: options.force, inputs: [...inputsOf(input), ...expectFile] });
+        const files = await writeBundle(bundle, options.out, { force: options.force, inputs: [...inputsOf(input), ...expectFile, ...(lit ? inputsOf(lit) : [])] });
         const notes = (gifs ?? []).flatMap(item => item.notes.map(text => `${item.animation}: ${text}`)).slice(0, 16);
         print({ ok: true, ...summary(bundle.project, input.document), ...bundleFiles(path.resolve(options.out), files, options), ...(gifs?.length && { gifs: { scale: gifs[0].scale, width: gifs[0].width, height: gifs[0].height, ...(notes.length && { notes }) } }), ...(options.look && { look: shown(path.join(path.resolve(options.out), 'look.png')) }), check: briefCheck(check), ...referenced(input) });
       }

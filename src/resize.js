@@ -55,7 +55,7 @@ function onCanvas(op, { width, height, symbols }) {
 
 // `canvas`, { width, height, symbols }, also cuts what the move puts off the new canvas (not for a layer sorted by
 // ground, where a grid stands on its lowest row).
-function moveOps(ops, dx, dy, path, option, canvas = null) {
+function moveOps(ops, dx, dy, path, option, canvas) {
   return ops.map((op, index) => {
     const p = `${path}[${index}]`;
     if (!PLACED.has(op.op) || (op.op === 'copy' && op.symbol === undefined)) {
@@ -63,7 +63,7 @@ function moveOps(ops, dx, dy, path, option, canvas = null) {
     }
     if (op.op === 'replace') return op;
     const moved = { ...op, x: (op.x ?? 0) + dx, y: (op.y ?? 0) + dy };
-    if (op.op === 'line') { moved.x2 = (op.x2 ?? op.x ?? 0) + dx; moved.y2 = (op.y2 ?? op.y ?? 0) + dy; }
+    if (op.op === 'line') { moved.x2 = op.x2 + dx; moved.y2 = op.y2 + dy; }
     if (op.ground !== undefined) moved.ground = op.ground + dy;
     return canvas ? onCanvas(moved, canvas) : moved;
   }).filter(Boolean);

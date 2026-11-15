@@ -514,7 +514,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     try { drawn = compileRest({ ...checkSource, poses: source.poses, animations: { check: { frames: standIns, loop: false } } }); }
     catch (error) { if (!(error instanceof PixelError)) throw error; }
     for (const pose of drawn ? standIns : []) {
-      const placed = drawn.metadata.poses[pose].parts[rig.body], rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
+      const parts = drawn.metadata.poses[pose].parts, placed = Object.hasOwn(parts, rig.body) ? parts[rig.body] : undefined, rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
       const lowest = placed ? placed.topLeft[1] + rows.findLastIndex(row => /[^. ]/.test(row)) : null, at = `poses.poses[${inputIndex.get(pose)}]`;
       const about = `"${pose}" stands in for a pose of the grounded idle "${groundedPoses.get(pose)}", so`;
       if (lowest === null) fail(at, `${about} it needs the body instance "${rig.body}" standing on rig.ground (row ${rig.ground})`);

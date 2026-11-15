@@ -1,4 +1,4 @@
-// Node-side help topics, shared by MCP pixel_help and `pixelbolt help <topic> [section]`: the quick start, the two
+// Node-side help topics, shared by MCP pixel_help and `pixelbolt help <topic> [section]`: the quick start, the three
 // guides, the recipe schema, a complete example, then the schema of each source format. The presets topics are built
 // from examples/ when asked (presets.js), so they are listed here but served by the caller.
 import { readFile } from 'node:fs/promises';

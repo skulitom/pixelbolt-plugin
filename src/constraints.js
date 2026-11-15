@@ -2,11 +2,10 @@
 // thresholds. Browser-compatible and deterministic: only + - * / and sqrt, craft.js trigonometry, fixed iteration counts
 // and joints solved in the order they are declared. A world anchor is a joint end without a body.
 import { fail, isObject } from './core.js';
-import { fields, number, pair } from './authoring.js';
+import { fields, number, boolean, pair } from './authoring.js';
 import { cosDeg, sinDeg, traceLine } from './craft.js';
 import { atan2Deg } from './shapes.js';
 
-const boolean = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected true or false'); return value; };
 const normalize = degrees => ((degrees % 360) + 540) % 360 - 180;
 const JOINTS = ['distance', 'rope', 'spring', 'hinge', 'weld'];
 const DEG = Math.PI / 180;
@@ -48,15 +47,25 @@ export function readJoints(list, path, { bodies, byName }) {
     const first = reference(entry.a, `${at}.a`), second = reference(entry.b, `${at}.b`);
     if (first.index < 0 && second.index < 0) fail(`${at}.b`, 'a joint needs at least one body; both ends are the world');
     if (first.index === second.index) fail(`${at}.b`, 'a joint joins two bodies, or a body and the world; both ends are the same body');
-    const la = entry.anchorA === undefined ? [0, 0] : pair(entry.anchorA, `${at}.anchorA`, -4096, 4096);
-    const lb = entry.anchorB === undefined ? [0, 0] : pair(entry.anchorB, `${at}.anchorB`, -4096, 4096);
+    // An anchor is a point on its body, its centre by default. The world's end has no centre: left out, a hinge or a
+    // weld holds the body where it starts (the world point under the body's own anchor), and a joint with a length
+    // must say where it is fixed. (It was the world point (0, 0): every bar of a cage welded to the canvas corner, and
+    // torn off on the first frame.)
+    const anchor = (end, key) => {
+      if (entry[key] !== undefined) return pair(entry[key], `${at}.${key}`, -4096, 4096);
+      if (end.body) return [0, 0];
+      if (entry.type !== 'hinge' && entry.type !== 'weld') fail(`${at}.${key}`, `a ${entry.type} to the world needs the world point it is fixed at, [x, y] in canvas pixels`);
+      return null;
+    };
+    let la = anchor(first, 'anchorA'), lb = anchor(second, 'anchorB');
+    la ??= readPoint(second.body, lb); lb ??= readPoint(first.body, la);
     const pa = readPoint(first.body, la), pb = readPoint(second.body, lb);
     const current = Math.sqrt((pb[0] - pa[0]) ** 2 + (pb[1] - pa[1]) ** 2);
     const type = entry.type;
     let length = type === 'hinge' || type === 'weld' ? 0 : entry.length === undefined ? current : number(entry.length, `${at}.length`, 0, 4096);
     let max = length;
     if (type === 'rope') {
-      max = entry.max === undefined ? entry.length === undefined ? current : length : number(entry.max, `${at}.max`, 0, 4096);
+      max = entry.max === undefined ? length : number(entry.max, `${at}.max`, 0, 4096);
       length = max;
     } else if (entry.max !== undefined) fail(`${at}.max`, 'max goes with a rope; a distance joint keeps its length');
     if (type === 'hinge' || type === 'weld') {
@@ -276,7 +285,8 @@ export function breakJoints(joints, frame, stats) {
   }
 }
 
-// Draws ropes: a line along each intact link joint, or a chain of links.
+// Draws ropes: a line along each intact link joint, or a chain of links. A chain with an outline key is drawn link by
+// link in its two keys by turns, which is what reads as a chain at this size; with one key it is a dot at each link.
 export function paintRopes(ropes, put, n = 1) {
   const disc = (x, y, code, r) => { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (i * i + j * j <= r * r + r) put(x + i, y + j, code); };
   const worldDot = (x, y, code, r) => disc(Math.floor(x * n), Math.floor(y * n), code, r);
@@ -286,10 +296,11 @@ export function paintRopes(ropes, put, n = 1) {
   };
   for (const rope of ropes) {
     const code = rope.fill.charCodeAt(0), outline = rope.outline?.charCodeAt(0);
-    for (const joint of rope.joints) {
+    for (const [index, joint] of rope.joints.entries()) {
       if (joint.broken || joint.a?.gone || joint.b?.gone) continue;
       const [ax, ay, bx, by] = anchors(joint);
-      if (rope.look === 'chain') {
+      if (rope.look === 'chain' && outline !== undefined) line(ax, ay, bx, by, index % 2 ? outline : code, rope.thickness);
+      else if (rope.look === 'chain') {
         worldDot(ax, ay, code, Math.max(0, Math.floor((rope.thickness * n - 1) / 2)));
         worldDot(bx, by, code, Math.max(0, Math.floor((rope.thickness * n - 1) / 2)));
       } else {
@@ -297,6 +308,6 @@ export function paintRopes(ropes, put, n = 1) {
         line(ax, ay, bx, by, code, rope.thickness);
       }
     }
-    if (rope.look === 'chain') for (const link of rope.links) if (!link.gone) worldDot(link.x, link.y, code, Math.max(0, Math.floor((rope.thickness * n - 1) / 2)));
+    if (rope.look === 'chain' && outline === undefined) for (const link of rope.links) if (!link.gone) worldDot(link.x, link.y, code, Math.max(0, Math.floor((rope.thickness * n - 1) / 2)));
   }
 }

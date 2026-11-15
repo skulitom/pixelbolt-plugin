@@ -1,8 +1,8 @@
 // Image sequences for video editors: one numbered PNG per video frame at a constant frame rate, on a canvas of the
 // video's size. Editors read these directly and keep the alpha; nothing here encodes video. Timing is exact integer
 // arithmetic on the frame rate as a fraction, so 29.97 means 30000/1001 and a sequence is the same on every machine.
-import { parseColor, fail } from './core.js';
-import { renderScene } from './scene.js';
+import { parseColor, fail, isObject } from './core.js';
+import { renderScene, SCENE_SIDE, SCENE_AREA } from './scene.js';
 import { bodiesFrames } from './bodies.js';
 import { encodePNG } from './png.js';
 
@@ -150,7 +150,7 @@ function compose(pixels, width, height, place, background) {
 // With `stream`, for frames whose key never comes back once it changes (a match's), each frame's file is instead made
 // when it is written (writeBundle calls it, in order) and only the last is kept, for the video frames that hold it, so a
 // sequence holds one frame at a time however long it runs; `info.differentFrames` is counted as they are made.
-function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe, stream = false) {
+function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe, stream = false, fine = 1) {
   const fps = options.rate, place = placeSprite(sourceWidth, sourceHeight, options);
   let background = options.background === undefined ? options.matte ?? null : null;
   if (options.background !== undefined && options.background !== 'transparent') {
@@ -159,7 +159,8 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
   }
   const digits = Math.max(4, String(count).length), pattern = `${name}_%0${digits}d.png`, files = new Map(), encoded = new Map();
   const fileOf = frame => `${name}_${String(frame + 1).padStart(digits, '0')}.png`, made = { different: 0, last: null };
-  const encode = pixels => encodePNG(compose(pixels(), sourceWidth, sourceHeight, place, background), place.width, place.height);
+  const drawn = fine > 1 ? { ...place, scale: place.scale / fine } : place;
+  const encode = pixels => encodePNG(compose(pixels(), sourceWidth * fine, sourceHeight * fine, drawn, background), place.width, place.height);
   for (let frame = 0; frame < count; frame++) {
     if (stream) {
       files.set(fileOf(frame), () => {
@@ -223,6 +224,12 @@ In a Windows batch file, write %% for each % in the file pattern.
 ${info.notes.length ? `\nNotes\n${info.notes.map(note => `- ${note}`).join('\n')}\n` : ''}
 sequence.json holds the same facts for programs, with the timing of every pose.
 `;
+// How many times finer than its own pixels a match is drawn for a placement: the whole enlargement where a frame that
+// size is within a still's limits, else the largest part of it that is (the rest enlarges the drawn frame).
+function fineness(width, height, scale) {
+  for (let k = scale; k > 1; k--) if (scale % k === 0 && width * k <= 4096 && height * k <= 4096 && width * k * height * k <= 16777216) return k;
+  return 1;
+}
 // `late` adds what is only known once every frame is made (a match's figures). A streamed sequence writes sequence.json
 // and the README after its frames, so they are made then.
 function finish(sequence, notes, late = () => {}) {
@@ -263,25 +270,36 @@ export function createSequence(project, options = {}) {
 // frame and drawn straight to video frames, never kept as a recipe, so it may run past a recipe's 256 frames (up to
 // MATCH_FRAMES). It plays once and holds its last frame. info.figures carries the match's metadata (hits, the score).
 // `budget`, for a caller with a time limit (MCP), is the most pixels of different frames it may write; past it the call
-// is refused before simulating, naming the command line, which has no limit. With `stream` (the command line), each
+// Where the frames are enlarged, the bodies and ropes are drawn at the video's own pixels (bodiesFrames' scale),
+// so a turned picture keeps every pixel; `info.placement.drawn` says how many times finer than the match's pixels.
+// is refused before simulating, naming the command line, which has no limit: `command`, the CLI as the caller runs it
+// (MCP names its own version, so the line runs the same release). With `stream` (the command line), each
 // frame is simulated, drawn and encoded as writeBundle writes it, and only one is held at a time, so a match is bounded
 // by its frames alone; without it, every frame's PNG is kept until the call returns, up to MAX_UNIQUE_PIXELS.
-export function createBodiesSequence(source, options = {}, { budget = Infinity, stream = false } = {}) {
-  const rate = common(options, KEYS.filter(key => key !== 'loops' && key !== 'step')), match = bodiesFrames(source, options.animation);
+export function createBodiesSequence(source, options = {}, { budget = Infinity, stream = false, command = 'npx -y pixelbolt' } = {}) {
+  // A match plays once, so one loop is what it does anyway (the help lists --loops for every sequence).
+  if (isObject(options) && options.loops !== undefined) {
+    if (options.loops !== 1) fail('sequence.loops', 'a match plays once and does not repeat; leave loops out, and end it early with seconds');
+    options = Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'loops'));
+  }
+  const rate = common(options, KEYS.filter(key => key !== 'loops' && key !== 'step'));
+  let sized = null;
+  const match = bodiesFrames(source, options.animation, { scale: (width, height) => { sized = [width, height]; return fineness(width, height, placeSprite(width, height, options).scale); } }), fine = match.scale;
   const plan = planSequence(new Array(match.frames).fill(match.duration), { fps: rate, loop: false, seconds: options.seconds });
   // Every frame of a match differs, and a sequence made in memory keeps each different frame's PNG: say so before
   // simulating, not a minute in.
-  const place = placeSprite(match.width, match.height, options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
-  if (!stream && different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). Run it on the command line, which writes each frame as it is made: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
+  const place = placeSprite(sized[0], sized[1], options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
+  if (!stream && different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). Run it on the command line, which writes each frame as it is made: ${command} sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
   const most = Math.floor(budget / (place.width * place.height));
-  if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
+  if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: ${command} sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
   let shown = -1, picture = null;
-  const built = build(`${match.name}-${match.effect}`, match.width, match.height, plan.count, frame => {
+  const built = build(`${match.name}-${match.effect}`, sized[0], sized[1], plan.count, frame => {
     const pose = plan.poses[frame];
     if (pose !== shown) { picture = match.image(pose); shown = pose; }
     const data = picture;
     return { key: pose, pixels: () => data };
-  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, stream);
+  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, stream, fine);
+  if (fine > 1) built.info.placement.drawn = fine;
   const notes = [];
   if (built.place.cropped) notes.push(cropNote('match', built.info));
   // A clip that `seconds` ends before the match does (fewer video frames than the match fills) cuts the frames after
@@ -297,11 +315,13 @@ export function createBodiesSequence(source, options = {}, { budget = Infinity, 
 // Every frame's figures stay in sequence.json; a reply that carried them grew with the match (90 KB at 9000 frames).
 export function figuresSummary(figures) {
   if (!figures) return figures;
-  const { territory, powers, escaped, ...rest } = figures, total = value => (Array.isArray(value) ? value.reduce((sum, n) => sum + (Array.isArray(n) ? n.reduce((a, b) => a + b, 0) : Number(n) || 0), 0) : value);
+  const { territory, powers, escaped, paths, ...rest } = figures, named = Object.keys(paths ?? {}), total = value => (Array.isArray(value) ? value.reduce((sum, n) => sum + (Array.isArray(n) ? n.reduce((a, b) => a + b, 0) : Number(n) || 0), 0) : value);
   return {
     ...rest, ...(escaped?.length && { escaped: escaped.slice(0, 8), ...(escaped.length > 8 && { escapedInAll: escaped.length }) }),
     ...(territory && { territory: { teams: territory.teams, cells: territory.counts.at(-1), leader: territory.leader, changedHands: total(territory.flips) } }),
     ...(powers?.length && { powers: powers.slice(0, 8), ...(powers.length > 8 && { powersInAll: powers.length }) }),
+    // Where each named body ended, [x, y, angle] (null once it has left); its place on every frame is its path.
+    ...(named.length && { ended: Object.fromEntries(named.slice(0, 8).map(name => [name, paths[name].at(-1) ?? null])), ...(named.length > 8 && { namedBodies: named.length }) }),
     every: 'sequence.json has every frame\'s figures'
   };
 }
@@ -331,7 +351,7 @@ export function createSceneSequence(scene, name, options = {}) {
   if (options.seconds === undefined && !plan.seamless) notes.push(`The scene lasts ${Math.round(plan.exactFrames / (options.loops ?? 1) * 1000) / 1000} video frames, so this clip does not end exactly where the scene repeats.${plan.loopsThatFit ? ` ${plan.loopsThatFit} loops fit the frame grid exactly (--loops ${plan.loopsThatFit}).` : ''}`);
   // A shot usually wants to fill the frame; say what scene size would, at this enlargement.
   const { width, height, placement } = built.info;
-  if (!placement.fit && (placement.width !== width || placement.height !== height)) notes.push(`The scene covers ${placement.width}×${placement.height} of the ${width}×${height} canvas${scene.background[3] === 255 && options.background === undefined ? '; the margins take the scene\'s background colour' : ''}. Use fit cover to fill the canvas and crop the overhang${width % placement.scale === 0 && height % placement.scale === 0 && width / placement.scale <= 256 && height / placement.scale <= 256 ? `, or author the scene at ${width / placement.scale}×${height / placement.scale} to fill it exactly at this scale` : ''}.`);
+  if (!placement.fit && (placement.width !== width || placement.height !== height)) notes.push(`The scene covers ${placement.width}×${placement.height} of the ${width}×${height} canvas${scene.background[3] === 255 && options.background === undefined ? '; the margins take the scene\'s background colour' : ''}. Use fit cover to fill the canvas and crop the overhang${width % placement.scale === 0 && height % placement.scale === 0 && width / placement.scale <= SCENE_SIDE && height / placement.scale <= SCENE_SIDE && width * height / (placement.scale * placement.scale) <= SCENE_AREA ? `, or author the scene at ${width / placement.scale}×${height / placement.scale} to fill it exactly at this scale` : ''}.`);
   if (placement.cropped) notes.push(cropNote('scene', built.info));
   Object.assign(built.info, { loop: { loops: options.loops ?? 1, plays: 'loops', passFrames: Math.round(plan.exactFrames / (options.loops ?? 1) * 1e6) / 1e6, seamless: plan.seamless && options.seconds === undefined }, sceneDuration: scene.duration });
   return finish(built, notes);

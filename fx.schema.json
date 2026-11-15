@@ -499,7 +499,7 @@
                   },
                   "maxItems": 16,
                   "minItems": 2,
-                  "description": "Move the spawn centre through 2–16 points [x, y] over the emitter's window from start to end, timed as a layer's keys are (round a whole loop: end where it starts), instead of at: a meteor shedding smoke, a spark tracing a circle. Not for sprite or child emitters."
+                  "description": "Move the spawn centre through 2–16 points [x, y] over the emitter's window, at one speed along the path's length (through ease), not a point a frame: on the first point at start, on the last at end, the frame after its last spawn (round a whole loop: end where it starts), instead of at: a meteor shedding smoke, a spark tracing a circle. Not for sprite or child emitters."
                 },
                 "attract": {
                   "type": "object",

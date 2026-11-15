@@ -1,11 +1,40 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { prepareScene, renderScene, sceneHaze, scenePlanes } from './scene.js';
+import { prepareScene, renderScene, sceneImage, sceneHaze, scenePlanes } from './scene.js';
+import { framesGIF } from './gif.js';
+import { parseFrameRate } from './sequence.js';
 import { encodePNG } from './png.js';
 import { buildAtlas } from './core.js';
 import { spriteFrames, canvasTexture, normalsYUp, tileSets, parallaxScene } from './godot.js';
 import { tileSource } from './export.js';
 import { tiledTileset, tiledMap } from './tiled.js';
+
+// A prepared scene as one looping GIF: the scene at each frame's start, through its duration once, `fps` frames a
+// second (25 unless given, which GIF's 10 ms steps hold exactly), each enlarged `scale` times. Returns framesGIF's
+// result, with a note when the duration is not a whole number of frames, since the loop then ends early or late, and
+// notes on the placements whose animations the duration cuts mid-loop or that play once: where the GIF repeats, those
+// jump.
+export function sceneGIF(scene, { fps = 25, scale = 1 } = {}) {
+  const rate = parseFrameRate(fps, 'gif.fps'), frameMs = 1000 * rate.denominator / rate.numerator, count = Math.max(1, Math.round(scene.duration / frameMs));
+  function* frames() {
+    for (let k = 0; k < count; k++) { const image = sceneImage(renderScene(scene, { time: k * frameMs }), { scale }); yield { data: image.data, width: image.width, height: image.height, name: `frame ${k + 1}` }; }
+  }
+  const gif = framesGIF(frames(), { fps: rate });
+  if (Math.abs(count * frameMs - scene.duration) > 0.5) gif.notes.push(`The scene lasts ${scene.duration} ms, ${Math.round(scene.duration / frameMs * 100) / 100} frames at ${rate.label} fps, and the GIF plays ${count}: give the scene a duration that is a whole number of frames (${Math.round(count * frameMs)} ms) and the loop closes exactly.`);
+  // The placements that simply play one animation, each with its length: a loop the duration cuts, or a one-shot.
+  const plays = scene.instances.flatMap((instance, i) => {
+    if (typeof instance.animation !== 'string' || instance.sequence?.length || instance.hidden) return [];
+    const project = scene.assets[instance.asset].recipe, animation = project.animations[instance.animation];
+    return animation.frames.length > 1 || !animation.loop ? [{ name: instance.name ?? `${instance.asset}#${i}`, loop: animation.loop, length: animation.frames.reduce((sum, frame) => sum + project.frames[frame].duration, 0) }] : [];
+  });
+  const cut = plays.filter(play => play.loop && scene.duration % play.length), once = plays.filter(play => !play.loop).map(play => play.name);
+  if (cut.length) {
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a), whole = plays.filter(play => play.loop).reduce((all, play) => (all > 60000 ? all : all / gcd(all, play.length) * play.length), 1);
+    gif.notes.push(`The scene's ${scene.duration} ms cut ${cut.slice(0, 6).map(item => `${item.name} (a loop of ${item.length} ms)`).join(', ')}${cut.length > 6 ? ` and ${cut.length - 6} more` : ''} mid-loop, so the GIF jumps where it repeats. ${whole <= 60000 ? `A scene duration of ${whole} ms holds whole loops of every placement.` : 'No duration up to 60000 ms holds whole loops of them all: give them loops of one length (frame durations, or fewer frames).'}`);
+  }
+  if (once.length) gif.notes.push(`${once.slice(0, 6).join(', ')}${once.length > 6 ? ` and ${once.length - 6} more` : ''} ${once.length === 1 ? 'plays' : 'play'} once and ${once.length === 1 ? 'holds its' : 'hold their'} last frame, then ${once.length === 1 ? 'starts' : 'start'} again where the GIF repeats: a one-shot animation in a loop. A patch of animations.<name> with "loop": true and "direction": "pingpong" makes a swing go there and back.`);
+  return gif;
+}
 
 export async function createSceneBundle(source) {
   const scene = prepareScene(source), view = renderScene(scene), files = new Map();
@@ -92,8 +121,13 @@ export async function createSceneBundle(source) {
   }
   files.set('alignment.json', Buffer.from(JSON.stringify(alignment, null, 2) + '\n'));
   files.set('review.json', Buffer.from(JSON.stringify({ placements: view.placements, warnings: [...view.warnings, ...tileWarnings] }, null, 2) + '\n'));
-  for (const file of ['core.js', 'craft.js', 'font.js', 'authoring.js', 'pose-geometry.js', 'motions.js', 'autotile.js', 'terrain.js', 'slopes.js', 'scene.js']) files.set(file, await readFile(new URL(file, import.meta.url)));
-  for (const [file, source] of [['preview.html', '../studio/scene.html'], ['scene-player.js', '../studio/scene-player.js'], ['scene.css', '../studio/scene.css']]) files.set(file, await readFile(new URL(source, import.meta.url)));
+  // The page that replays the scene, with what it runs on in player/: the folder's top level is what a game takes
+  // (scene.tscn, scene.tmx, planes/, assets/), not a dozen engine modules among it.
+  for (const file of ['core.js', 'craft.js', 'font.js', 'authoring.js', 'pose-geometry.js', 'motions.js', 'autotile.js', 'terrain.js', 'slopes.js', 'scene.js']) files.set(`player/${file}`, await readFile(new URL(file, import.meta.url)));
+  for (const file of ['scene-player.js', 'scene.css']) files.set(`player/${file}`, await readFile(new URL(`../studio/${file}`, import.meta.url)));
+  const page = await readFile(new URL('../studio/scene.html', import.meta.url), 'utf8'), placed = page.replace('href="./scene.css"', 'href="./player/scene.css"').replace('src="./scene-player.js"', 'src="./player/scene-player.js"');
+  if (placed === page || !placed.includes('./player/scene.css') || !placed.includes('./player/scene-player.js')) throw new Error('studio/scene.html no longer names scene.css and scene-player.js as the scene export expects');
+  files.set('preview.html', Buffer.from(placed));
   // A forced export over an earlier export of a scene removes what that one wrote and this one doesn't: planes, hazed
   // copies, the files of an asset it no longer has (or of a pass it lost), tileset.tres. Only files the earlier
   // alignment.json lists go, and only in the folders they are in, so nothing else in the folder is touched.

@@ -3,7 +3,7 @@
 // paths resolve from `baseDir`; when `root` is set (the MCP server), every referenced file must stay inside it.
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { PixelError, inlineSharedPalette, fail, isObject } from './core.js';
+import { inlineSharedPalette, fail, isObject } from './core.js';
 
 const within = (parent, child) => { const relative = path.relative(parent, child); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 /**

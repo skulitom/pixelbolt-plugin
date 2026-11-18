@@ -18,13 +18,13 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 4096,
-      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
+      "description": "1–1024 pixels, and at most 262,144 pixels a frame (320×180, 640×360 and 512×512 fit); a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all. All the frames of a recipe hold at most 4,194,304 pixels: 72 frames of 320×180, 16 of 512×512."
     },
     "height": {
       "type": "integer",
       "minimum": 1,
       "maximum": 4096,
-      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
+      "description": "1–1024 pixels, and at most 262,144 pixels a frame (320×180, 640×360 and 512×512 fit); a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all. All the frames of a recipe hold at most 4,194,304 pixels: 72 frames of 320×180, 16 of 512×512."
     },
     "palette": {
       "type": "object",
@@ -91,9 +91,8 @@
     },
     "animations": {
       "type": "object",
-      "minProperties": 1,
       "maxProperties": 65524,
-      "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
+      "description": "Named animations; left out, one plays every frame in order. {} says the frames are stills (icons, UI states, tiles), exported with no animation. ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -177,10 +176,10 @@
   "then": {
     "properties": {
       "width": {
-        "maximum": 256
+        "maximum": 1024
       },
       "height": {
-        "maximum": 256
+        "maximum": 1024
       }
     }
   },
@@ -190,11 +189,11 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 256
+        "maxLength": 1024
       },
-      "maxItems": 256,
+      "maxItems": 1024,
       "minItems": 1,
-      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+      "description": "Equal-width text rows, at most 262,144 characters in all. Every character is a palette key; dot and space skip a pixel."
     },
     "frame": {
       "type": "object",
@@ -371,7 +370,7 @@
           "items": {
             "$ref": "#/$defs/pixel"
           },
-          "maxItems": 65536,
+          "maxItems": 262144,
           "description": "Final canvas-coordinate RGBA replacements after ops and layers. Coordinates must be inside this canvas. Later entries win; transparent erases."
         }
       },
@@ -518,13 +517,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -568,13 +567,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -657,13 +656,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             }
           },
           "required": [
@@ -965,22 +964,22 @@
             "sx": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "sy": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "scale": {
               "type": "integer",
@@ -1244,13 +1243,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1400,13 +1399,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "steps": {
               "type": "integer",
@@ -1550,7 +1549,7 @@
               "items": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 256
+                "maximum": 1024
               },
               "maxItems": 2,
               "minItems": 2,
@@ -1886,7 +1885,7 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 65536,
+              "maximum": 262144,
               "description": "Most replacements per rule per step."
             },
             "seed": {

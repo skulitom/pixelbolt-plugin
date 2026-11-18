@@ -128,7 +128,7 @@ const RUNES = [
   ['.x.', 'x.x', '.x.'], ['x.x', 'xxx', 'x.x'], ['x.x', 'x.x', '.x.'], ['xxx', '..x', '..x']
 ];
 
-function paletteKey(key, path, palette) {
+export function paletteKey(key, path, palette) {
   if (typeof key !== 'string' || key.length !== 1 || key === '.' || key === ' ' || !Object.hasOwn(palette, key)) fail(path, 'expected a single-character key in the palette');
   return key;
 }

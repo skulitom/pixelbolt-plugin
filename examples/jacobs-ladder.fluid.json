@@ -166,7 +166,7 @@
       "duration": 60,
       "loop": true,
       "blend": 1,
-      "seed": 3,
+      "seed": 5,
       "buoyancy": 0.6,
       "vorticity": 0.1,
       "cooling": 0.2,

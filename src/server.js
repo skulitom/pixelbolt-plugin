@@ -39,6 +39,7 @@ const routes = new Map([
   ['/fluid-controls.js', ['../studio/fluid-controls.js', 'text/javascript; charset=utf-8']],
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
   ['/electric.js', ['./electric.js', 'text/javascript; charset=utf-8']],
+  ['/light.js', ['./light.js', 'text/javascript; charset=utf-8']],
   ['/bodies.js', ['./bodies.js', 'text/javascript; charset=utf-8']],
   ['/constraints.js', ['./constraints.js', 'text/javascript; charset=utf-8']],
   ['/cloth.js', ['./cloth.js', 'text/javascript; charset=utf-8']],
@@ -63,7 +64,7 @@ const routes = new Map([
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
-  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
+  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'wall-torch', 'chimney-smoke', 'fireball-explosion', 'cannon-smoke', 'campfire-stones', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
 export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/scene-source.json', '/project.json', '/shared-palette.json'];

@@ -8,6 +8,9 @@ import { sinDeg, cosDeg } from './craft.js';
 import { HOLD } from './shapes.js';
 
 export const WAVE_KINDS = ['radial', 'directional'];
+// Decoration grids are read as they were when a frame held 256 a side (a wave canvas is at most 128): the per-frame
+// cost of a wave is not budgeted, so it keeps its own limits.
+const WAVE_ROWS = 256;
 const smooth = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 
 function readEffect(effect, path, source) {
@@ -55,7 +58,7 @@ function readEffect(effect, path, source) {
   });
   const decoration = key => {
     if (effect[key] === undefined) return null;
-    const { rows } = readRows(effect[key], `${path}.${key}`, source.palette);
+    const { rows } = readRows(effect[key], `${path}.${key}`, source.palette, WAVE_ROWS);
     if (rows.length !== source.height || rows[0].length !== source.width) fail(`${path}.${key}`, 'expected a full-canvas grid');
     return rows;
   };

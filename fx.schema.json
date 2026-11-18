@@ -18,12 +18,14 @@
     "width": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 256
+      "maximum": 1024,
+      "description": "1–1024 pixels, at most 262,144 a frame. The frames hold at most 4,194,304 pixels in all (72 of 320×180); a source with more compiles with frames (--frames), and a count that divides a loop's frames keeps an even step."
     },
     "height": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 256
+      "maximum": 1024,
+      "description": "1–1024 pixels, at most 262,144 a frame. The frames hold at most 4,194,304 pixels in all (72 of 320×180); a source with more compiles with frames (--frames), and a count that divides a loop's frames keeps an even step."
     },
     "palette": {
       "type": "object",
@@ -226,11 +228,11 @@
                   "items": {
                     "type": "integer",
                     "minimum": 1,
-                    "maximum": 256
+                    "maximum": 2048
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Spawn box [w, h] centred on at; default [1, 1]. Use one of area, ring and line."
+                  "description": "Spawn box [w, h] centred on at; default [1, 1]. It may be larger than the canvas (rain spawned above the screen). Use one of area, ring and line."
                 },
                 "ring": {
                   "type": "object",
@@ -240,14 +242,14 @@
                         {
                           "type": "number",
                           "minimum": 0,
-                          "maximum": 256
+                          "maximum": 1024
                         },
                         {
                           "type": "array",
                           "items": {
                             "type": "number",
                             "minimum": 0,
-                            "maximum": 256
+                            "maximum": 1024
                           },
                           "maxItems": 2,
                           "minItems": 2
@@ -499,7 +501,7 @@
                   },
                   "maxItems": 16,
                   "minItems": 2,
-                  "description": "Move the spawn centre through 2–16 points [x, y] over the emitter's window from start to end, timed as a layer's keys are (round a whole loop: end where it starts), instead of at: a meteor shedding smoke, a spark tracing a circle. Not for sprite or child emitters."
+                  "description": "Move the spawn centre through 2–16 points [x, y] over the emitter's window, at one speed along the path's length (through ease), not a point a frame: on the first point at start, on the last at end, the frame after its last spawn (round a whole loop: end where it starts), instead of at: a meteor shedding smoke, a spark tracing a circle. Not for sprite or child emitters."
                 },
                 "attract": {
                   "type": "object",
@@ -619,8 +621,8 @@
                 },
                 "ground": {
                   "type": "number",
-                  "minimum": -256,
-                  "maximum": 256,
+                  "minimum": -1024,
+                  "maximum": 1024,
                   "description": "A floor this many pixels below where each particle was born, instead of floor: shards thrown up from a ring laid on the ground land back on their own patch of it."
                 },
                 "bounce": {
@@ -3006,9 +3008,156 @@
             "uniqueItems": true,
             "description": "Canvas sides the effect is meant to touch: top for a bolt from the sky, bottom for a figure standing on the bottom row. Drawing on any other side's outermost row or column is warned about, since whatever reaches past it is cut off. Turned copies turn the sides with them."
           },
+          "residue": {
+            "type": "boolean",
+            "description": "True when a one-shot is meant to end with its last frame still drawn (debris at rest, a mark on the ground, a smear that ends with the swing it follows). Without it the compile warns when the last frame still draws anything besides the sprites the effect draws, since that is cut off where a game ends the effect. Not for a loop."
+          },
           "light": {
             "type": "boolean",
             "description": "Write the light track into the frames as a point named light, where the effect's bright pixels are; frames with nothing bright have none. A scene light that follows { instance, point: \"light\" } then moves with the effect's light and goes dark when it does; atlases export the point for game code."
+          },
+          "shine": {
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "object",
+                "minProperties": 1,
+                "maxProperties": 16,
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 8
+                },
+                "description": "The palette keys that shine, each with how strongly: 1 is a full light where a body of it is five pixels across, a thin bolt wants 2–4, and 0 is for a fire's dim colours, which give no light and take none. A remap or a tint to one of these colours shines the same."
+              },
+              "solid": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                  "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Names of sprite emitters whose drawn sprite the light can't pass: lit on the side the light comes from, dark further in, and shadowing what is behind. Any other sprite is a flat thing the light lies on by how far it is."
+              },
+              "reach": {
+                "type": "number",
+                "minimum": 2,
+                "maximum": 128,
+                "description": "Pixels of open air a full light crosses before it is gone."
+              },
+              "depth": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Pixels into a solid sprite the light gets; default reach / 2.6."
+              },
+              "ease": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 1,
+                "description": "The share of the way each pixel's light moves to its new level each frame; default 0.5. 1 follows a flash at once; lower is steadier, and outlasts what shone by a few frames."
+              },
+              "thresholds": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "Rising shares of full light (1 beside what shines, 0 at reach), one for each colour of colors, smoke and wall."
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on the sprites the effect draws, from the least to the most. A fully clear colour draws nothing at its level."
+              },
+              "smoke": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on whatever else the effect draws that does not shine: smoke, debris, dim shapes."
+              },
+              "wall": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on the empty pixels, when there is a wall or a floor behind the effect."
+              },
+              "dark": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1,
+                "description": "Lies on drawn sprites wherever the light is below the first threshold: draw them as they look fully lit, and the light is seen by what it leaves dark."
+              },
+              "dither": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Feather each colour in below its threshold, as a look does; default 0.5."
+              },
+              "pattern": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "bayer2",
+                      "bayer4",
+                      "bayer8",
+                      "noise",
+                      "value"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  }
+                ],
+                "description": "Dither pattern, as for the dither operation; default bayer4. Needs dither."
+              }
+            },
+            "required": [
+              "keys",
+              "reach",
+              "thresholds"
+            ],
+            "additionalProperties": false,
+            "description": "The light of what the effect draws in its brightest colours. It spreads from those pixels through the picture, losing 1 / reach a pixel, on every frame, so it moves with them and has no shape of its own; a loop's light runs through its seam. Drawn last, over everything. With a back and a front, the wall's light and the light on what the back draws go to the back part, the light on what the front draws to the front, and a stand-in's is in the whole effect only. Give at least one of colors, smoke and wall."
           },
           "turn": {
             "type": "object",

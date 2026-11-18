@@ -17,8 +17,16 @@ function spawn() {
     if (message === 'ready') { started = true; resolveReady(); return; }
     pending?.resolve(message); pending = undefined;
   });
+  // An idle worker ends its own thread: terminate() on workers that had just compiled sometimes crashed the whole
+  // process natively (an access violation on Windows under load). terminate() stays for a worker still starting,
+  // holding a job or already gone, and for one that has not ended 5 s after it was asked.
+  const leave = () => new Promise(resolve => {
+    const fallback = setTimeout(() => thread.terminate(), 5000);
+    thread.once('exit', () => { clearTimeout(fallback); resolve(); });
+    thread.postMessage('close');
+  });
   return {
-    close: () => closing ??= thread.terminate(),
+    close: () => closing ??= started && !pending && !failure ? leave() : thread.terminate(),
     async ready() {
       await ready;
       if (!started) throw failure;
@@ -66,7 +74,7 @@ export async function measurePresets(jobs, { concurrency, deadline }, measure) {
     }
   }
   try {
-    if (!jobs.length || !open()) return results;
+    if (!jobs.length) return results;
     const lanes = [];
     if (!serial) {
       try {

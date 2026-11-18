@@ -33,19 +33,33 @@ let elapsed = 0, lastTime = 0, zoom = 12, dirty = false, valid = false, compileT
 // (typing, a sample, GIF, Frames) calls showExport, so it can neither turn the button on nor lose its label mid-export.
 let exporting = false;
 const exportLabel = [...$('export').childNodes];
+// What GIF, Frames and Motion say when the frames play: stills replace it with why each is off.
+const buttonTitles = Object.fromEntries(['gif', 'frames', 'motion-view'].map(id => [id, $(id).title]));
 function showExport() {
   const button = $('export');
   button.disabled = exporting || !valid;
   button.replaceChildren(...(exporting ? ['Packing assets…'] : exportLabel));
 }
 // Zoom is a whole number, or "fit": the whole picture in the artboard, at the largest whole number that fits or, for a
-// still larger than the artboard, scaled down smoothly so a dither reads as the tone it makes rather than as noise.
-// A still larger than 256 px a side opens fitted; the zoom chosen for sprites comes back when a sprite is shown again.
+// picture larger than the artboard, scaled down smoothly so a dither reads as the tone it makes rather than as noise.
+// A picture larger than 256 px a side, a still or an animation frame (320 × 180, 640 × 360: up to 1024 a side), opens
+// fitted; the zoom chosen for sprites comes back when a sprite is shown again.
 const ZOOMS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 let spriteZoom = zoom, shownScale = 1;
-const isLarge = p => p.width > 256 || p.height > 256;
+const SPRITE_SIDE = 256;
+const isLarge = p => p.width > SPRITE_SIDE || p.height > SPRITE_SIDE;
 // The zoom as the GIF and frame exports take it: a whole number, at most `max`; a view fitted below 1× exports at 1×.
 const exportScale = max => Math.min(max, zoom === 'fit' ? Math.max(1, Math.floor(shownScale)) : zoom);
+// The largest scale whose frames pixelbolt sequence can make without a size: at most 4096 a side and 16,777,216 pixels.
+// A 256 px sprite keeps 16 and a 640 × 360 frame stops at 6, so the Frames dialog's "current zoom" never asks for more.
+// A copy of sequence.js SEQUENCE_SIDE and SEQUENCE_CANVAS_PIXELS (placeSprite's canvas limits): the studio cannot load that
+// module, which encodes PNGs with node:zlib, so whoever changes one changes the other (test/interfaces.test.js holds them equal).
+const SEQUENCE_SIDE = 4096, SEQUENCE_CANVAS_PIXELS = 16777216;
+function sequenceScale(width, height) {
+  let scale = 256;
+  while (scale > 1 && (width * scale > SEQUENCE_SIDE || height * scale > SEQUENCE_SIDE || width * scale * height * scale > SEQUENCE_CANVAS_PIXELS)) scale--;
+  return scale;
+}
 function fitZoom(next) {
   const wasLarge = project ? isLarge(project) : false, large = isLarge(next);
   if (large === wasLarge) return;
@@ -136,7 +150,8 @@ function render() {
     context.fillStyle = '#ffce53';
     for (const marker of pose.markers) if (pose.contacts?.includes(marker.name)) context.fillRect(marker.at[0] - 1, marker.at[1] + 1, 3, 1);
   }
-  // The native-size preview shows a sprite at 1× beside the zoomed view; a large still is its own 1× view.
+  // The native-size preview shows a sprite at 1× beside the zoomed view. A large picture, a still or a big animation
+  // frame, would not fit the playback bar: zoom 1 shows it at 1×.
   const native = $('native-canvas');
   native.parentElement.hidden = isLarge(project);
   if (!isLarge(project)) { native.width = project.width; native.height = project.height; native.getContext('2d').drawImage(frameImages[selected], 0, 0); }
@@ -192,10 +207,18 @@ function compile() {
     fitZoom(nextProject);
     spec = compiled.recipe; poseMetadata = compiled.metadata?.format === 'pixelforge-pose-metadata' ? compiled.metadata : null; project = nextProject; atlas = nextAtlas;
     motionReview = null; ownedProject = null; partsView = null;
-    $('motion-view').disabled = !poseMetadata; $('contacts').disabled = !poseMetadata;
+    // Stills ("animations": {}) keep their flipbook to step through, but have no animation to pick, make a GIF of,
+    // export as frames or review for motion: the picker is hidden, and those are off, each saying why.
+    const stills = project.stills === true, reviewable = Boolean(poseMetadata) && !stills;
+    $('animation').hidden = stills; $('animation-label').hidden = stills;
+    for (const [id, what] of [['gif', 'make a GIF of'], ['frames', 'export as frames'], ['motion-view', 'review for motion']]) {
+      $(id).title = stills ? `The frames are stills ("animations": {}), so there is no animation to ${what}.` : buttonTitles[id];
+      if (id !== 'motion-view') $(id).disabled = stills;
+    }
+    $('motion-view').disabled = !reviewable; $('contacts').disabled = !poseMetadata;
     $('motion-tools').hidden = !poseMetadata;
     $('motion-ground').value = poseMetadata?.rig?.ground ?? '';
-    if (!poseMetadata && mode === 'motion') mode = 'animation';
+    if (!reviewable && mode === 'motion') mode = 'animation';
     frameImages = project.frames.map(f => imageCanvas(f.data, project.width, project.height));
     $('project-name').textContent = title(project.name);
     $('dimensions').textContent = `${project.width} × ${project.height} px`;
@@ -411,7 +434,7 @@ $('gif').addEventListener('click', () => {
 });
 // Frames for a video editor: the server builds them exactly as `pixelbolt sequence` does. The dialog also shows that
 // call, and the MCP one, because agents are who usually make these.
-const framesSettings = () => ({ fps: $('frames-fps').value, animation: $('animation').value, ...($('frames-size').value ? { size: $('frames-size').value } : { scale: exportScale(256) }) });
+const framesSettings = () => ({ fps: $('frames-fps').value, animation: $('animation').value, ...($('frames-size').value ? { size: $('frames-size').value } : { scale: Math.min(exportScale(256), sequenceScale(project.width, project.height)) }) });
 function showFramesCall() {
   const settings = framesSettings(), sizing = settings.size ? `--size ${settings.size}` : `--scale ${settings.scale}`;
   $('frames-call').textContent = `pixelbolt sequence ${savedName()} --fps ${settings.fps} ${sizing} --animation ${settings.animation} --out frames\n\npixel_render { "revision": "…", "sequence": ${JSON.stringify(settings)} }`;

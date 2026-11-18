@@ -1,0 +1,265 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "teleport-in",
+  "width": 96,
+  "height": 128,
+  "anchor": [48, 110],
+  "palette": {
+    "W": "#ffffff",
+    "y": "#e4fbff",
+    "c": "#9be8ff",
+    "b": "#49b8f0",
+    "v": "#5a6cf0",
+    "d": "#3a3aa8",
+    "s": "#49b8f040",
+    "t": "#7fd8ff66",
+    "u": "#c8f4ff99"
+  },
+  "symbols": {
+    "mote": ["c"],
+    "mote-hot": ["W"],
+    "mote-dim": ["v"],
+    "glint-3": [
+      ".c.",
+      "cWc",
+      ".c."
+    ],
+    "glint-5": [
+      "..c..",
+      "..y..",
+      "cyWyc",
+      "..y..",
+      "..c.."
+    ],
+    "dash": [
+      "W",
+      "y",
+      "c"
+    ],
+    "dash-dim": [
+      "c",
+      "b"
+    ],
+    "bit": ["y"]
+  },
+  "effects": {
+    "teleport-in": {
+      "frames": 23,
+      "duration": 60,
+      "seed": 7,
+      "edges": ["top"],
+      "looks": {
+        "floor": { "colors": ["d", "v", "b", "c", "W"], "thresholds": [0.14, 0.3, 0.48, 0.68, 0.88] },
+        "shaft": { "colors": ["s", "t", "u"], "thresholds": [0.14, 0.4, 0.7] },
+        "core": { "colors": ["b", "c", "y", "W"], "thresholds": [0.3, 0.5, 0.7, 0.88] }
+      },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "ring",
+          "look": "floor",
+          "at": [48, 110],
+          "frames": [0, 12],
+          "radius": [42, 15],
+          "width": [2, 3, 5],
+          "squash": [1, 0.36],
+          "noise": [0.5, 0.1],
+          "scale": 5,
+          "power": [0.9, 1.2, 1.5],
+          "ease": "in"
+        },
+        {
+          "kind": "ring",
+          "look": "floor",
+          "at": [48, 110],
+          "frames": [2, 11],
+          "radius": [28, 7],
+          "width": [2, 3],
+          "squash": [1, 0.36],
+          "noise": [0.4, 0.1],
+          "scale": 5,
+          "power": [0.7, 1.3],
+          "ease": "in"
+        },
+        {
+          "kind": "burst",
+          "look": "floor",
+          "at": [48, 110],
+          "frames": [6, 17],
+          "radius": [6, 14, 19, 12],
+          "squash": [1, 0.36],
+          "noise": 0.25,
+          "scale": 4,
+          "boil": 2,
+          "power": [0.9, 1.4, 1.6, 0.5],
+          "ease": "linear"
+        },
+        {
+          "kind": "beam",
+          "look": "shaft",
+          "at": [48, 110],
+          "to": [48, -28],
+          "frames": [2, 12],
+          "width": [2, 6, 10, 15, 22],
+          "reveal": 0.3,
+          "fade": 0.7,
+          "wobble": 0,
+          "power": [0.8, 1, 1.1, 1.2],
+          "ease": "linear",
+          "squash": [1, 0.36]
+        },
+        {
+          "kind": "beam",
+          "look": "core",
+          "at": [48, 110],
+          "to": [48, -28],
+          "frames": [2, 12],
+          "width": [1, 2, 4, 7, 11],
+          "reveal": 0.3,
+          "fade": 0.55,
+          "wobble": 0.06,
+          "wavelength": 28,
+          "waves": -2,
+          "power": [1, 1.1, 1.2, 1.3],
+          "ease": "linear",
+          "squash": [1, 0.36]
+        },
+        {
+          "kind": "beam",
+          "look": "shaft",
+          "at": [48, 110],
+          "to": [48, -28],
+          "frames": [12, 16],
+          "width": [36, 40, 22, 8],
+          "fade": 0.7,
+          "wobble": 0,
+          "noise": [0, 0.2, 0.7],
+          "scale": 5,
+          "power": [1.5, 1.3, 0.8, 0.35],
+          "ease": "linear",
+          "squash": [1, 0.36]
+        },
+        {
+          "kind": "beam",
+          "look": "core",
+          "at": [48, 110],
+          "to": [48, -28],
+          "frames": [12, 16],
+          "width": [24, 20, 7, 2],
+          "fade": 0.55,
+          "wobble": 0,
+          "noise": [0, 0.2, 0.8],
+          "scale": 4,
+          "power": [1.8, 1.5, 1, 0.5],
+          "ease": "linear",
+          "squash": [1, 0.36]
+        },
+        {
+          "kind": "star",
+          "look": "core",
+          "at": [48, 78],
+          "frames": [12, 16],
+          "points": 8,
+          "ratio": 0.7,
+          "radius": [38, 14],
+          "width": [5, 1],
+          "core": [5, 1],
+          "power": [1.7, 0.5],
+          "cue": "arrive"
+        },
+        {
+          "kind": "ring",
+          "look": "floor",
+          "at": [48, 110],
+          "frames": [13, 22],
+          "radius": [12, 45],
+          "width": [7, 3],
+          "squash": [1, 0.36],
+          "noise": [0.2, 0.95],
+          "scale": 5,
+          "power": [1.6, 0.35]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "gather",
+          "at": [48, 78],
+          "ring": { "radius": [34, 46] },
+          "rate": [5, 5, 4, 0],
+          "start": 0,
+          "end": 10,
+          "speed": [0, 0.4],
+          "attract": { "at": [48, 92], "strength": 0.6, "swirl": 0.3 },
+          "drag": 0.1,
+          "life": [6, 9],
+          "play": "life",
+          "shapes": [["mote", "mote", "mote-hot", "mote-hot"], ["mote-dim", "mote", "mote", "glint-3"]],
+          "trail": { "color": "b", "length": 3 }
+        },
+        {
+          "name": "rise",
+          "at": [42, 108],
+          "line": { "to": [54, 108] },
+          "rate": [1, 2.5, 3, 0],
+          "start": 4,
+          "end": 14,
+          "angle": [269, 271],
+          "speed": [3.5, 6],
+          "life": [5, 8],
+          "play": "life",
+          "shapes": [["dash", "dash", "dash-dim"], ["dash-dim", "dash", "dash-dim"]]
+        },
+        {
+          "name": "rays",
+          "at": [48, 78],
+          "ring": { "radius": [3, 7], "arc": [152, 388], "even": true, "outward": true },
+          "burst": 14,
+          "start": 12,
+          "angle": [-7, 7],
+          "speed": [6.5, 12],
+          "drag": 0.2,
+          "life": [5, 8],
+          "shapes": ["bit"],
+          "tint": [{}, { "y": "W" }, {}, { "y": "c" }, { "y": "b" }, { "y": "v" }],
+          "trail": { "color": "b", "length": 3 }
+        },
+        {
+          "name": "scatter",
+          "at": [48, 100],
+          "line": { "to": [48, 34] },
+          "burst": 14,
+          "start": 13,
+          "angle": [198, 342],
+          "speed": [1.4, 3.8],
+          "drag": 0.1,
+          "gravity": [0, -0.03],
+          "life": [6, 9],
+          "play": "life",
+          "shapes": [
+            ["mote-hot", "mote", "mote", "mote-dim"],
+            ["mote-hot", "glint-3", "mote", "mote-dim"],
+            ["dash", "dash-dim", "mote-dim"]
+          ]
+        },
+        {
+          "name": "after",
+          "at": [48, 84],
+          "area": [48, 60],
+          "rate": [0, 2.2, 1.6, 0],
+          "start": 13,
+          "end": 17,
+          "angle": [262, 278],
+          "speed": [0.3, 0.9],
+          "life": [4, 6],
+          "play": "life",
+          "shapes": [
+            ["mote", "glint-3", "glint-5", "glint-3", "mote-dim"],
+            ["mote", "glint-3", "mote-dim"],
+            ["mote-hot", "mote", "mote-dim"]
+          ]
+        }
+      ]
+    }
+  }
+}

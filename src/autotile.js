@@ -1,5 +1,6 @@
 // Browser-compatible autotile rules and tilemap legends, shared by scene tilemaps, the recipe `tilemap` operation and
-// the autotile compiler. No I/O.
+// the autotile compiler. No I/O. (What an autotile source may say is listed by `pixelbolt help autotile`; a terrain
+// description's options by `pixelbolt help terrain`.)
 import { hash, random } from './craft.js';
 // A tile is split into four quadrants. Each quadrant looks at two orthogonal neighbours and the diagonal between
 // them, and becomes one of five pieces: o (outer corner), h (horizontal edge), v (vertical edge), i (inner corner)
@@ -73,14 +74,20 @@ export function tilemapEntry(recipe) {
   }
   const names = [...patterns.keys()], counts = new Set([...patterns.values()].map(entry => entry.count)), weights = names.map(name => patterns.get(name).weight);
   if (counts.size !== 1) return null;
-  const entry = names.length === 1 ? { frame: names[0] } : { frames: names, ...(weights.some(value => value !== 1) && { weights }) };
+  // An animated set, where each mask's variants are the frames of its animation: the legend names the animation, since
+  // a map of `frames` scatters them as stills that never change.
+  const masks = [...new Set(tiles.map(tile => tile.mask))], animated = Object.keys(recipe.animations ?? {}).map(name => name.split('-').map(part => (part === String(masks[0]) ? '{mask}' : part)).join('-'))
+    .find(pattern => pattern.includes('{mask}') && masks.every(mask => Object.hasOwn(recipe.animations, pattern.replace('{mask}', String(mask)))));
+  const entry = animated ? { animation: animated } : names.length === 1 ? { frame: names[0] } : { frames: names, ...(weights.some(value => value !== 1) && { weights }) };
   return { tile: [recipe.width, recipe.height], legend: { ...entry, autotile: tiles[0].mode } };
 }
 
 // What a compile reply gives of a tile set: a scene instance's `tilemap` without its rows, the cell size and the
 // legend with `#` for the terrain. A set with slopes has a character for each slope too and rules for the feet under
-// them (the legend its metadata holds), with the small map that uses every one. null where tilemapEntry is.
+// them (the legend its metadata holds), with the small map that uses every one. A layered set's legend has each
+// layer's key, all drawn from the one family of corner tiles. null where tilemapEntry is.
 export function tilemapOf(recipe, metadata) {
+  if (metadata?.layers && metadata.frame) return { tile: [recipe.width, recipe.height], legend: Object.fromEntries(metadata.layers.map(layer => [layer.key, { frame: metadata.frame, autotile: 'corner' }])) };
   const entry = tilemapEntry(recipe);
   if (!entry) return null;
   return metadata?.slopes ? { tile: entry.tile, legend: metadata.slopes.legend, rows: metadata.slopes.map } : { tile: entry.tile, legend: { '#': entry.legend } };

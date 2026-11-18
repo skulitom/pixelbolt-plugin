@@ -3,15 +3,18 @@
 // offset (a layer's by its own x and y as well), and the result renders exactly as that window of the original does:
 // a margin shows the background, or nothing. With fewer frames (`keepFrames`): evenly spaced frames of each
 // animation, playing as long as before. Browser-compatible.
-import { CANVAS_SIDE, FRAME_AREA, parseColor, renderProject, fail } from './core.js';
+import { CANVAS_SIDE, FRAME_AREA, frameAreaProblem, frameTotalProblem, parseColor, renderProject, fail } from './core.js';
+import { frameParts } from './fx.js';
 
 
-// "32x32", "32×32" or [32, 32].
+// "32x32", "32×32" or [32, 32]: an animation frame's size, at most CANVAS_SIDE a side and FRAME_PIXELS in all.
 export function readSize(value, path = 'size') {
   const parts = typeof value === 'string' ? /^(\d{1,4})[x×](\d{1,4})$/i.exec(value.trim())?.slice(1).map(Number) : value;
   if (!Array.isArray(parts) || parts.length !== 2 || parts.some(side => !Number.isInteger(side) || side < 1 || side > CANVAS_SIDE)) {
     fail(path, `expected a canvas size such as "32x32", each side from 1 to ${CANVAS_SIDE}`);
   }
+  const problem = frameAreaProblem(parts[0], parts[1]);
+  if (problem) fail(path, problem);
   return parts;
 }
 
@@ -53,17 +56,50 @@ function onCanvas(op, { width, height, symbols }) {
     : { ...op, op: 'copy', ...at, sx: left, sy: top, w: right - left, h: bottom - top };
 }
 
+// What ties a recipe to its own canvas, so that no other size can draw it: an operation that reads the whole canvas,
+// or a frame moved after it is drawn, which brings in what lay beside the window the new canvas never drew. Checked
+// before the frame total, which fewer frames meet, so a refusal never sends the caller to a change that cannot help.
+function tiedToCanvas(recipe, path) {
+  recipe.frames.forEach((frame, index) => {
+    const p = `frames[${index}]`;
+    for (const key of ['flipX', 'flipY', 'wrap', 'tile', 'translate']) {
+      if (key === 'translate' ? frame.translate?.some(Boolean) : frame[key]) fail(path, `${p}.${key} is tied to the canvas size, so this recipe cannot move to another one; change the size in its source instead`);
+    }
+    const lists = [[`${p}.ops`, frame.ops ?? []], ...(frame.layers ?? []).map((layer, li) => [`${p}.layers[${li}].ops`, layer.ops ?? []])];
+    for (const [list, ops] of lists) ops.forEach((op, i) => {
+      if (!PLACED.has(op.op) || (op.op === 'copy' && op.symbol === undefined)) {
+        fail(path, `${list}[${i}] is ${op.op === 'copy' ? 'a copy from another frame' : `"${op.op}"`}, which reads the whole canvas, so this recipe cannot move to another canvas size; change the size in its source instead`);
+      }
+    });
+  });
+}
+
+// What a frame-total refusal adds for a recipe of several animations, where fewer frames (--frames, frames) count per
+// animation: the most of each a keep may leave for the frames kept to fit, and how many that keeps (keepFrames is the
+// count), or else keeping fewer animations. Nothing for one animation, whose frames that fit the total already says.
+function fewerRoute(recipe, width, height, path) {
+  const lengths = Object.values(recipe.animations ?? {}).map(animation => animation.frames.length);
+  if (lengths.length < 2) return '';
+  const cli = path.startsWith('--'), fits = Math.floor(FRAME_AREA / (width * height)), left = count => keepFrames(recipe, count).recipe.frames.length;
+  const animation = cli ? '--animation <name>' : 'animation <name>';
+  // The largest count from 1 to one below the longest animation that fits, by halving: keeping more of each
+  // animation keeps more in all (animations that share frames may stray by a frame, and the count named is exact).
+  let low = 0, high = Math.min(256, Math.max(...lengths) - 1), kept = 0;
+  while (low < high) {
+    const mid = Math.floor((low + high + 1) / 2), count = left(mid);
+    if (count <= fits) { low = mid; kept = count; } else high = mid - 1;
+  }
+  if (!low) return `; keep fewer animations with ${animation}`;
+  return `; ${cli ? '--frames' : 'frames'} ${low} keeps ${kept} (${low} of each animation's, evenly spaced), or keep fewer animations with ${animation}`;
+}
+
 // `canvas`, { width, height, symbols }, also cuts what the move puts off the new canvas (not for a layer sorted by
 // ground, where a grid stands on its lowest row).
-function moveOps(ops, dx, dy, path, option, canvas = null) {
-  return ops.map((op, index) => {
-    const p = `${path}[${index}]`;
-    if (!PLACED.has(op.op) || (op.op === 'copy' && op.symbol === undefined)) {
-      fail(option, `${p} is ${op.op === 'copy' ? 'a copy from another frame' : `"${op.op}"`}, which reads the whole canvas, so this recipe cannot move to another canvas size; change the size in its source instead`);
-    }
+function moveOps(ops, dx, dy, canvas) {
+  return ops.map(op => {
     if (op.op === 'replace') return op;
     const moved = { ...op, x: (op.x ?? 0) + dx, y: (op.y ?? 0) + dy };
-    if (op.op === 'line') { moved.x2 = (op.x2 ?? op.x ?? 0) + dx; moved.y2 = (op.y2 ?? op.y ?? 0) + dy; }
+    if (op.op === 'line') { moved.x2 = op.x2 + dx; moved.y2 = op.y2 + dy; }
     if (op.ground !== undefined) moved.ground = op.ground + dy;
     return canvas ? onCanvas(moved, canvas) : moved;
   }).filter(Boolean);
@@ -73,7 +109,9 @@ function moveOps(ops, dx, dy, path, option, canvas = null) {
 // of the drawn pixels (over every frame) that the new canvas leaves out.
 export function resizeRecipe(recipe, size, path = 'size') {
   const [width, height] = readSize(size, path), project = renderProject(recipe), { width: oldWidth, height: oldHeight } = project;
-  if (width * height * project.frames.length > FRAME_AREA) fail(path, `${project.frames.length} frames of ${width}×${height} pixels exceed the ${FRAME_AREA.toLocaleString('en-US')}-pixel limit on a recipe's frames`);
+  tiedToCanvas(recipe, path);
+  const tooMany = frameTotalProblem(project.frames.length, width, height);
+  if (tooMany) fail(path, `${tooMany}${fewerRoute(recipe, width, height, path)}`);
   const columns = new Array(oldWidth).fill(0), rows = new Array(oldHeight).fill(0);
   for (const frame of project.frames) {
     for (let y = 0; y < oldHeight; y++) for (let x = 0; x < oldWidth; x++) if (frame.data[(y * oldWidth + x) * 4 + 3]) { columns[x]++; rows[y]++; }
@@ -118,15 +156,10 @@ export function resizeRecipe(recipe, size, path = 'size') {
   if (background[3]) margins.push(...margins.map(clear => ({ ...clear, op: 'rect', color: `#${background.map(value => value.toString(16).padStart(2, '0')).join('')}` })));
   const point = ([x, y]) => [x + dx, y + dy], canvas = { width, height, symbols: recipe.symbols };
   const frames = recipe.frames.map((frame, index) => {
-    const p = `frames[${index}]`;
-    // A frame moved after it is drawn brings in what lay beside the window, which the new canvas never drew.
-    for (const key of ['flipX', 'flipY', 'wrap', 'tile', 'translate']) {
-      if (key === 'translate' ? frame.translate?.some(Boolean) : frame[key]) fail(path, `${p}.${key} is tied to the canvas size, so this recipe cannot move to another one; change the size in its source instead`);
-    }
-    const ops = moveOps(frame.ops ?? [], dx, dy, `${p}.ops`, path, canvas);
+    const p = `frames[${index}]`, ops = moveOps(frame.ops ?? [], dx, dy, canvas);
     // A layer is drawn on a canvas of its own, cut by it, then moved by the layer's x and y and cut by the frame.
     // Here its operations take that move as well, so its canvas is the new one, and what either cut took is cleared.
-    const moved = (frame.layers ?? []).map(({ x = 0, y = 0, sort, ops: list = [] }, li) => moveOps(list, dx + x, dy + y, `${p}.layers[${li}].ops`, path, sort ? null : canvas));
+    const moved = (frame.layers ?? []).map(({ x = 0, y = 0, sort, ops: list = [] }, li) => moveOps(list, dx + x, dy + y, sort ? null : canvas));
     const beyond = (frame.layers ?? []).map(({ x = 0, y = 0 }) => outside(dx + Math.max(0, x), dx + oldWidth + Math.min(0, x), dy + Math.max(0, y), dy + oldHeight + Math.min(0, y)));
     const cut = margins.length || beyond.some(clears => clears.length) ? cutIn(frame, index) : [];
     if (margins.length && overhangs(cut, 'ops', frame.ops ?? [])) ops.push(...margins);
@@ -176,9 +209,8 @@ export function resizeMargins({ from, offset }, [width, height]) {
 // for, so the animation plays as long as before. Returns { recipe, kept: { <animation>: "8 of 19" }, notes }.
 export function keepFrames(recipe, count, path = 'frames') {
   if (!Number.isInteger(count) || count < 1 || count > 256) fail(path, 'expected how many frames each animation keeps, a whole number from 1 to 256');
-  const project = renderProject(recipe), names = recipe.frames.map(frame => frame.name), index = new Map(names.map((name, i) => [name, i]));
+  const { project, draws } = frameFacts(recipe), names = recipe.frames.map(frame => frame.name), index = new Map(names.map((name, i) => [name, i]));
   const animations = recipe.animations ?? { default: { frames: names } }, kept = {}, next = {}, wanted = new Map(), dropped = new Set();
-  const draws = frame => { const { data } = project.frames[frame]; for (let i = 3; i < data.length; i += 4) if (data[i]) return true; return false; };
   for (const [key, animation] of Object.entries(animations)) {
     const listed = animation.frames.map(name => index.get(name)), F = listed.length, pingpong = animation.direction === 'pingpong';
     // A pingpong plays its inner frames twice: 2 × listed − 2 frames.
@@ -208,6 +240,25 @@ export function keepFrames(recipe, count, path = 'frames') {
   // Frames kept only to draw others from are no longer played, so the animation that played every frame is spelled out.
   const explicit = recipe.animations !== undefined || frames.length > next.default.frames.length;
   return { recipe: { ...recipe, frames, ...(explicit && { animations: next }) }, kept, notes };
+}
+
+// What keepFrames reads of each frame: its duration (project.frames[i].duration) and whether it draws. An effect
+// compiled for fewer frames (compileEffects' `frames`) may make more than a recipe's frames hold together, so when they
+// do, and no frame is drawn from another, they are rendered a run at a time (frameParts) and only these are kept.
+function frameFacts(recipe) {
+  const area = recipe?.width * recipe?.height, frames = recipe?.frames;
+  const drawsIn = ({ data }) => { for (let i = 3; i < data.length; i += 4) if (data[i]) return true; return false; };
+  const copies = frame => frame?.from !== undefined || [...(frame?.ops ?? []), ...(frame?.layers ?? []).flatMap(layer => layer?.ops ?? [])].some(op => op?.op === 'copy');
+  const parts = Number.isInteger(area) && area >= 1 && Array.isArray(frames) && frames.length <= 256 && !frames.some(copies) ? frameParts(frames, area) : null;
+  if (!parts || parts.length < 2) {
+    const project = renderProject(recipe);
+    return { project, draws: frame => drawsIn(project.frames[frame]) };
+  }
+  const facts = [];
+  for (const part of parts) {
+    for (const frame of renderProject({ ...recipe, frames: part, animations: { all: { frames: part.map(frame => frame.name) } } }).frames) facts.push({ duration: frame.duration, draws: drawsIn(frame) });
+  }
+  return { project: { frames: facts }, draws: frame => facts[frame].draws };
 }
 
 // A recipe that keeps only the animations named, and the frames they play or are drawn from: one spell out of a

@@ -1,5 +1,5 @@
 // Motion templates lower to editable poses. Kept separate from rasterization and file I/O.
-import { PixelError, fail } from './core.js';
+import { PixelError, fail, paletteOverride } from './core.js';
 import { sinDeg, cosDeg, rasterizeMass } from './craft.js';
 
 const id = (value, path) => { if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of at most 64 characters'); return value; };
@@ -222,7 +222,10 @@ export function expandMotions(input, compileRest, probeJoints) {
     const gait = ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'];
     const fields = { walk: gait, trot: gait, run: [...gait, ...(quad ? ['flex'] : [])], idle: ['breath', 'squash'], jump: ['crouch', 'stretch', 'apex'], attack: ['arm', 'windup', 'strike', 'hold'], hurt: ['recoil', 'squash'] };
     if (template === 'run' && !quad && motion.flex !== undefined) fail(`${path}.flex`, 'flex bends a four-legged spine in its gallop; this rig has no rig.fore and rig.hind');
-    object(motion, ['template', 'frames', 'duration', 'follow', ...fields[template]], path);
+    object(motion, ['template', 'frames', 'duration', 'follow', 'palette', ...fields[template]], path);
+    // A palette recolours every pose the motion makes (a hurt's flash); without one they keep the rest pose's, and an
+    // empty one, `{}`, gives them none.
+    if (motion.palette !== undefined) paletteOverride(motion.palette, source.palette ?? {}, `${path}.palette`, 'a motion palette recolours keys declared in poses.palette');
     const p = (key, fallback, lo, hi, integer = false) => number(motion[key], fallback, lo, hi, `${path}.${key}`, integer);
     // How far the tail swings from its rest angles as it follows through: 0 holds it as drawn, 2 swings it twice as far.
     const follow = p('follow', 1, 0, 2);
@@ -345,6 +348,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     for (let i = 0; i < count; i++) {
       const pose = structuredClone(rest), label = locomotion ? labels.get(i) ?? `between-${i}` : fixedLabels[template][i];
       pose.name = id(`${name}-${label}`, path); pose.duration = duration;
+      if (motion.palette !== undefined) pose.palette = structuredClone(motion.palette);
       pose.origin = [...(rest.origin ?? [0, 0])]; pose.contacts = []; pose.markers = [...(rest.markers ?? [])];
       const parts = new Map(pose.parts.map(p => [p.name, p])), torso = parts.get(rig.body), angle = Math.round(i * 360 / count) + (template === 'idle' && count === 2 ? 90 : 0);
       const setAngle = setAngleOf;
@@ -514,7 +518,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     try { drawn = compileRest({ ...checkSource, poses: source.poses, animations: { check: { frames: standIns, loop: false } } }); }
     catch (error) { if (!(error instanceof PixelError)) throw error; }
     for (const pose of drawn ? standIns : []) {
-      const placed = drawn.metadata.poses[pose].parts[rig.body], rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
+      const parts = drawn.metadata.poses[pose].parts, placed = Object.hasOwn(parts, rig.body) ? parts[rig.body] : undefined, rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
       const lowest = placed ? placed.topLeft[1] + rows.findLastIndex(row => /[^. ]/.test(row)) : null, at = `poses.poses[${inputIndex.get(pose)}]`;
       const about = `"${pose}" stands in for a pose of the grounded idle "${groundedPoses.get(pose)}", so`;
       if (lowest === null) fail(at, `${about} it needs the body instance "${rig.body}" standing on rig.ground (row ${rig.ground})`);

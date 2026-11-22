@@ -71,7 +71,14 @@
       "description": "Symbols the ops may stamp; not copied into the compiled recipe."
     },
     "template": {
-      "$ref": "#/$defs/rows",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "maxItems": 256,
+      "minItems": 1,
       "description": "tile × 3 rows of tile × 2 characters. Tiles are stitched from its quarters, so it has to repeat every tile."
     },
     "terrain": {
@@ -615,7 +622,14 @@
             "description": "This layer's terrain, merged into the set's terrain (if any) field by field."
           },
           "template": {
-            "$ref": "#/$defs/rows",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 256,
+            "minItems": 1,
             "description": "This layer's template rows instead of a terrain."
           },
           "ops": {
@@ -820,7 +834,14 @@
             "description": "How often this variant is picked against the others for a cell, in the test map and Godot; default 1. Give common variants 10 and a rare one 1."
           },
           "template": {
-            "$ref": "#/$defs/rows",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "maxItems": 256,
+            "minItems": 1,
             "description": "Redraw this variant from its own template of the same size (compiled as the symbol template-<name>): cracked or mossy stone with the base set's edges."
           },
           "terrain": {
@@ -943,11 +964,11 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 256
+        "maxLength": 1024
       },
-      "maxItems": 256,
+      "maxItems": 1024,
       "minItems": 1,
-      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+      "description": "Equal-width text rows, at most 262,144 characters in all. Every character is a palette key; dot and space skip a pixel."
     },
     "op": {
       "oneOf": [
@@ -1010,13 +1031,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1060,13 +1081,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1133,6 +1154,60 @@
           "type": "object",
           "properties": {
             "op": {
+              "const": "polygon"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "maxItems": 256,
+              "minItems": 3,
+              "description": "Ordered vertices relative to x/y. The closed edge includes its pixel endpoints. The interior uses even-odd fill."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "points",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
               "const": "clear"
             },
             "x": {
@@ -1149,13 +1224,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             }
           },
           "required": [
@@ -1457,22 +1532,22 @@
             "sx": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "sy": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "scale": {
               "type": "integer",
@@ -1736,13 +1811,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1892,13 +1967,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "steps": {
               "type": "integer",
@@ -2042,7 +2117,7 @@
               "items": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 256
+                "maximum": 1024
               },
               "maxItems": 2,
               "minItems": 2,
@@ -2378,7 +2453,7 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 65536,
+              "maximum": 262144,
               "description": "Most replacements per rule per step."
             },
             "seed": {

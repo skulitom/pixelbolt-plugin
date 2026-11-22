@@ -70,7 +70,7 @@
           "speed": [1.5, 2.9],
           "gravity": [0, 0.25],
           "drag": 0.05,
-          "life": [4, 7],
+          "life": [4, 6],
           "shapes": ["spark", "spark-y", "spark-o"],
           "trail": { "color": "o", "length": 1 }
         }

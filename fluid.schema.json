@@ -744,7 +744,7 @@
                   },
                   "required": [],
                   "additionalProperties": false,
-                  "description": "Strength follows a sine wave: puffs, heaves, heartbeats."
+                  "description": "Strength follows a sine wave: puffs, heaves, heartbeats. A liquid is never fuller than full, so a liquid emitter at rate 1 only dips: its stream thins and falls short in the low half of a cycle, and never passes its steady reach."
                 },
                 "orbit": {
                   "type": "object",
@@ -1599,7 +1599,11 @@
                 },
                 "symbol": {
                   "type": "string",
-                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns)."
+                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns). A circle's stays upright unless it rolls."
+                },
+                "rolls": {
+                  "type": "boolean",
+                  "description": "A circle with a symbol: turn the symbol as the ball rolls (a wheel, a boulder), its round outline kept as drawn. Without it the symbol stays upright (a face)."
                 },
                 "trail": {
                   "type": "object",
@@ -2239,6 +2243,145 @@
             "minItems": 2,
             "description": "Direction toward the light for the light and shadow fields; default [-1, -1], the upper left."
           },
+          "shine": {
+            "type": "object",
+            "properties": {
+              "field": {
+                "enum": [
+                  "temperature",
+                  "density",
+                  "ionization",
+                  "current"
+                ],
+                "description": "The field whose high values shine; default temperature."
+              },
+              "from": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 256,
+                "description": "The field level at which a pixel begins to shine."
+              },
+              "full": {
+                "type": "number",
+                "minimum": 0.001,
+                "maximum": 512,
+                "description": "The level at which it shines in full; default twice from."
+              },
+              "reach": {
+                "type": "number",
+                "minimum": 2,
+                "maximum": 128,
+                "description": "Pixels of open air a full light crosses before it is gone."
+              },
+              "depth": {
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 64,
+                "description": "Pixels into a solid obstacle the light gets; default reach / 2.6. Small: lit faces, hard shadows behind. Large: a soft gradient across the thing."
+              },
+              "ease": {
+                "type": "number",
+                "minimum": 0.05,
+                "maximum": 1,
+                "description": "The share of the way each pixel's light moves to its new level each frame; default 0.5. 1 follows the fire at once (a flash); lower is steadier."
+              },
+              "thresholds": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0.001,
+                  "maximum": 1
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "Rising shares of full light (1 beside what shines, 0 at reach), one for each colour of colors, smoke and wall."
+              },
+              "colors": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "A one-character palette key (grid rows name colours by character)."
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on drawn obstacles, from the least to the most. A fully clear colour draws nothing at its level."
+              },
+              "smoke": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "A one-character palette key (grid rows name colours by character)."
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on what the gas itself drew that does not shine: its smoke."
+              },
+              "wall": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1,
+                  "description": "A one-character palette key (grid rows name colours by character)."
+                },
+                "maxItems": 16,
+                "minItems": 1,
+                "description": "The light on the empty pixels, when there is a wall or a floor behind the effect."
+              },
+              "dark": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1,
+                "description": "Lies on drawn obstacles wherever the light is below the first threshold: draw them as they look fully lit, and the light is seen by what it leaves dark."
+              },
+              "dither": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Feather each colour in below its threshold, as a look layer does; default 0.5."
+              },
+              "pattern": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "bayer2",
+                      "bayer4",
+                      "bayer8",
+                      "noise",
+                      "value"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                      },
+                      "maxItems": 16,
+                      "minItems": 1
+                    },
+                    "maxItems": 16,
+                    "minItems": 1
+                  }
+                ],
+                "description": "Dither pattern, as for the dither operation: bayer4 (default), bayer2, bayer8, noise or value (seeded by the effect) or a matrix of ranks. Anchored to the canvas, so it never crawls."
+              }
+            },
+            "required": [
+              "from",
+              "reach",
+              "thresholds"
+            ],
+            "additionalProperties": false,
+            "description": "Gas: the light of what shines. It spreads from the pixels where field is at least from through the open pixels, losing 1 / reach a pixel; solid obstacles drink it (1 / depth a pixel) and shadow what is behind them; decorations (solid: false) are flat things it lies on. It moves with the fire, never as a shape of its own. Give at least one of colors, smoke and wall."
+          },
           "outline": {
             "type": "string",
             "minLength": 1,
@@ -2257,7 +2400,7 @@
             },
             "required": [],
             "additionalProperties": false,
-            "description": "De-Stray (specks and pinholes take their surroundings' colour; a liquid's lone pixel is a drop, and stays) and De-Corner cleanup of the fluid before outline and sparks."
+            "description": "De-Stray (specks and pinholes take their surroundings' colour, the commonest where bands meet; a liquid's lone pixel is a drop, and stays) and De-Corner cleanup of the fluid before outline and sparks."
           }
         },
         "required": [

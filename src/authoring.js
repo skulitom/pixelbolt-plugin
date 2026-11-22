@@ -1,5 +1,5 @@
 // Optional authoring compilers. All output is ordinary, editable version-1 recipe data.
-import { PixelError, CANVAS_SIDE, parseColor, renderProject, describeStampRecipe, readRows, pictureSheet, fail, sameWidth } from './core.js';
+import { PixelError, POSE_SIDE, parseColor, paletteOverride, renderProject, describeStampRecipe, readRows, pictureSheet, fail, sameWidth } from './core.js';
 import { AUTOTILE_MODES, MODE_MASKS, MODE_BITS, tilePieces, templatePiece } from './autotile.js';
 import { terrainTemplate, mergeTerrain, normalTerrain, readTerrain, templateSeams, seamWarnings, testMapRecipe, layeredTestMapRecipe } from './terrain.js';
 import { slopeTiles, slopeCollision, slopeLegend, SLOPE_MAP } from './slopes.js';
@@ -19,6 +19,10 @@ export function point(value, path, bound = 4096) {
 // [min, max] range with the draw that samples it. Declared as functions, so modules that import each other can use them.
 export function number(value, path, min, max) {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) fail(path, `expected a number from ${min} to ${max}`);
+  return value;
+}
+export function boolean(value, path) {
+  if (typeof value !== 'boolean') fail(path, 'expected true or false');
   return value;
 }
 export function integer(value, path, min, max) {
@@ -54,7 +58,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 const VIEW_KEY = /^(0|[1-9][0-9]{0,2})$/;
 function checkView(view, path, part, palette) {
   fields(view, ['rows', 'anchor', 'points'], path);
-  readRows(view.rows, `${path}.rows`, palette);
+  readRows(view.rows, `${path}.rows`, palette, POSE_SIDE);
   point(view.anchor, `${path}.anchor`);
   if (view.points !== undefined) fields(view.points, Object.keys(part.points ?? {}), `${path}.points`);
   for (const key of Object.keys(part.points ?? {})) point(view.points?.[key], `${path}.points.${key}`);
@@ -63,9 +67,6 @@ function checkView(view, path, part, palette) {
 function structuralPart(part, source, path) {
   const kind = part.bone !== undefined ? 'bone' : 'mass', shape = part[kind], p = `${path}.${kind}`;
   fields(shape, kind === 'bone' ? ['length', 'width', 'ramp', 'base', 'outline', 'caps', 'snap'] : ['size', 'ramp', 'base', 'outline', 'flat'], p, ['outline']);
-  const integer = (value, at, low, high) => {
-    if (!Number.isInteger(value) || value < low || value > high) fail(at, `expected an integer from ${low} to ${high}`);
-  };
   if (kind === 'bone') {
     integer(shape.length, `${p}.length`, 1, 64);
     if (!Array.isArray(shape.width) || ![2, 3].includes(shape.width.length)) fail(`${p}.width`, 'expected [start, end] or [start, middle, end]');
@@ -157,6 +158,11 @@ function stampsOutside(frames, symbols, width, height) {
 const nameList = (names, limit = 3) => names.slice(0, limit).join(', ') + (names.length > limit ? ` and ${names.length - limit} more` : '');
 const span = (low, high) => low === high ? `${low}` : `${low} to ${high}`;
 
+// A pose's (or a motion's) palette as written, with its exact colours to compare by; empty, it is none.
+function posePalette(value, path, palette) {
+  const hex = paletteOverride(value, palette, path, 'a pose palette recolours keys declared in poses.palette');
+  return Object.keys(hex).length ? { authored: value, hex: Object.fromEntries(Object.entries(hex).sort(([a], [b]) => a < b ? -1 : 1)) } : undefined;
+}
 export function compilePoses(source, within) {
   // `within` is this module's own (see expandPoses): a compile made during motion expansion, and whether it is a probe.
   const mode = within?.[WITHIN]?.probe ? PROBE : undefined;
@@ -165,6 +171,8 @@ export function compilePoses(source, within) {
   if (motions !== undefined) { const input = source; source = expandPoses(source); written = writtenPoses(input, source); }
   fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'light', 'innerLines', 'rig', 'motionInfo', 'parts', 'poses', 'animations', 'sheet'], 'poses');
   if (source.format !== 'pixelforge-poses' || source.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
+  // Before anything is sized by it: the pass that shades inner lines made its arrays from a width nothing had checked.
+  for (const side of ['width', 'height']) if (!Number.isInteger(source[side]) || source[side] < 1 || source[side] > POSE_SIDE) fail(`project.${side}`, `${source[side] === undefined ? 'missing; ' : ''}expected an integer from 1 to ${POSE_SIDE}`);
   if (source.light !== undefined && (!Number.isInteger(source.light) || source.light < 0 || source.light > 359)) fail('poses.light', 'expected whole degrees from 0 to 359');
   if (source.innerLines !== undefined && !['shade', 'outline'].includes(source.innerLines)) fail('poses.innerLines', 'expected shade (the default) or outline');
   if (source.ramps !== undefined && (!Array.isArray(source.ramps) || source.ramps.length > 64)) fail('poses.ramps', 'expected at most 64 colour ramps');
@@ -273,7 +281,7 @@ export function compilePoses(source, within) {
       if (Object.hasOwn(source.parts, symbol) || symbol.length > 64) fail(where, `a rotated part needs the symbol name ${symbol}; rename that part definition or shorten ${name}`);
       const rows = flipX ? definition.rows.map(row => [...row].reverse().join('')) : definition.rows;
       const turned = rotateRows(rows, angle, local(anchor), { cleanup: tidy });
-      if (turned.rows.length > 256 || turned.rows[0].length > 256) fail(where, `rotating ${name} by ${angle}° exceeds 256×256 pixels`);
+      if (turned.rows.length > POSE_SIDE || turned.rows[0].length > POSE_SIDE) fail(where, `rotating ${name} by ${angle}° exceeds ${POSE_SIDE}×${POSE_SIDE} pixels`);
       symbols[symbol] = turned.rows;
       shapes.set(key, { symbol, flipX: false, anchor: turned.pivot, point: p => turned.map(local(p)) });
     }
@@ -291,9 +299,13 @@ export function compilePoses(source, within) {
   };
   const posed = source.poses.map((pose, index) => {
     const writtenAs = written?.get(pose?.name), path = writtenAs?.path ?? `poses.poses[${index}]`, motion = writtenAs?.motion;
-    fields(pose, ['name', 'duration', 'origin', 'parts', 'markers', 'contacts', 'mirror', 'relight', 'tween'], path);
+    fields(pose, ['name', 'duration', 'origin', 'parts', 'markers', 'contacts', 'mirror', 'relight', 'tween', 'palette'], path);
     identifier(pose.name, `${path}.name`);
     if (Object.hasOwn(compiled, pose.name)) fail(`${path}.name`, 'duplicate pose');
+    // A pose's palette recolours its frame, as a recipe frame's palette does (a hit flash). A mirror without one takes
+    // its source pose's; a tween without one takes the palette both its poses share, and none if they differ. A palette
+    // written empty, `{}`, is none, and is what clears an inherited one.
+    const tone = pose.palette === undefined ? undefined : posePalette(pose.palette, `${path}.palette`, source.palette ?? {});
     let origin, placed, layers, markers, inputs = null, mirrorInputs = null, tween = null;
     if (pose.relight !== undefined && (typeof pose.relight !== 'boolean' || pose.mirror === undefined)) fail(`${path}.relight`, 'expected a boolean on a mirror pose');
     let mirroredFrom;
@@ -405,7 +417,7 @@ export function compilePoses(source, within) {
         point(instance.reach, `${ip}.reach`);
         if (instance.rotate !== undefined || instance.angle !== undefined) fail(`${ip}.reach`, 'reach replaces the last bone angle');
         const parent = spec.parts[instances.get(instance.attach?.part)], first = source.parts[parent?.part], second = source.parts[instance.part];
-        if (!first?.bone || !second?.bone || first.points?.[instance.attach?.point] !== 'end') fail(`${ip}.reach`, 'reach needs a bone attached to the end point of another bone');
+        if (!instance.attach || !first?.bone || !second?.bone || first.points?.[instance.attach.point] !== 'end') fail(`${ip}.reach`, 'reach needs a bone attached to the end point of another bone');
         if (instance.at !== undefined && point(instance.at, `${ip}.at`).some(Boolean)) fail(`${ip}.at`, 'a reach chain must meet at its shared joint; omit at or use [0, 0]');
         if (owners.has(parent.name) || parent.reach !== undefined) fail(`${ip}.reach`, 'reach chains cannot overlap or share their first bone');
         owners.set(parent.name, instance);
@@ -515,13 +527,15 @@ export function compilePoses(source, within) {
       });
     }
     const duration = pose.duration ?? (pose.mirror !== undefined ? compiled[pose.mirror].duration : undefined);
+    const [from, to] = tween ? [compiled[tween.from].tone, compiled[tween.to].tone] : [];
+    const palette = pose.palette !== undefined ? tone : pose.mirror !== undefined ? mirroredFrom.tone : from && to && JSON.stringify(from.hex) === JSON.stringify(to.hex) ? from : undefined;
     const contacts = pose.mirror !== undefined ? mirroredFrom.contacts : pose.contacts;
     if (contacts !== undefined && (!Array.isArray(contacts) || contacts.length > 64 || new Set(contacts).size !== contacts.length || contacts.some(name => !markers.some(marker => marker.name === name)))) fail(`${path}.contacts`, 'expected up to 64 unique marker names from this pose');
-    compiled[pose.name] = { origin, placed, layers, markers, contacts, duration, inputs, mirrorInputs };
+    compiled[pose.name] = { origin, placed, layers, markers, contacts, duration, inputs, mirrorInputs, tone: palette };
     metadata.poses[pose.name] = { origin, ...(pose.mirror !== undefined && { mirror: pose.mirror }), ...(pose.relight !== undefined && { relight: pose.relight }), ...(tween && { tween }), parts: placed, markers, ...(contacts !== undefined && { contacts }) };
     // The pose origin becomes the frame anchor; marker positions become named frame points in the atlas.
     const lines = mode === PROBE ? [] : innerLinePixels(layers);
-    return { name: pose.name, ...(duration !== undefined && { duration }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers, ...(lines.length && { pixels: lines }) };
+    return { name: pose.name, ...(duration !== undefined && { duration }), ...(palette && { palette: palette.authored }), anchor: origin, ...(markers.length && { points: Object.fromEntries(markers.map(m => [m.name, m.at])) }), layers, ...(lines.length && { pixels: lines }) };
   });
   if (mode === PROBE) return { metadata: { poses: metadata.poses } };
   // A rig's rest pose is what the motions are made from. It is a frame only when an animation plays it: left in the
@@ -592,7 +606,13 @@ export function compilePoses(source, within) {
     if (!clip.outside) return;
     const name = clip.name, writtenAs = written?.get(name), origin = compiled[name].origin, gone = clip.outside === clip.total;
     if (gone && written && name === rig?.rest) restGone = true;
-    const message = `${gone ? `Pose "${name}" draws nothing inside the ${canvas}: all ${clip.total} of its pixels fall outside` : `Pose "${name}" draws ${clip.outside} of its ${clip.total} pixels outside the ${canvas}, where they are clipped`} (its parts cover ${cover(clip.box)}). A part without attach stands at the pose origin [${origin.join(', ')}] plus its at.${gone && written && name === rig?.rest ? ' The motion templates move this pose, so the poses they make fall outside too.' : ''}`;
+    // A pose with its own origin is moved whole by it, reach targets aside, so say where the origin would bring the
+    // parts inside, when they fit the canvas at all. A mirror or a tween takes its origin from other poses.
+    const box = clip.box, pose = source.poses[index], shift = (low, high, side) => high - low >= side ? null : low < 0 ? -low : high >= side ? side - 1 - high : 0;
+    const by = pose.mirror === undefined && pose.tween === undefined && writtenAs?.motion === undefined ? [shift(box[0], box[2], width), shift(box[1], box[3], height)] : [null];
+    const reaches = (pose.parts ?? []).some(part => part?.reach !== undefined);
+    const move = by.includes(null) ? '' : ` Moving the origin by [${by.join(', ')}], to [${origin[0] + by[0]}, ${origin[1] + by[1]}]${reaches ? ', and its reach targets with it' : ''}, brings it all inside.`;
+    const message = `${gone ? `Pose "${name}" draws nothing inside the ${canvas}: all ${clip.total} of its pixels fall outside` : `Pose "${name}" draws ${clip.outside} of its ${clip.total} pixels outside the ${canvas}, where they are clipped`} (its parts cover ${cover(box)}). A part without attach stands at the pose origin [${origin.join(', ')}] plus its at.${move}${gone && written && name === rig?.rest ? ' The motion templates move this pose, so the poses they make fall outside too.' : ''}`;
     const warning = { path: writtenAs?.path ?? `poses.poses[${index}]`, message, outside: clip.outside, pixels: clip.total };
     clipped.push(warning);
     if (writtenAs?.motion !== undefined) generated.set(warning, { kind: 'canvas', motion: writtenAs.motion, pose: name, outside: clip.outside, total: clip.total, box: clip.box });
@@ -708,7 +728,7 @@ export function draftViews(source, request, { sheet: drawSheet = true } = {}) {
     const path = `draftViews.${name}`, part = Object.hasOwn(source.parts, name) ? source.parts[name] : undefined;
     if (!part) fail(path, `no part named ${name}; the source defines ${nameList(Object.keys(source.parts), 8) || 'none'}`);
     if (part.rows === undefined) fail(path, `${name} is a ${part.bone ? 'bone' : 'mass'} part, which the compiler draws afresh at every angle; drafts are for grid parts (rows)`);
-    readRows(part.rows, `poses.parts.${name}.rows`, palette);
+    readRows(part.rows, `poses.parts.${name}.rows`, palette, POSE_SIDE);
     if (part.rows.length > DRAFT_LIMITS.side || part.rows[0].length > DRAFT_LIMITS.side) fail(`poses.parts.${name}.rows`, `drafts are for small parts, at most ${DRAFT_LIMITS.side}×${DRAFT_LIMITS.side} pixels; this one is ${part.rows[0].length}×${part.rows.length}`);
     const anchor = point(part.anchor ?? [0, 0], `poses.parts.${name}.anchor`);
     if (part.points !== undefined && (!part.points || typeof part.points !== 'object' || Array.isArray(part.points))) fail(`poses.parts.${name}.points`, 'expected named attachment points');
@@ -812,6 +832,8 @@ export function compileAutotile(source) {
     symbols[`template-${variant.name}`] = rows;
   });
   if (source.animation !== undefined && (typeof source.animation !== 'string' || !source.animation.includes('{mask}'))) fail('autotile.animation', 'expected an animation name template containing {mask}');
+  // Variants that differ only in their palette or how long they show are the frames of one tile, not tiles to scatter.
+  const cycled = source.animation === undefined && Array.isArray(source.variants) && source.variants.length > 1 && source.variants.every(variant => (variant.palette !== undefined || variant.duration !== undefined) && Object.keys(variant).every(key => ['name', 'palette', 'duration'].includes(key)));
   if (source.preview !== undefined) {
     fields(source.preview, ['background', 'rows'], 'autotile.preview');
     if (source.preview.background !== undefined) parseColor(source.preview.background, palette, 'autotile.preview.background');
@@ -850,11 +872,39 @@ export function compileAutotile(source) {
   const recipe = { version: 1, name: source.name, width: tile, height: tile, palette, ...(source.ramps !== undefined && { ramps: source.ramps }), symbols, frames, ...(source.animation !== undefined && { animations }), ...(source.sheet !== undefined && { sheet: source.sheet }) };
   renderProject(recipe);
   const report = templateSeams(templates, tile, mode, drawn), warnings = seamWarnings(report, tile);
+  if (cycled) warnings.push(`autotile.variants: the ${source.variants.length} variants differ only in palette or duration, which are the frames of an animation, but with no \`animation\` each cell picks one of them at random and never changes. Add "animation": "${source.name}-{mask}" and every tile plays them in turn (an animated tile in the Godot TileSet and in Tiled).`);
   const count = kind => report.seams.reduce((sum, seam) => sum + seam.pixels.filter(p => (kind === 'corner' ? seam.corner : !seam.corner && (kind === 'shape') === p.shape)).length, 0);
   // At 84 pixels a tile the test map is 1680 × 1176 (2016 × 1596 with slopes), inside the size of a still. It mixes
   // the templates the frames draw, each as often as the variants that draw it.
+  // A variant that only recolours draws the shared template in its own palette, which one frame of one palette can't
+  // do: there it is a copy of the template in spare keys that hold its colours. (Every variant was drawn in the base
+  // palette, so a red set with a blue variant showed a test map all red.) The frames of an animation stay one template.
+  // A colour the palette already has keeps its key, each new colour gets one spare key however many variants use it, and
+  // a variant whose colours would take the palette past its 256 is drawn in the base palette, as all were.
+  const shown = { ...recipe, palette: { ...palette }, symbols: { ...symbols } }, spares = new Map();
+  let spare = 0x2460;
+  const drawnAs = variant => {
+    const base = symbolOf(variant);
+    if (variant.palette === undefined || source.animation !== undefined) return base;
+    const swap = new Map(), fresh = [];
+    for (const [key, named] of Object.entries(variant.palette)) {
+      // A key of one character can stand in a row; a longer key name draws its colour from a spare key.
+      if (Object.hasOwn(palette, named) && named.length === 1) { swap.set(key, named); continue; }
+      const value = Object.hasOwn(palette, named) ? palette[named] : named;
+      if (!spares.has(value)) {
+        while (Object.hasOwn(shown.palette, String.fromCharCode(spare))) spare++;
+        spares.set(value, String.fromCharCode(spare++)); fresh.push(value);
+      }
+      swap.set(key, spares.get(value));
+    }
+    if (Object.keys(shown.palette).length + fresh.length > 256) { for (const value of fresh) spares.delete(value); return base; }
+    for (const value of fresh) shown.palette[spares.get(value)] = value;
+    const name = `${base}-as-${variant.name}`;
+    shown.symbols[name] = symbols[base].map(row => [...row].map(key => swap.get(key) ?? key).join(''));
+    return name;
+  };
   const share = new Map();
-  for (const variant of variants) share.set(symbolOf(variant), (share.get(symbolOf(variant)) ?? 0) + (variant.weight ?? 1));
+  for (const variant of variants) { const symbol = drawnAs(variant); share.set(symbol, (share.get(symbol) ?? 0) + (variant.weight ?? 1)); }
   const most = Math.max(...share.values()), weighted = variants.some(variant => (variant.weight ?? 1) !== 1);
   // preview.rows: a map of the caller's own drawn in place of the test map, so a level laid out in characters is one
   // picture from the template alone: # for the terrain, . for nothing, and the set's slope characters.
@@ -866,7 +916,7 @@ export function compileAutotile(source) {
     level.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (!known.includes(row[x])) fail(`autotile.preview.rows[${y}]`, `character ${JSON.stringify(row[x])} at column ${x} is not one this set draws: ${said}${slopes ? '' : ' (a set with slopes has a character for each)'}`); });
     if (level[0].length * tile > 4096 || level.length * tile > 4096 || level[0].length * level.length * tile * tile > 4194304) fail('autotile.preview.rows', `${level[0].length} by ${level.length} tiles of ${tile} pixels is more than one picture holds (4096 a side, 4,194,304 pixels)`);
   }
-  const preview = testMapRecipe(recipe, { ...(level && { rows: level }), templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
+  const preview = testMapRecipe(shown, { ...(level && { rows: level }), templates: [...share.keys()], ...(weighted && { weights: [...share.values()].map(sum => Math.max(1, Math.round(sum * Math.min(1, 1000 / most)))) }), mode, background: source.preview?.background, ...(slopes && { slopes }) });
   // For maps with slopes: a scene legend that draws the set (# its terrain, a foot under each slope that has one) and the
   // slopes by their characters, and a map holding every slope.
   const setEntry = source.variants === undefined ? { frame: source.frame } : { frames: variants.map(variant => source.frame.replaceAll('{variant}', variant.name)), ...(variants.some(variant => (variant.weight ?? 1) !== 1) && { weights: variants.map(variant => variant.weight ?? 1) }) };
@@ -934,8 +984,17 @@ function compileLayers(source, { tile, mode, palette }) {
     fail('autotile.frame', `makes ${JSON.stringify(name)} for corners ${corners}, which is no frame name: names are 1–64 letters, digits, underscores or hyphens, starting with a letter${/^[0-9]/.test(name) && source.frame.startsWith('{corners}') ? '; a layer key is a digit, so put a letter before {corners}, as in tiles-{corners}' : ''}`);
   };
   if (source.preview !== undefined) {
-    fields(source.preview, ['background'], 'autotile.preview');
+    fields(source.preview, ['background', 'rows'], 'autotile.preview');
     if (source.preview.background !== undefined) parseColor(source.preview.background, palette, 'autotile.preview.background');
+  }
+  // preview.rows: a map of the caller's own, a layer's key in each cell, drawn in place of the test map.
+  const level = source.preview?.rows;
+  if (level !== undefined) {
+    const keys = read.map(layer => layer.key), said = keys.map((key, i) => `${key} for ${read[i].name}`).join(', ');
+    if (!Array.isArray(level) || !level.length || level.length > 256 || level.some(row => typeof row !== 'string') || !level[0].length) fail('autotile.preview.rows', `expected 1–256 equal-width text rows of the layers' keys: ${said}`);
+    sameWidth(level, 'autotile.preview.rows');
+    level.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (!keys.includes(row[x])) fail(`autotile.preview.rows[${y}]`, `character ${JSON.stringify(row[x])} at column ${x} is no layer's key: ${said}`); });
+    if (level[0].length * tile > 4096 || level.length * tile > 4096 || level[0].length * level.length * tile * tile > 4194304) fail('autotile.preview.rows', `${level[0].length} by ${level.length} tiles of ${tile} pixels is more than one picture holds (4096 a side, 4,194,304 pixels)`);
   }
   // Codes count in base n, NW the lowest digit.
   const n = read.length, places = [1, n, n * n, n * n * n], frames = [], variantFrames = [], weighed = weight => (weight !== 1 ? { weight } : {});
@@ -958,9 +1017,9 @@ function compileLayers(source, { tile, mode, palette }) {
     seams.joins += report.checked;
     for (const seam of report.seams) for (const pixel of seam.pixels) seams[pixel.shape ? 'shape' : 'texture']++;
   }
-  const preview = layeredTestMapRecipe(recipe, read, { background: source.preview?.background });
+  const preview = layeredTestMapRecipe(recipe, read, { background: source.preview?.background, rows: level });
   const listed = read.map(({ name, key, weight, variants, collision }) => ({ name, key, ...(variants && { weight, variants: variants.map(variant => ({ name: variant.name, weight: variant.weight })) }), ...(collision && { solid: true }) }));
-  return plain({ recipe, metadata: { format: 'pixelforge-autotile-metadata', version: 1, mode, layers: listed, corners: ['nw', 'ne', 'sw', 'se'], tiles: frames.length, seams }, ...(warnings.length && { warnings }), preview });
+  return plain({ recipe, metadata: { format: 'pixelforge-autotile-metadata', version: 1, mode, layers: listed, frame: source.frame, corners: ['nw', 'ne', 'sw', 'se'], tiles: frames.length, seams }, ...(warnings.length && { warnings }), preview });
 }
 
 // A layer's variants of its plain tile, the tile with it at all four corners. Each redraws the layer's template from its
@@ -1156,17 +1215,23 @@ const encodeNormal = vector => '#' + vector.map(v => Math.round((v + 1) * 127.5)
 // The output is an ordinary recipe aligned with the colour recipe: same size, frame names and durations, animations
 // and atlas layout. Mirrored frames get mirrored normals because they are derived from the drawn pixels.
 // `faces` gives pixels drawn in chosen palette keys one direction each instead (the top, front and side of a box,
-// a wall or a building, which a cushion cannot describe); every other pixel is rounded as before.
+// a wall or a building, which a cushion cannot describe); every other pixel is rounded as before. `axis` rounds a
+// cylinder instead of a cushion: with "vertical" (a barrel, a pillar, a trunk standing up) each row of a shape is
+// rounded from its left end to its right, so the surface leans left and right and never up or down; "horizontal" (a
+// log lying down) rounds each column.
+// A normal pass keeps 256 a side, whatever an animation frame may be: its shading is not budgeted per frame.
+const NORMALS_SIDE = 256;
 export function compileNormals(source) {
-  fields(source, ['format', 'version', 'name', 'recipe', 'bevel', 'detail', 'faces'], 'normals');
+  fields(source, ['format', 'version', 'name', 'recipe', 'bevel', 'detail', 'faces', 'axis'], 'normals');
+  if (source.axis !== undefined && !['vertical', 'horizontal'].includes(source.axis)) fail('normals.axis', 'expected vertical (a barrel or a pillar standing up) or horizontal (a log lying down); omit it to round each shape like a cushion');
   if (source.format !== 'pixelforge-normals' || source.version !== 1) fail('normals', 'expected version-1 pixelforge-normals');
   const spec = source.recipe;
   if (typeof spec === 'string' || (spec && typeof spec === 'object' && spec.revision !== undefined && spec.version === undefined)) fail('normals.recipe', 'file and revision references are resolved by the CLI and MCP; inline the recipe to compile here');
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) fail('normals.recipe', 'expected the colour recipe, inline or as a file reference');
   if (spec.format !== undefined) fail('normals.recipe', `expected a recipe, not a ${spec.format} source; compile it first and derive normals from the result`);
-  // A normal pass lights scene assets, which are at most 256 a side, so a larger still is refused here rather than as
-  // an error in a grid the user never wrote.
-  if ([spec.width, spec.height].some(side => typeof side === 'number' && side > CANVAS_SIDE)) fail('normals.recipe', `the colour recipe is ${spec.width}×${spec.height}; a normal pass is at most ${CANVAS_SIDE}×${CANVAS_SIDE} (it lights scene assets, which keep that limit), so derive normals from a recipe of at most ${CANVAS_SIDE} a side`);
+  // A normal pass is at most NORMALS_SIDE a side, so a larger recipe is refused here rather than as an error in a grid
+  // the user never wrote.
+  if ([spec.width, spec.height].some(side => typeof side === 'number' && side > NORMALS_SIDE)) fail('normals.recipe', `the colour recipe is ${spec.width}×${spec.height}; a pass made by the normals compiler keeps ${NORMALS_SIDE} pixels a side, so derive normals from a recipe of at most ${NORMALS_SIDE} a side; a larger scene asset takes a normal pass drawn as a recipe of its own size`);
   if (source.bevel !== undefined && (!Number.isInteger(source.bevel) || source.bevel < 1 || source.bevel > 64)) fail('normals.bevel', 'expected 1–64 pixels from the edge to the flat top; omit it to round each shape up to its thickest point');
   const detail = source.detail ?? 0;
   if (typeof detail !== 'number' || !Number.isFinite(detail) || detail < 0 || detail > 1) fail('normals.detail', 'expected 0 (shape only) to 1');
@@ -1219,10 +1284,29 @@ export function compileNormals(source) {
       }
       thickest.push(deepest);
     }
+    // A cylinder: each run of solid pixels across the axis is a slice of it, rounded about the run's middle with the
+    // radius of the shape's widest run. A narrower run (a rounded end, a notch) is the same cylinder cut shorter, so
+    // its ends stand above the rim and the surface still never leans along the axis.
+    const half = source.axis ? new Float64Array(size) : null;
+    if (half) {
+      const upright = source.axis === 'vertical', span = upright ? w : h, lines = upright ? h : w, index = (k, line) => (upright ? line * w + k : k * w + line), runs = [], radius = thickest.map(() => 0);
+      for (let line = 0; line < lines; line++) for (let k = 0; k < span; k++) {
+        if (!solid(index(k, line))) continue;
+        let end = k;
+        while (end + 1 < span && solid(index(end + 1, line))) end++;
+        runs.push([line, k, end]);
+        radius[shape[index(k, line)]] = Math.max(radius[shape[index(k, line)]], (end - k + 1) / 2);
+        k = end;
+      }
+      for (const [line, k, end] of runs) {
+        const whole = radius[shape[index(k, line)]], inset = whole - (end - k + 1) / 2;
+        for (let j = k; j <= end; j++) { distance[index(j, line)] = 3 * (inset + Math.min(j - k + 0.5, end - j + 0.5)); half[index(j, line)] = whole; }
+      }
+    }
     const height = new Float64Array(size);
     for (let i = 0; i < size; i++) if (solid(i)) {
       // A shape with no transparent pixel around it (a filled tile) has no rim and stays flat apart from detail.
-      const reach = source.bevel ?? (Number.isFinite(thickest[shape[i]]) ? thickest[shape[i]] / 3 : 0);
+      const whole = half ? half[i] : Number.isFinite(thickest[shape[i]]) ? thickest[shape[i]] / 3 : 0, reach = source.bevel === undefined ? whole : half ? Math.min(source.bevel, whole) : source.bevel;
       const t = reach ? Math.min(distance[i] / 3, reach) / reach : 1;
       height[i] = reach * Math.sqrt(1 - (1 - t) * (1 - t)) + detail * 2 * brightness(data, i * 4);
     }
@@ -1240,8 +1324,10 @@ export function compileNormals(source) {
         // Sobel slopes in pixels of height per pixel; the surface normal leans downhill.
         const gx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x - 1, y) - at(x - 1, y + 1)) / 8;
         const gy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1) - at(x - 1, y - 1) - 2 * at(x, y - 1) - at(x + 1, y - 1)) / 8;
+        // A cylinder never leans along its axis, at its cut ends least of all.
+        const sx = source.axis === 'horizontal' ? 0 : gx, sy = source.axis === 'vertical' ? 0 : gy;
         let best = '5', score = -Infinity;
-        for (const key of keys) { const [nx, ny, nz] = NORMAL_DIRECTIONS[key], s = -gx * nx - gy * ny + nz; if (s > score) { score = s; best = key; } }
+        for (const key of keys) { const [nx, ny, nz] = NORMAL_DIRECTIONS[key], s = -sx * nx - sy * ny + nz; if (s > score) { score = s; best = key; } }
         row += best; counts[best] = (counts[best] ?? 0) + 1;
       }
       rows.push(row);
@@ -1253,6 +1339,6 @@ export function compileNormals(source) {
   renderProject(recipe);
   // A faced key that no frame draws is usually a typo or a key recoloured by a frame palette.
   const unmatched = Object.keys(facedBy).filter(key => !facedBy[key].pixels);
-  return plain({ recipe, metadata: { format: 'pixelforge-normals-metadata', version: 1, encoding: 'RGB = (XYZ + 1) × 127.5; +X right, +Y down, +Z toward the viewer', bevel: source.bevel ?? 'each shape to its thickest point', detail, ...(source.faces !== undefined && { faces: Object.fromEntries(Object.entries(facedBy).map(([key, face]) => [key, { direction: face.way, pixels: face.pixels }])) }), directions: Object.fromEntries(keys.map(key => [key, NORMAL_DIRECTIONS[key].map(v => Math.round(v * 1e4) / 1e4)])), pixels: Object.fromEntries(used.map(key => [key, counts[key]])) },
+  return plain({ recipe, metadata: { format: 'pixelforge-normals-metadata', version: 1, encoding: 'RGB = (XYZ + 1) × 127.5; +X right, +Y down, +Z toward the viewer', bevel: source.bevel ?? 'each shape to its thickest point', detail, ...(source.axis && { axis: source.axis }), ...(source.faces !== undefined && { faces: Object.fromEntries(Object.entries(facedBy).map(([key, face]) => [key, { direction: face.way, pixels: face.pixels }])) }), directions: Object.fromEntries(keys.map(key => [key, NORMAL_DIRECTIONS[key].map(v => Math.round(v * 1e4) / 1e4)])), pixels: Object.fromEntries(used.map(key => [key, counts[key]])) },
     ...(unmatched.length && { warnings: unmatched.map(key => `faces.${key}: no pixel is drawn in ${JSON.stringify(key)}'s colour, so it faces nothing; check the key, or a frame palette that recolours it.`) }) });
 }

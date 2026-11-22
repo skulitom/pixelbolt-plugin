@@ -103,12 +103,18 @@ export function tiledTileset(source, { oneShots = true } = {}) {
       else animated.set(animation.frames[0], animation.frames);
     }
   } else for (const [key, animation] of Object.entries(atlas.animations ?? {})) {
+    // Frames an earlier animation passes through don't hold this one back: in either order, both play.
     const sequence = animation.frames, start = kind(sequence[0]);
-    if (sequence.length < 2 || start === null || sequence.some(frame => kind(frame) !== start) || animated.has(sequence[0]) || sequence.some(frame => covered.has(frame))) continue;
-    if (!animation.loop) { stopping.push(key); continue; }
-    animated.set(sequence[0], sequence);
-    for (const frame of sequence.slice(1)) if (frame !== sequence[0]) covered.add(frame);
+    if (sequence.length < 2 || start === null || sequence.some(frame => kind(frame) !== start)) continue;
+    if (!animation.loop) stopping.push(key);
+    else if (animated.has(sequence[0])) second.push(key);
+    else {
+      animated.set(sequence[0], sequence);
+      for (const frame of sequence.slice(1)) if (frame !== sequence[0]) covered.add(frame);
+    }
   }
+  // Here a frame that plays an animation is a tile of its own, weighed as one, whatever passes through it.
+  if (!brushed) for (const start of animated.keys()) covered.delete(start);
   const named = keys => `animation${keys.length === 1 ? '' : 's'} ${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', …' : ''} became still tiles of ${keys.length === 1 ? 'its' : 'their'} first frame`;
   if (stopping.length && oneShots) warnings.push(`${named(stopping)}: Tiled loops every tile animation`);
   if (second.length && oneShots) warnings.push(`${named(second)}: ${second.length === 1 ? 'its first frame already plays' : 'their first frames already play'} an earlier animation, and a Tiled tile plays one`);

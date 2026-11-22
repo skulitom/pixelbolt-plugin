@@ -55,7 +55,7 @@ export function readTerritory(value, path, { width, height, palette }) {
     if (teams.findIndex(other => other.color === team.color) !== i) fail(`${path}.teams[${i}].color`, `two teams share the colour ${team.color}; each team's cells need their own`);
   });
   if ((value.rows === undefined) === (value.split === undefined)) fail(path, 'lay the cells out with rows (one character per cell: a team\'s colour, or . for none) or split (columns or rows, the board shared out among the teams in order)');
-  let columns, rows, start;
+  let columns, rows, start, uneven = null;
   if (value.rows !== undefined) {
     if (value.size !== undefined) fail(`${path}.size`, 'rows already give the size; size goes with split');
     if (!Array.isArray(value.rows) || !value.rows.length || typeof value.rows[0] !== 'string' || !value.rows[0].length || value.rows.some(row => typeof row !== 'string')) fail(`${path}.rows`, 'expected equal-width text rows, one character per cell');
@@ -74,10 +74,13 @@ export function readTerritory(value, path, { width, height, palette }) {
     start = new Int8Array(columns * rows);
     const across = value.split === 'columns' ? columns : rows;
     for (let j = 0; j < rows; j++) for (let i = 0; i < columns; i++) start[j * columns + i] = Math.floor((value.split === 'columns' ? i : j) * teams.length / across);
+    // A board that looks even and is not: 19 rows between two teams start one of them on 10. Said as a warning.
+    const shares = teams.map((_, team) => start.reduce((n, owner) => n + (owner === team ? 1 : 0), 0));
+    if (shares.some(n => n !== shares[0])) uneven = `${path}.split: ${across} ${value.split} don't share out evenly among ${teams.length} teams, which start with ${shares.join(', ')} cells; give size ${value.split === 'columns' ? 'a width' : 'a height'} that divides by ${teams.length}`;
   }
   if (columns * rows > LIMITS.cells) fail(path, `${columns * rows} cells, more than ${LIMITS.cells}`);
   if (x + columns * cell > width || y + rows * cell > height) fail(path, `the ${columns}×${rows} cells of ${cell} pixels from [${x}, ${y}] reach past the ${width}×${height} canvas`);
-  return { cell, x, y, columns, rows, teams, start,
+  return { cell, x, y, columns, rows, teams, start, ...(uneven && { uneven }),
     bounce: number(value.bounce ?? 1, `${path}.bounce`, 0, 1), friction: number(value.friction ?? 0, `${path}.friction`, 0, 2) };
 }
 

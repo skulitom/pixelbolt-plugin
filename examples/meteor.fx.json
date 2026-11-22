@@ -31,7 +31,7 @@
   },
   "effects": {
     "meteor": {
-      "frames": 22,
+      "frames": 23,
       "edges": ["top"],
       "duration": 60,
       "seed": 3,
@@ -144,7 +144,7 @@
           "area": [18, 3],
           "rate": [3, 0],
           "start": 10,
-          "end": 16,
+          "end": 14,
           "angle": [255, 285],
           "speed": [0.5, 0.9],
           "life": [6, 9],

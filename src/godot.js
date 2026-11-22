@@ -108,6 +108,10 @@ export function normalsYUp(data) {
 // top-left, so each plane is drawn at its position less parallax × the camera, as renderScene draws it. The root draws
 // with nearest filtering, which the planes take. `planes` lists { name, image (relative to the .tscn), at, parallax };
 // `background` is RGBA from 0 to 255 and `camera` the camera's start, [x, y].
+// An entry with `frames` instead of `image` is an animated placement: { name, frames (a SpriteFrames .tres relative to
+// the .tscn), animation, scale, parallax, at: [[x, y], …] (each copy's top-left in the scene) }, a Parallax2D holding an
+// AnimatedSprite2D per copy that plays the animation from the start (autoplay), drawn where the plane order puts it.
+// `scale` is the placement's pixels per sheet pixel (its scale over the sheet's).
 // Godot's node names can't hold . : @ / " or %, and siblings need their own names: those characters become
 // underscores, a plane's name a sibling already has gets a number, and an empty one is "plane" ("scene" for the root).
 export function parallaxScene({ name, width, height, background, camera, planes }) {
@@ -120,15 +124,27 @@ export function parallaxScene({ name, width, height, background, camera, planes 
     taken.add(id);
     return id;
   };
-  const lines = ['[gd_scene format=3]', '', ...planes.map((plane, k) => `[ext_resource type="Texture2D" path=${quote(plane.image)} id="${k + 1}_plane"]`), ...(planes.length ? [''] : []),
+  // One resource per image and per SpriteFrames, numbered in order of first use.
+  const resources = [], ids = new Map(), resource = (type, file, kind) => {
+    const key = `${kind} ${file}`;
+    if (!ids.has(key)) { ids.set(key, `${ids.size + 1}_${kind}`); resources.push(`[ext_resource type="${type}" path=${quote(file)} id="${ids.get(key)}"]`); }
+    return ids.get(key);
+  };
+  const used = planes.map(plane => (plane.frames === undefined ? resource('Texture2D', plane.image, 'plane') : resource('SpriteFrames', plane.frames, 'frames')));
+  const lines = ['[gd_scene format=3]', '', ...resources, ...(resources.length ? [''] : []),
     `[node name=${quote(clean(name) || 'scene')} type="Node2D"]`, 'texture_filter = 1', '',
     '[node name="Camera2D" type="Camera2D" parent="."]', ...(camera[0] || camera[1] ? [`position = ${vector(camera)}`] : []), 'anchor_mode = 0', '',
     '[node name="Background" type="Parallax2D" parent="."]', 'scroll_scale = Vector2(0, 0)', '',
     '[node name="Color" type="ColorRect" parent="Background"]', `offset_right = ${real(width)}`, `offset_bottom = ${real(height)}`, `color = Color(${background.map(channel).join(', ')})`, ''];
   planes.forEach((plane, k) => {
     const id = node(plane.name);
-    lines.push(`[node name=${quote(id)} type="Parallax2D" parent="."]`, ...(plane.parallax[0] !== 1 || plane.parallax[1] !== 1 ? [`scroll_scale = ${vector(plane.parallax)}`] : []), '',
-      `[node name="Image" type="Sprite2D" parent=${quote(id)}]`, ...(plane.at[0] || plane.at[1] ? [`position = ${vector(plane.at)}`] : []), `texture = ExtResource("${k + 1}_plane")`, 'centered = false', '');
+    lines.push(`[node name=${quote(id)} type="Parallax2D" parent="."]`, ...(plane.parallax[0] !== 1 || plane.parallax[1] !== 1 ? [`scroll_scale = ${vector(plane.parallax)}`] : []), '');
+    if (plane.frames === undefined) {
+      lines.push(`[node name="Image" type="Sprite2D" parent=${quote(id)}]`, ...(plane.at[0] || plane.at[1] ? [`position = ${vector(plane.at)}`] : []), `texture = ExtResource("${used[k]}")`, 'centered = false', '');
+      return;
+    }
+    plane.at.forEach((at, copy) => lines.push(`[node name="${copy ? `Sprite ${copy + 1}` : 'Sprite'}" type="AnimatedSprite2D" parent=${quote(id)}]`, ...(at[0] || at[1] ? [`position = ${vector(at)}`] : []),
+      ...(plane.scale !== 1 ? [`scale = ${vector([plane.scale, plane.scale])}`] : []), `sprite_frames = ExtResource("${used[k]}")`, `animation = &${quote(plane.animation)}`, `autoplay = ${quote(plane.animation)}`, 'centered = false', ''));
   });
   return lines.join('\n');
 }

@@ -1,12 +1,11 @@
 // Cloth for pixelforge-bodies: a grid of particles held by distance constraints, pinned to fixed points, keys or bodies,
 // pushed by gravity and wind, colliding with pixel obstacles and bodies, tearing when stretched too far, and drawn as a
-// palette-shaded surface. Browser-compatible and deterministic: only + - * / sqrt, craft.js trigonometry and seeded
-// hashes, fixed substeps and iteration counts.
+// palette-shaded surface, with an optional drawn ripple that travels down it. Browser-compatible and deterministic:
+// only + - * / sqrt, craft.js trigonometry and seeded hashes, fixed substeps and iteration counts.
 import { fail, isObject } from './core.js';
-import { fields, number, integer, pair } from './authoring.js';
+import { fields, number, integer, boolean, pair } from './authoring.js';
 import { sinDeg, traceLine } from './craft.js';
 
-const boolean = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected true or false'); return value; };
 const identifier = (value, path) => {
   if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,59}$/.test(value) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(value)) fail(path, 'expected a portable name: a letter, then letters, digits, _ or -, at most 60 characters');
   return value;
@@ -20,6 +19,8 @@ const LIMITS = { cloths: 16, particles: 4096, pins: 64 };
 
 // Reads a bodies effect's `cloths`. A cloth is a grid of particles at `at`, spaced `cell` pixels apart; cells between four
 // present particles are drawn. Pins hold particles to a fixed point, keys over time or a named body's local point.
+// `fill` is one ramp of keys from dark to light for the whole cloth, or a ramp for each character of the `mask`, whose
+// rows are then the cloth's design (a stripe, a cross): a cell takes the character at its top-left particle.
 export function readCloths(list, path, { bodies, byName, palette }) {
   if (list === undefined) return [];
   if (!Array.isArray(list) || list.length > LIMITS.cloths) fail(path, `expected a list of at most ${LIMITS.cloths} cloths`);
@@ -28,7 +29,7 @@ export function readCloths(list, path, { bodies, byName, palette }) {
   return list.map((entry, i) => {
     const at = `${path}[${i}]`;
     if (!isObject(entry)) fail(at, 'expected a cloth');
-    fields(entry, ['name', 'at', 'size', 'cell', 'mask', 'fill', 'outline', 'back', 'light', 'wind', 'gust', 'stiffness', 'slack', 'shear', 'bend', 'damping', 'tear', 'seed', 'draw', 'collide', 'pins'], at);
+    fields(entry, ['name', 'at', 'size', 'cell', 'mask', 'fill', 'outline', 'back', 'light', 'wind', 'gust', 'ripple', 'waves', 'stiffness', 'slack', 'shear', 'bend', 'damping', 'tear', 'seed', 'draw', 'collide', 'pins'], at);
     const name = entry.name === undefined ? null : identifier(entry.name, `${at}.name`);
     if (name !== null) { if (names.has(name.toLowerCase())) fail(`${at}.name`, `two cloths are named ${name}`); names.add(name.toLowerCase()); }
     const origin = entry.at === undefined ? [0, 0] : pair(entry.at, `${at}.at`, -4096, 4096);
@@ -37,20 +38,32 @@ export function readCloths(list, path, { bodies, byName, palette }) {
     total += columns * rows;
     if (total > LIMITS.particles) fail(`${at}.size`, `the cloths make ${total} particles, more than ${LIMITS.particles}`);
     const cell = integer(entry.cell ?? 1, `${at}.cell`, 1, 8);
+    const ramp = (value, where) => {
+      const keys = Array.isArray(value) ? value : [value];
+      if (value === undefined || !keys.length || keys.length > 8) fail(where, 'expected a palette key, or 1–8 keys from dark to light');
+      keys.forEach((each, k) => key(each, `${where}${Array.isArray(value) ? `[${k}]` : ''}`, palette));
+      return keys;
+    };
+    const designed = isObject(entry.fill), ramps = {};
+    if (designed) {
+      const marks = Object.keys(entry.fill);
+      if (!marks.length || marks.length > 16 || marks.some(mark => mark.length !== 1 || mark === '.' || mark === ' ')) fail(`${at}.fill`, 'expected a palette key, 1–8 keys from dark to light, or 1–16 such ramps each under the single character the mask draws it with');
+      for (const mark of marks) ramps[mark] = ramp(entry.fill[mark], `${at}.fill.${mark}`);
+      if (entry.mask === undefined) fail(`${at}.mask`, `a fill of ramps by character needs a mask whose rows draw the cloth with them: ${marks.join(', ')}, and . for a hole`);
+    } else ramps['#'] = ramp(entry.fill, `${at}.fill`);
+    const marks = Object.keys(ramps).join(', '), drawnWith = new Array(columns * rows).fill('#');
     let present = new Uint8Array(columns * rows).fill(1);
     if (entry.mask !== undefined) {
-      if (!Array.isArray(entry.mask) || entry.mask.length !== rows || entry.mask.some(row => typeof row !== 'string' || row.length !== columns)) fail(`${at}.mask`, `expected ${rows} rows of ${columns} characters, # for cloth and . for a hole`);
+      if (!Array.isArray(entry.mask) || entry.mask.length !== rows || entry.mask.some(row => typeof row !== 'string' || row.length !== columns)) fail(`${at}.mask`, `expected ${rows} rows of ${columns} characters, ${marks} for cloth and . for a hole`);
       present = new Uint8Array(columns * rows);
-      entry.mask.forEach((row, v) => { for (let u = 0; u < columns; u++) if (row[u] === '#') present[v * columns + u] = 1; else if (row[u] !== '.') fail(`${at}.mask[${v}]`, 'expected # for cloth or . for a hole'); });
+      entry.mask.forEach((row, v) => { for (let u = 0; u < columns; u++) if (Object.hasOwn(ramps, row[u])) { present[v * columns + u] = 1; drawnWith[v * columns + u] = row[u]; } else if (row[u] !== '.') fail(`${at}.mask[${v}]`, `expected ${marks} for cloth or . for a hole`); });
     }
-    const fills = entry.fill === undefined ? null : (Array.isArray(entry.fill) ? entry.fill : [entry.fill]);
-    if (!fills || !fills.length || fills.length > 8) fail(`${at}.fill`, 'expected a palette key, or 1–8 keys from dark to light');
-    fills.forEach((value, k) => key(value, `${at}.fill${Array.isArray(entry.fill) ? `[${k}]` : ''}`, palette));
     const outline = entry.outline === undefined ? null : key(entry.outline, `${at}.outline`, palette);
     const back = entry.back === undefined ? null : key(entry.back, `${at}.back`, palette);
     const light = entry.light === undefined ? [0, -1] : pair(entry.light, `${at}.light`, -1, 1);
     const wind = entry.wind === undefined ? [0, 0] : pair(entry.wind, `${at}.wind`, -4, 4);
     const gust = number(entry.gust ?? 0, `${at}.gust`, 0, 1);
+    const ripple = number(entry.ripple ?? 0, `${at}.ripple`, 0, 8), waves = number(entry.waves ?? 1.5, `${at}.waves`, 0.25, 4);
     const stiffness = number(entry.stiffness ?? 0.6, `${at}.stiffness`, 0.05, 1);
     const slack = number(entry.slack ?? 0.05, `${at}.slack`, 0, 1);
     const shear = number(entry.shear ?? 0.4, `${at}.shear`, 0, 1);
@@ -65,7 +78,7 @@ export function readCloths(list, path, { bodies, byName, palette }) {
     const nodes = [];
     for (let v = 0; v < rows; v++) for (let u = 0; u < columns; u++) {
       const on = present[v * columns + u] === 1;
-      nodes.push({ u, v, present: on, x: origin[0] + u * cell, y: origin[1] + v * cell, pin: false });
+      nodes.push({ u, v, present: on, x: origin[0] + u * cell, y: origin[1] + v * cell, pin: false, fills: ramps[drawnWith[v * columns + u]] });
     }
     const constraints = [];
     const add = (a, b, rest, kind) => {
@@ -129,7 +142,7 @@ export function readCloths(list, path, { bodies, byName, palette }) {
         pins.push({ index, bodyIndex, point: null, keys, x, y, last: null });
       });
     }
-    return { name, columns, rows, nodes, constraints, pins, fills, outline, back, light, wind, gust, damping, tear, seed, draw, collide };
+    return { name, columns, rows, nodes, constraints, pins, outline, back, light, wind, gust, ripple, waves, damping, tear, seed, draw, collide };
   });
 }
 
@@ -155,9 +168,20 @@ function target(pin, frame) {
   return pin.keys ? keyTarget(pin, frame) : [pin.x, pin.y];
 }
 
-// The live state of one cloth: particles, constraints and pins. The definition stays untouched.
-export function createCloth(definition, { bodies }) {
-  const particles = definition.nodes.map(node => ({ ...node, x: node.x, y: node.y, px: node.x, py: node.y, pin: node.pin }));
+// A turn that advances `rate` degrees a frame, or in a loop of `cycle` frames (0: none) the whole number of turns a
+// cycle nearest to that, at least one: what the wind and the ripple run on, so a loop's every cycle is alike.
+const turned = (rate, frame, cycle) => (cycle ? (frame % cycle) * 360 * Math.max(1, Math.round(rate * cycle / 360)) / cycle : frame * rate);
+
+// The live state of one cloth: particles, constraints and pins. The definition stays untouched. `across` is the way
+// its ripple sways it: across the pull of gravity and wind together, growing from the end the pull starts at (a flag's
+// pole, a banner's rod) to the free end.
+export function createCloth(definition, { bodies, gravity }) {
+  const pullX = gravity[0] + definition.wind[0], pullY = gravity[1] + definition.wind[1], pull = Math.sqrt(pullX * pullX + pullY * pullY);
+  const alongX = pull ? pullX / pull : 0, alongY = pull ? pullY / pull : 1;
+  let first = Infinity, last = -Infinity;
+  for (const node of definition.nodes) if (node.present) { const d = node.u * alongX + node.v * alongY; first = Math.min(first, d); last = Math.max(last, d); }
+  const across = { x: -alongY, y: alongX, at: node => (node.u * alongX + node.v * alongY - first) / Math.max(1, last - first) };
+  const particles = definition.nodes.map(node => ({ ...node, px: node.x, py: node.y }));
   const constraints = definition.constraints.map(item => ({ ...item }));
   const pins = definition.pins.map(item => ({ ...item, body: item.bodyIndex >= 0 ? bodies[item.bodyIndex] : null }));
   for (const pin of pins) {
@@ -166,7 +190,7 @@ export function createCloth(definition, { bodies }) {
     particle.x = targetPoint[0]; particle.y = targetPoint[1]; particle.px = targetPoint[0]; particle.py = targetPoint[1]; particle.pin = true;
     pin.last = targetPoint;
   }
-  return { definition, particles, constraints, pins, tears: 0, rest: null };
+  return { definition, particles, constraints, pins, across, tears: 0, rest: null };
 }
 
 const present = (cloth, u, v) => u >= 0 && v >= 0 && u < cloth.definition.columns && v < cloth.definition.rows && cloth.definition.nodes[v * cloth.definition.columns + u].present;
@@ -213,15 +237,17 @@ function outOfBody(x, y, bodies) {
   return null;
 }
 
-// Steps a cloth one frame: substeps of integration, pins, distance constraints, collisions and tearing.
-export function stepCloth(cloth, frame, { substeps, iterations, gravity, solidAt, bodies, width, height }) {
-  const def = cloth.definition, dt = 1 / substeps, damp = 1 - def.damping;
+// Steps a cloth one frame: substeps of integration, pins, distance constraints, collisions and tearing. In a loop of
+// `cycle` frames the wind repeats with it, so every cycle drives the cloth alike and it settles into a motion that
+// repeats.
+export function stepCloth(cloth, frame, { substeps, iterations, gravity, solidAt, bodies, width, height, cycle }) {
+  const def = cloth.definition, dt = 1 / substeps, damp = 1 - def.damping, gustTurn = turned(7, frame, cycle), flapTurn = turned(11, frame, cycle);
   for (let s = 0; s < substeps; s++) {
     for (const p of cloth.particles) {
       if (!p.present || p.pin) continue;
-      const gust = def.gust ? def.gust * sinDeg(def.seed + frame * 7 + p.u * 37 + p.v * 91 + s * 13) : 0;
+      const gust = def.gust ? def.gust * sinDeg(def.seed + gustTurn + p.u * 37 + p.v * 91 + s * 13) : 0;
       // Gusts also flap across the wind: a flag pinned along one edge ripples instead of only stretching.
-      const flap = def.gust ? def.gust * sinDeg(def.seed * 3 + frame * 11 + p.u * 53 + p.v * 29 + s * 17) : 0;
+      const flap = def.gust ? def.gust * sinDeg(def.seed * 3 + flapTurn + p.u * 53 + p.v * 29 + s * 17) : 0;
       const ax = gravity[0] + def.wind[0] * (1 + gust) - def.wind[1] * flap;
       const ay = gravity[1] + def.wind[1] * (1 + gust) + def.wind[0] * flap;
       const vx = (p.x - p.px) * damp, vy = (p.y - p.py) * damp;
@@ -286,10 +312,17 @@ function inside(x, y, cx, cy) {
   return true;
 }
 
-// Draws cloths into a character grid: each cell a shaded quad, with an optional outline round its edge.
-export function paintCloth(cloths, put, n = 1) {
+// Draws cloths into a character grid: each cell a shaded quad, with an optional outline round its edge. A cloth with
+// `ripple` is drawn swayed by a wave that travels from its held end to its free end, where it is `ripple` pixels high:
+// the simulation hangs, swings and catches the cloth, and the ripple, which a taut simulated sheet does not make, is
+// what reads as cloth in a wind. It turns once every 24 frames, or a whole number of times in a loop.
+export function paintCloth(cloths, put, n, frame, cycle) {
   for (const cloth of cloths) {
-    const def = cloth.definition, particles = cloth.particles, light = def.light;
+    const def = cloth.definition, light = def.light, turn = turned(15, frame, cycle);
+    const particles = !def.ripple ? cloth.particles : cloth.particles.map(p => {
+      const along = cloth.across.at(p), sway = p.pin ? 0 : def.ripple * along * sinDeg(def.seed * 5 + 360 * def.waves * along - turn);
+      return { x: p.x + cloth.across.x * sway, y: p.y + cloth.across.y * sway };
+    });
     for (let v = 0; v + 1 < def.rows; v++) for (let u = 0; u + 1 < def.columns; u++) {
       if (!cell(cloth, u, v)) continue;
       const p00 = particles[v * def.columns + u], p10 = particles[v * def.columns + u + 1];
@@ -302,8 +335,8 @@ export function paintCloth(cloths, put, n = 1) {
         const tx = p10.x - p00.x, ty = p10.y - p00.y, bx = p01.x - p00.x, by = p01.y - p00.y;
         const tl = Math.sqrt(tx * tx + ty * ty) || 1, bl = Math.sqrt(bx * bx + by * by) || 1;
         const shade = ((tx * light[0] + ty * light[1]) / tl + (bx * light[0] + by * light[1]) / bl) / 2;
-        const index = Math.max(0, Math.min(def.fills.length - 1, Math.round((shade + 1) / 2 * (def.fills.length - 1))));
-        fill = def.fills[index];
+        const fills = def.nodes[v * def.columns + u].fills;
+        fill = fills[Math.max(0, Math.min(fills.length - 1, Math.round((shade + 1) / 2 * (fills.length - 1))))];
       }
       const color = fill.charCodeAt(0), x0 = Math.floor(Math.min(...cx)), x1 = Math.ceil(Math.max(...cx)), y0 = Math.floor(Math.min(...cy)), y1 = Math.ceil(Math.max(...cy));
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (inside(x + 0.5, y + 0.5, cx, cy)) put(x, y, color);

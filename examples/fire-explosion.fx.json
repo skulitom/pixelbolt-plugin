@@ -26,7 +26,7 @@
   },
   "effects": {
     "fire-explosion": {
-      "frames": 16,
+      "frames": 19,
       "duration": { "from": 45, "to": 100, "ease": "in" },
       "seed": 7,
       "looks": {
@@ -89,7 +89,7 @@
           "gravity": [0, -0.05],
           "drag": 0.1,
           "life": [10, 14],
-          "blob": { "look": "smoke", "radius": [4, 8, 7, 2.5] }
+          "blob": { "look": "smoke", "radius": [4, 6, 8, 7.5, 7, 4.75, 1.6] }
         },
         {
           "at": [48, 56],

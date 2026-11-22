@@ -3,9 +3,9 @@
 // reported rather than guessed around.
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { PixelError, parseColor, fail } from './core.js';
+import { PixelError, fail } from './core.js';
 import { decodePNG } from './import.js';
-import { framesGIF } from './gif.js';
+import { framesGIF, gifBackground } from './gif.js';
 import { parseFrameRate } from './sequence.js';
 
 // A number of up to 15 digits is exact as a JavaScript number. (Up to 9, frames numbered across a thousand million, as
@@ -44,11 +44,7 @@ export function folderGIF(directory, { fps, loops = 0, background, prefix } = {}
   let names;
   try { names = readdirSync(directory); } catch (error) { fail('frames', error.code === 'ENOENT' ? `no folder at ${path.resolve(directory)}` : error.code === 'ENOTDIR' ? `${path.resolve(directory)} is a file; name the folder that holds the frames` : error.message); }
   const found = numberedFrames(names, { prefix });
-  let blend = null;
-  if (background !== undefined && background !== 'transparent') {
-    blend = parseColor(background, {}, 'gif.background');
-    if (blend[3] !== 255) fail('gif.background', 'must be an opaque colour; omit it to keep 1-bit transparency');
-  }
+  const blend = gifBackground(background);
   function* frames() {
     for (const { file } of found.frames) {
       let image;

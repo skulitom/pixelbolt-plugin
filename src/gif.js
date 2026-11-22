@@ -1,7 +1,7 @@
 // Browser-compatible GIF89a export for sharing an animation where APNG or CSS scaling is not an option. Colours are
 // exact: nothing is quantized or dithered, so a frame that needs more than 256 colours is refused rather than
 // approximated. GIF has no partial transparency and times frames in 10 ms steps; both conversions are reported.
-import { PixelError, parseColor } from './core.js';
+import { PixelError, parseColor, stillsHaveNoAnimation, largestScale } from './core.js';
 
 const MAX_PIXELS = 67108864;
 // Integer arithmetic only, so table sizes never depend on an engine's logarithm.
@@ -36,6 +36,31 @@ function compress(indices, minimum, slots, state) {
   emit(end);
   if (bits) { size = 8 - bits; emit(0); }
   return bytes.subarray(0, length);
+}
+
+// A GIF's `background` option read as [r, g, b, 255], or null for none (omitted or "transparent"): a hex colour, or a
+// name in `palette`, that must be opaque. With no palette (a scene's or a frame folder's GIF) only hex is offered.
+export function gifBackground(value, palette = {}) {
+  if (value === undefined || value === 'transparent') return null;
+  // parseColor with no palette reads only hex, so its refusal's palette names would point at nothing.
+  let color;
+  try { color = parseColor(value, palette, 'gif.background'); } catch (error) { if (Object.keys(palette).length) throw error; throw new PixelError('gif.background', `expected a hex colour such as #14213d, not ${JSON.stringify(value)}`); }
+  if (color[3] !== 255) throw new PixelError('gif.background', 'must be an opaque colour; omit it to keep 1-bit transparency');
+  return color;
+}
+
+// One RGBA frame as a GIF shows it, by indexFrame's rule: blended onto `background` ([r, g, b]), or cut to 1-bit alpha
+// at 50%. A contact sheet of these is a picture of the GIF itself, not of the recipe.
+export function asGIFShows(data, background = null) {
+  const out = new Uint8ClampedArray(data.length);
+  for (let at = 0; at < data.length; at += 4) {
+    const alpha = data[at + 3];
+    if (background) {
+      for (let c = 0; c < 3; c++) out[at + c] = (data[at + c] * alpha + background[c] * (255 - alpha) + 127) / 255 | 0;
+      out[at + 3] = 255;
+    } else if (alpha >= 128) { out.set(data.subarray(at, at + 3), at); out[at + 3] = 255; }
+  }
+  return out;
 }
 
 // Reads one RGBA frame as indices into its own colours, numbered in the order they first appear. Pixels below 50%
@@ -171,8 +196,18 @@ function writeFrames(indexed, width, height, { loops, scale = 1 }, all, shared, 
 export function encodeGIF(frames, width, height, { loop = true, scale = 1, background = null } = {}) {
   if (!Array.isArray(frames) || !frames.length) throw new PixelError('gif', 'at least one frame is required');
   if (!Number.isInteger(scale) || scale < 1 || scale > 16) throw new PixelError('gif.scale', 'expected a whole number from 1 to 16');
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width * scale > 65535 || height * scale > 65535) throw new PixelError('gif', 'invalid dimensions');
-  if (frames.length * width * height * scale * scale > MAX_PIXELS) throw new PixelError('gif', `${frames.length} frames at ${width * scale}×${height * scale} exceed 67,108,864 pixels; lower the scale or shorten the animation`);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) throw new PixelError('gif', 'invalid dimensions');
+  if (width * scale > 65535 || height * scale > 65535) {
+    // A GIF's side is a 16-bit number; the scale named holds the pixel budget too.
+    let fits = Math.min(scale - 1, Math.floor(65535 / Math.max(width, height)));
+    while (fits >= 1 && frames.length * width * height * fits * fits > MAX_PIXELS) fits--;
+    throw new PixelError('gif', `${width * scale}×${height * scale} is past the 65,535 pixels a GIF's side holds; ${fits >= 1 ? `scale ${fits} is the largest that fits` : 'use a smaller canvas'}`);
+  }
+  if (frames.length * width * height * scale * scale > MAX_PIXELS) {
+    const fits = largestScale(frames.length * width * height, MAX_PIXELS, scale);
+    // One frame has no animation to shorten.
+    throw new PixelError('gif', `${plural(frames.length, 'frame')} at ${width * scale}×${height * scale} exceed${frames.length === 1 ? 's' : ''} 67,108,864 pixels; ${fits ? `scale ${fits} is the largest that fits${frames.length === 1 ? '' : ', or shorten the animation'}` : 'shorten the animation'}`);
+  }
   const area = width * height, indexed = [], delays = [];
   let partialAlpha = 0, carry = 0;
   for (const [position, frame] of frames.entries()) {
@@ -190,7 +225,8 @@ export function encodeGIF(frames, width, height, { loop = true, scale = 1, backg
   return { data: gif.data, width: width * scale, height: height * scale, colors: gif.colors, transparent: gif.transparent, delays, partialAlpha, backgroundClears: gif.backgroundClears };
 }
 
-const MAX_FRAMES_PIXELS = 134217728, MAX_FRAMES = 18000;
+// The pixels over all of one GIF's frames, and its frames: what a scene GIF's scale is held to up front (scene-export.js).
+export const MAX_FRAMES_PIXELS = 134217728, MAX_FRAMES = 18000;
 const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`;
 // The note for frames that writeFrames had to clear without naming a transparent index.
 const backgroundNote = count => `${plural(count, 'frame')} with 256 colours of ${count === 1 ? 'its' : 'their'} own ${count === 1 ? 'is' : 'are'} followed by transparent pixels that GIF cannot clear for every viewer: browsers and ffmpeg clear them, but Pillow shows a colour of the frame's table there. At most 255 colours in ${count === 1 ? 'that frame' : 'those frames'} keeps them clear everywhere.`;
@@ -244,18 +280,17 @@ export function framesGIF(frames, { fps, loops = 0, background = null } = {}) {
   return { data: gif.data, width, height, frames: count, fps: { label, numerator, denominator }, frameMs: round(frameMs), duration, delays: Object.fromEntries(used), loops, colors: gif.colors, colorsPerFrame: { fewest, most }, tables: gif.shared ? 'shared' : 'per frame', transparent: gif.transparent, partialAlpha, notes };
 }
 
+// What a render asked for GIFs says of stills, which it writes none of.
+export const STILLS_GIF_NOTE = 'gif: none written, since the frames are stills ("animations": {}) and a GIF plays an animation';
 // One animation of a rendered project as a GIF, at the frames' own size unless `scale` enlarges it by a whole number.
-// `notes` says, in words, what GIF could not keep.
+// `notes` says, in words, what GIF could not keep. Stills (a recipe whose "animations" is {}) have none and are refused.
 export function animationGIF(project, animation, options = {}) {
   const names = Object.keys(project.animations), name = animation ?? names[0];
   for (const key of Object.keys(options)) if (!['scale', 'background'].includes(key)) throw new PixelError(`gif.${key}`, 'unknown option; use scale or background');
+  if (project.stills) throw new PixelError('gif', stillsHaveNoAnimation('make a GIF of'));
   if (!Object.hasOwn(project.animations, name)) throw new PixelError('gif.animation', `no animation named "${name}"; choose one of: ${names.join(', ')}`);
   const sequence = project.animations[name], scale = options.scale ?? 1;
-  let background = null;
-  if (options.background !== undefined && options.background !== 'transparent') {
-    background = parseColor(options.background, project.palette, 'gif.background');
-    if (background[3] !== 255) throw new PixelError('gif.background', 'must be an opaque colour; omit it to keep 1-bit transparency');
-  }
+  const background = gifBackground(options.background, project.palette);
   const frames = sequence.frames.map(index => ({ data: project.frames[index].data, duration: project.frames[index].duration }));
   const gif = encodeGIF(frames, project.width, project.height, { loop: sequence.loop, scale, background }), notes = [];
   if (gif.partialAlpha) notes.push(`${gif.partialAlpha} partly transparent pixel${gif.partialAlpha === 1 ? '' : 's'} across the frames became fully transparent (below 50% alpha) or fully opaque; GIF has no partial transparency. Pass a background colour to blend them instead.`);

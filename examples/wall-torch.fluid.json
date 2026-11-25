@@ -1,0 +1,126 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "wall-torch",
+  "width": 64,
+  "height": 96,
+  "palette": {
+    "r": "#b8322f",
+    "o": "#f0772b",
+    "y": "#ffcc4d",
+    "W": "#fff6d1",
+    "s": "#8f8a9a40",
+    "S": "#9e9aaa73",
+    "T": "#b4b0bfa6",
+    "a": "#ff8a2a12",
+    "e": "#ff97341f",
+    "f": "#ffa6442e",
+    "g": "#ffb85a40",
+    "D": "#0c0a1466",
+    "u": "#0c0a1447",
+    "v": "#0c0a1424",
+    "z": "#00000000",
+    "H": "#ffd08a40",
+    "k": "#1c1418",
+    "i": "#353846",
+    "I": "#565b6e",
+    "J": "#8d94a6",
+    "h": "#e39a56",
+    "w": "#45291b",
+    "b": "#6a4128",
+    "B": "#93603a"
+  },
+  "symbols": {
+    "holder": [
+      "..khhhhhhhhhhk..",
+      "..kJJIIIIIIiik..",
+      "..kJIIIIIIIiik..",
+      "...kJIIIIIiik...",
+      "....kJIIIiik....",
+      ".....kkkkkk.....",
+      ".....kBbbwk.....",
+      ".....kBbwwk.....",
+      ".....kBBbwk.....",
+      ".....kBbbwk.....",
+      ".kkkkkBbbwkkkkk.",
+      ".kJIIkBbbwkIIik.",
+      ".kIJIkBbwwkIJik.",
+      ".kIIIkBBbwkIIik.",
+      "kkkkkkkkkkkkkkkk",
+      "kJJIIIIIIIIIIiik",
+      "kIIIIIIIIIIIiiik",
+      "kkkkkkkkkkkkkkkk",
+      ".kIIIkBbbwkIIik.",
+      ".kIJIkBbwwkIJik.",
+      ".kiiikBbbwkiiik.",
+      ".kkkkkBbbwkkkkk.",
+      ".....kBBbwk.....",
+      ".....kBbbwk.....",
+      ".....kBbwwk.....",
+      ".....kBbbwk.....",
+      ".....kBbbwk.....",
+      "......kbwk......",
+      "......kbwk......",
+      ".......kk......."
+    ]
+  },
+  "effects": {
+    "wall-torch": {
+      "frames": 32,
+      "duration": 60,
+      "loop": true,
+      "seed": 4,
+      "buoyancy": 0.45,
+      "vorticity": 0.6,
+      "dissipation": 0.055,
+      "cooling": 0.12,
+      "drag": 0.02,
+      "obstacles": [{ "symbol": "holder", "x": 24, "y": 60 }],
+      "emitters": [
+        {
+          "name": "flame",
+          "at": [32, 58],
+          "radius": 7,
+          "rate": 1,
+          "temperature": 1.4,
+          "density": 0.3,
+          "falloff": 0.75,
+          "velocity": [0, -1.8],
+          "noise": 1.1,
+          "flicker": 0.4
+        },
+        {
+          "name": "embers",
+          "at": [32, 42],
+          "radius": 4,
+          "rate": 1,
+          "sparks": {
+            "count": 0.4,
+            "life": [10, 20],
+            "colors": ["W", "y", "y", "o", "o"],
+            "trail": true,
+            "angle": [245, 295],
+            "speed": [0.5, 1.2],
+            "drag": 0.05
+          }
+        }
+      ],
+      "look": [
+        { "field": "density", "colors": ["s", "S", "T"], "thresholds": [0.05, 0.12, 0.24], "dither": 0 },
+        { "field": "temperature", "colors": ["r", "o", "y", "W"], "thresholds": [0.36, 0.5, 0.72, 1.08], "dither": 0 }
+      ],
+      "shine": {
+        "from": 0.5,
+        "full": 1.1,
+        "reach": 34,
+        "dark": "D",
+        "colors": ["u", "v", "z", "H"],
+        "thresholds": [0.2, 0.4, 0.6, 0.82],
+        "dither": 0.6,
+        "smoke": ["a", "e", "f", "g"],
+        "wall": ["a", "e", "f", "g"]
+      },
+      "cleanup": { "strays": true }
+    }
+  }
+}

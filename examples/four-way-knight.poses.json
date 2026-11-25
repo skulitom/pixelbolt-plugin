@@ -1,0 +1,252 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "four-way-knight",
+  "width": 24,
+  "height": 24,
+  "palette": { "x": "#3f2631", "s": "#8b9bb4", "h": "#c0cbdc", "t": "#bd6c4a", "b": "#52607c" },
+  "parts": {
+    "down-boot-a": {
+      "rows": [
+        "xxxx",
+        "xbbx",
+        "xhhx"
+      ]
+    },
+    "down-boot-b": {
+      "rows": [
+        "xxxx",
+        "xbbx",
+        "xhhx"
+      ]
+    },
+    "down-body": {
+      "rows": [
+        "....xxxx....",
+        "..xxxxxxxx..",
+        ".xxxxhhxxxx.",
+        "xxxshhhhsxxx",
+        "xxbshhhhsbxx",
+        "xxssssssssxx",
+        "xxssxsxsxsxx",
+        "xxssxsxsxsxx",
+        "xxssssssssxx",
+        "..hxxxxxxh..",
+        "..hshhhhsh..",
+        "..sshbbhss..",
+        "..xttttttx.."
+      ]
+    },
+    "down-arm-a": {
+      "rows": [
+        "..xx",
+        ".xxh",
+        "xxxh",
+        "xxbb",
+        "xxbb",
+        "xxxx",
+        ".xxx"
+      ]
+    },
+    "down-arm-b": {
+      "rows": [
+        "xx..",
+        "hxx.",
+        "hxxx",
+        "bbxx",
+        "bbxx",
+        "xxxx",
+        "xxx."
+      ]
+    },
+    "up-boot-a": {
+      "rows": [
+        "xbbx",
+        "xbbx",
+        "xxxx",
+        "xbbx",
+        "xssx"
+      ]
+    },
+    "up-boot-b": {
+      "rows": [
+        "xbbx",
+        "xbbx",
+        "xxxx",
+        "xbbx",
+        "xssx"
+      ]
+    },
+    "up-body": {
+      "rows": [
+        "....xxxx....",
+        "..xxxxxxxx..",
+        ".xxxxhhxxxx.",
+        "xxxshhhhsxxx",
+        "xxbshhhhsbxx",
+        "xxssshhsssxx",
+        "xxbssssssbxx",
+        "xxbbssssbbxx",
+        "xxbbbbbbbbxx",
+        "..hxssssxh..",
+        "..hssssssh..",
+        "..ssbtbbss..",
+        "..xttttttx.."
+      ]
+    },
+    "up-arm-a": {
+      "rows": [
+        "..xx",
+        ".xxh",
+        "xxxh",
+        "xxbb",
+        "xxbb",
+        "xxxx",
+        ".xxx"
+      ]
+    },
+    "up-arm-b": {
+      "rows": [
+        "xx..",
+        "hxx.",
+        "hxxx",
+        "bbxx",
+        "bbxx",
+        "xxxx",
+        "xxx."
+      ]
+    },
+    "right-arm-a": {
+      "rows": [
+        ".xxx.",
+        "xsssx",
+        "xbbsx",
+        "xbbbx",
+        "xbbbx",
+        ".xxx."
+      ]
+    },
+    "right-boot-a": {
+      "rows": [
+        ".xxx.",
+        "xbbx.",
+        ".xbx.",
+        ".xssx",
+        ".xxxx"
+      ]
+    },
+    "right-boot-b": {
+      "rows": [
+        ".xxx.",
+        "xbbx.",
+        "xssx.",
+        "xshhx",
+        "..xxx"
+      ]
+    },
+    "right-body": {
+      "rows": [
+        "..xxxxx.....",
+        ".xxxxxxx....",
+        "xxxshhhxx...",
+        "xxbshhhhsx..",
+        "xxbssssssxx.",
+        "xxbssshhhhxx",
+        "xxbbsssxsxsx",
+        ".xbbsssxsxsx",
+        ".xxbbssssxx.",
+        "..xxssbbxx..",
+        "..xbshhssx..",
+        "..xbssbbbx..",
+        "..xxttttxx..",
+        "...xxxxxx..."
+      ]
+    },
+    "right-arm-b": {
+      "rows": [
+        ".xxx.",
+        "xhhhx",
+        "xsshx",
+        "xbbbx",
+        "xsssx",
+        ".xxx."
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand-down",
+      "origin": [12, 19],
+      "parts": [
+        { "name": "boot-a", "part": "down-boot-a", "at": [-4, -3], "cleanup": false },
+        { "name": "boot-b", "part": "down-boot-b", "at": [0, -3], "cleanup": false },
+        { "name": "body", "part": "down-body", "at": [-6, -15], "cleanup": false },
+        { "name": "arm-a", "part": "down-arm-a", "at": [-8, -7], "cleanup": false },
+        { "name": "arm-b", "part": "down-arm-b", "at": [4, -7], "cleanup": false }
+      ]
+    },
+    {
+      "name": "stand-up",
+      "origin": [12, 19],
+      "parts": [
+        { "name": "boot-a", "part": "up-boot-a", "at": [-4, -5], "cleanup": false },
+        { "name": "boot-b", "part": "up-boot-b", "at": [0, -5], "cleanup": false },
+        { "name": "body", "part": "up-body", "at": [-6, -15], "cleanup": false },
+        { "name": "arm-a", "part": "up-arm-a", "at": [-8, -7], "cleanup": false },
+        { "name": "arm-b", "part": "up-arm-b", "at": [4, -7], "cleanup": false }
+      ]
+    },
+    {
+      "name": "stand-right",
+      "origin": [12, 19],
+      "parts": [
+        { "name": "arm-a", "part": "right-arm-a", "at": [0, -7], "cleanup": false },
+        { "name": "boot-a", "part": "right-boot-a", "at": [-2, -5], "cleanup": false },
+        { "name": "boot-b", "part": "right-boot-b", "at": [-2, -5], "cleanup": false },
+        { "name": "body", "part": "right-body", "at": [-5, -15], "cleanup": false },
+        { "name": "arm-b", "part": "right-arm-b", "at": [-3, -7], "cleanup": false }
+      ]
+    },
+    { "name": "stand-left", "mirror": "stand-right" }
+  ],
+  "walkCycles": {
+    "walk-down": {
+      "rest": "stand-down",
+      "direction": "down",
+      "feet": ["boot-a", "boot-b"],
+      "arms": ["arm-a", "arm-b"],
+      "stride": 1,
+      "lift": 1,
+      "bob": 1,
+      "duration": 110
+    },
+    "walk-up": {
+      "rest": "stand-up",
+      "direction": "up",
+      "feet": ["boot-a", "boot-b"],
+      "arms": ["arm-a", "arm-b"],
+      "stride": 1,
+      "lift": 1,
+      "bob": 1,
+      "duration": 110
+    },
+    "walk-right": {
+      "rest": "stand-right",
+      "direction": "right",
+      "feet": ["boot-a", "boot-b"],
+      "arms": ["arm-a", "arm-b"],
+      "stride": 3,
+      "lift": 2,
+      "bob": 1,
+      "duration": 110,
+      "mirrorAs": "walk-left"
+    }
+  },
+  "animations": {
+    "stand-down": { "frames": ["stand-down"] },
+    "stand-up": { "frames": ["stand-up"] },
+    "stand-right": { "frames": ["stand-right"] },
+    "stand-left": { "frames": ["stand-left"] }
+  },
+  "sheet": { "columns": 8 }
+}

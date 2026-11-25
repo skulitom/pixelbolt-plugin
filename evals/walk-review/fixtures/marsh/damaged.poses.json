@@ -1,0 +1,412 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "marn",
+  "width": 36,
+  "height": 36,
+  "palette": {
+    "k": "#302e3d",
+    "v": "#464358",
+    "x": "#757685",
+    "q": "#685142",
+    "r": "#9b643e",
+    "o": "#c58a4b",
+    "b": "#dfab64",
+    "y": "#f7d998",
+    "s": "#aa6955",
+    "p": "#db956e",
+    "t": "#ffd3a0",
+    "d": "#2f5053",
+    "g": "#42756b",
+    "m": "#6d9c7a",
+    "j": "#abc591",
+    "a": "#af5147",
+    "e": "#ea8054",
+    "h": "#809296"
+  },
+  "parts": {
+    "right-sleeve-far": {
+      "rows": [
+        ".kkk..",
+        "kgmgk.",
+        "kggmk.",
+        ".kdgk.",
+        ".kggk.",
+        "..kpk.",
+        "..ktpk",
+        "...kkk"
+      ]
+    },
+    "right-boot-far": {
+      "rows": [
+        ".kkk...",
+        "kggdk..",
+        "kggdk..",
+        "kdddk..",
+        "kxxvk..",
+        "kxvvk..",
+        ".kvvk..",
+        ".kvvk..",
+        ".kvvkk.",
+        ".kvxxvk",
+        ".kkkkkk"
+      ]
+    },
+    "right-creel": {
+      "rows": [
+        "...kkk...........",
+        "..kbybk..........",
+        ".kbk.kok.........",
+        ".kok..krk........",
+        "kok...kqk........",
+        "kok....qk........",
+        ".kkk...qkk.......",
+        ".kbyyybbbybbook..",
+        ".kobboobbooborqk.",
+        "..krrrorrrorrrqk.",
+        "..kyobboyobbobqk.",
+        "...krobboorboorqk",
+        "...kqorrr..rrorqk",
+        "....kkkkkk.kkkkk."
+      ]
+    },
+    "right-boot-near": {
+      "rows": [
+        "...kkkk....",
+        "..kgmgdk...",
+        "..kggggk...",
+        "..kgdgdk...",
+        "..kvxxxk...",
+        "orkxvvvk...",
+        ".kkxxvvk...",
+        "..kxvvvk...",
+        "..kvvxvkk..",
+        "..kvvxxxvkk",
+        "..kkkkkkkkk"
+      ]
+    },
+    "right-coat": {
+      "rows": [
+        "rr....kkkkkk.....",
+        "qbq..kbyyybok....",
+        ".rr.kbybbboook...",
+        "..qgbbbooorrrk...",
+        "..kgrrrqrrrqqkk..",
+        ".kbybbbbbbbbbbok.",
+        "koyyyybbbbbooorrk",
+        "kkkqrrrrrqqkkkkk.",
+        "......krrptttttk.",
+        "......kqykptkpttk",
+        ".......krrppptkk.",
+        ".......kqqpktsk..",
+        ".......kkqqkssk..",
+        "......kggkkakk...",
+        ".....kgmmeaegk...",
+        ".....kmjjmrrmgk..",
+        "....kgmmmrqmmgk..",
+        "....kmgmrqggmgk..",
+        "...kgmgroqgmggk..",
+        "...kgmroqdgggdk..",
+        "...kggoqdggggdk..",
+        "...kddkqkggdgdk..",
+        "....kkkkkkkkkk..."
+      ]
+    },
+    "right-sleeve-near": {
+      "rows": [
+        "..kkk.",
+        ".kmmmk",
+        "kjjmmk",
+        "kmmmgk",
+        "kmgggk",
+        "kdgddk",
+        ".kggdk",
+        ".kbbok",
+        ".ktppk",
+        "..kpsk",
+        "...kk."
+      ]
+    },
+    "down-sleeve-far": {
+      "rows": [
+        ".kk..",
+        "kmmk.",
+        "kmmgk",
+        ".kmgk",
+        ".kggk",
+        ".kddk",
+        ".kbok",
+        ".ktpk",
+        "..ksk",
+        "...k."
+      ]
+    },
+    "down-boot-far": {
+      "rows": [
+        ".kkkk.",
+        "kgmmgk",
+        "kgggdk",
+        "kddgdk",
+        "kxxxvk",
+        "kxvvvk",
+        "kvvvvk",
+        "kvvvk.",
+        "kvxxvk",
+        "kxhxxk",
+        "kkkkk."
+      ]
+    },
+    "down-creel": {
+      "rows": [
+        "...kk.........",
+        "..kbok........",
+        ".kbkqk........",
+        ".kok.qk.......",
+        "kok..qk.......",
+        "kok..qk.......",
+        ".kk..qkk......",
+        ".kbyyybbbok...",
+        ".kobrboobork..",
+        "..korrorrrorqk",
+        "..kobrboobork.",
+        "..korbbooorqk.",
+        "...korrrrorqk.",
+        "....kkkkkkkk.."
+      ]
+    },
+    "down-boot-near": {
+      "rows": [
+        ".kkkk.",
+        "kgmmgk",
+        "kgggdk",
+        "kdgddk",
+        "kvxxxk",
+        "kxvvvk",
+        "kvvvvk",
+        "kvvxvk",
+        "kvxxvk",
+        "kxxxxk",
+        "kkkkkk"
+      ]
+    },
+    "down-coat": {
+      "rows": [
+        ".....kkkkkkk.....rr",
+        "....kbyyyybok...qbq",
+        "...kbyybboobok..rr.",
+        "..kobbboooorrrkgq..",
+        "..kqrrqqrrrqqqkg...",
+        ".kbyyyyybbbbbbook..",
+        "kbyyybbbbbbboooork.",
+        "kkrrqrrrrrrqqrqqkk.",
+        ".....kpppttttppk...",
+        ".....kpsktttkpsk...",
+        "......ksppttppk....",
+        "......kqppsspsk....",
+        ".......kqpppsk.....",
+        ".....kkgkkaakkk....",
+        "....kgmmjeaemmgk...",
+        "...kgmmjeagrommgk..",
+        "...kgmmgmroqmmmgk..",
+        "...kgmgmrqggmmggk..",
+        "...kgggroqggmgggk..",
+        "...kggroqgdggggdk..",
+        "...kdroqggdggdgdk..",
+        "...kdqkkdddddgdkk..",
+        "....kkkkkkkkkkkk..."
+      ]
+    },
+    "down-sleeve-near": {
+      "rows": [
+        "...kkk.",
+        "..kmmmk",
+        ".kjjmmk",
+        ".kmmmgk",
+        ".kmgmgk",
+        ".kgdgk.",
+        "kggddk.",
+        "kbbok..",
+        "kttpk..",
+        ".kpsk..",
+        "..kk..."
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand-right",
+      "origin": [
+        18,
+        31
+      ],
+      "parts": [
+        {
+          "name": "sleeve-far",
+          "part": "right-sleeve-far",
+          "at": [
+            2,
+            -16
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "boot-far",
+          "part": "right-boot-far",
+          "at": [
+            1,
+            -10
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "creel",
+          "part": "right-creel",
+          "at": [
+            -14,
+            -17
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "boot-near",
+          "part": "right-boot-near",
+          "at": [
+            -5,
+            -10
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "coat",
+          "part": "right-coat",
+          "at": [
+            -10,
+            -29
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "sleeve-near",
+          "part": "right-sleeve-near",
+          "at": [
+            -3,
+            -16
+          ],
+          "cleanup": false
+        }
+      ]
+    },
+    {
+      "name": "stand-down",
+      "origin": [
+        18,
+        31
+      ],
+      "parts": [
+        {
+          "name": "sleeve-far",
+          "part": "down-sleeve-far",
+          "at": [
+            4,
+            -16
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "boot-far",
+          "part": "down-boot-far",
+          "at": [
+            1,
+            -10
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "creel",
+          "part": "down-creel",
+          "at": [
+            -15,
+            -17
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "boot-near",
+          "part": "down-boot-near",
+          "at": [
+            -6,
+            -10
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "coat",
+          "part": "down-coat",
+          "at": [
+            -10,
+            -29
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "sleeve-near",
+          "part": "down-sleeve-near",
+          "at": [
+            -10,
+            -16
+          ],
+          "cleanup": false
+        }
+      ]
+    }
+  ],
+  "walkCycles": {
+    "walk-right": {
+      "rest": "stand-right",
+      "direction": "right",
+      "feet": [
+        "boot-far",
+        "boot-near"
+      ],
+      "arms": [
+        "sleeve-far",
+        "sleeve-near"
+      ],
+      "stride": 3,
+      "lift": 1,
+      "bob": 1,
+      "duration": 110
+    },
+    "walk-down": {
+      "rest": "stand-down",
+      "direction": "down",
+      "feet": [
+        "boot-far",
+        "boot-near"
+      ],
+      "arms": [
+        "sleeve-far",
+        "sleeve-near"
+      ],
+      "stride": 1,
+      "lift": 1,
+      "bob": 1,
+      "duration": 110
+    }
+  },
+  "animations": {
+    "stand-right": {
+      "frames": [
+        "stand-right"
+      ]
+    },
+    "stand-down": {
+      "frames": [
+        "stand-down"
+      ]
+    }
+  },
+  "sheet": {
+    "columns": 8
+  }
+}

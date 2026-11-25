@@ -1,0 +1,787 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "tide-post",
+  "width": 38,
+  "height": 39,
+  "palette": {
+    "k": "#202537",
+    "d": "#30364d",
+    "n": "#394b61",
+    "b": "#506d7a",
+    "t": "#7398a0",
+    "i": "#adc9c5",
+    "v": "#d6dcd0",
+    "w": "#fff0d7",
+    "p": "#61354d",
+    "m": "#965369",
+    "r": "#bf6174",
+    "f": "#e68a86",
+    "u": "#683b42",
+    "c": "#a35446",
+    "o": "#eb7750",
+    "a": "#ffb560",
+    "y": "#ffe197",
+    "g": "#265358",
+    "e": "#377576",
+    "j": "#62a596",
+    "l": "#99c2a3"
+  },
+  "parts": {
+    "right-far-wing": {
+      "rows": [
+        "..kk...",
+        ".kbtk..",
+        "kbnntk.",
+        "knnnnk.",
+        ".knnbk.",
+        ".kdnbk.",
+        "..kdnbk",
+        "...kdk.",
+        "....k.."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-far-foot": {
+      "rows": [
+        "..knnk...",
+        "..knnk...",
+        "..knnk...",
+        "..knnk...",
+        "..kcck...",
+        "..kock...",
+        "..kock...",
+        ".kcoock..",
+        ".koocockk",
+        ".kuccccuk",
+        "..kkkkkk."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-near-shin": {
+      "rows": [
+        "...kbbk",
+        "...kbbk",
+        "...kbnk",
+        "...kbnk",
+        "...kcuk",
+        "...kaok"
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-coat": {
+      "rows": [
+        "........kkkkkk.....",
+        "......kknttttbkk...",
+        ".....kddnbttibbbk..",
+        "....kdndbnnbbttivk.",
+        "...kddnnnbbbtiwwvk.",
+        "..kddnbbbttiwwwvvk.",
+        "..kdnbbbbbtiwwwwvik",
+        ".kdnnbbbbtiw..wwvik",
+        ".kdnnbbbtiww..wwvik",
+        "kddnbbbiwwww..wwvik",
+        "kddnnbbivwwwwwwwvik",
+        ".kddnbbivvvwwwwwvik",
+        "..kdnbbiiivvvwwvik.",
+        "...kdnbbttiiivvik..",
+        "....kkdnbbttiik....",
+        "......kkkkkkkk....."
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "points": {
+        "root": [
+          0,
+          0
+        ]
+      }
+    },
+    "right-sling": {
+      "rows": [
+        "..............uc",
+        ".............uac",
+        "............uacu",
+        "..........uacuu.",
+        "........uacuu...",
+        "......uacuu.....",
+        "....uacuu.......",
+        "..uacuu.........",
+        "uacuu..........."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-satchel": {
+      "rows": [
+        "..kuuuk......",
+        ".kcuuuck.....",
+        ".ku..uck.....",
+        ".ku...ck.....",
+        ".ku...ck.....",
+        "kggggggggkk..",
+        "kejlllljjegk.",
+        "kevwwwwwvejgk",
+        "kewivvviweejk",
+        "kevviwivvjeek",
+        "kejjeijejgggk",
+        "kejjeeeegggek",
+        "kegjeeee..eek",
+        "kgcccuu...cuk",
+        ".kcuuuc..uck.",
+        "..kkkkk.kkk.."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-near-foot": {
+      "rows": [
+        "...egkoak....",
+        "..ccckoak....",
+        "..uukcoock...",
+        "..kkcoaaook..",
+        "...kooaocoakk",
+        "...kuuccccuck",
+        "....kkkkkkkk."
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "points": {
+        "root": [
+          0,
+          0
+        ]
+      }
+    },
+    "right-near-wing": {
+      "rows": [
+        "...kkk..",
+        "..kbttk.",
+        ".kbtibnk",
+        "kbttbbnk",
+        "kbtnbbnk",
+        "kbnbbnk.",
+        "knbnbnk.",
+        "kdnnbk..",
+        "kdnnbk..",
+        "kdnbk...",
+        "kdnk....",
+        ".kk....."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-head": {
+      "rows": [
+        "......kkkkkkkk.....",
+        "....kkdbbbbbbnkk...",
+        "...kdnbbbbbbbnnnk..",
+        "..kdnbbbbbbbnnnnnk.",
+        ".kdnbbbbnnnnivvvik.",
+        ".kdnbbbnnniwwwwwvik",
+        "kdnbbbnnniwwwwwwwik",
+        "kdnbbnniwwwdkwwwwik",
+        "kdnbnniwwwwkkwwwvvk",
+        "kddnnbivwwwwwwvvvik",
+        ".kddnnbivwwwwwwvik.",
+        "..kddnnbivvwwvvik..",
+        "...kkddnbbiivvik...",
+        ".....kkdnbbttkk....",
+        ".......kkkkkk......"
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-bill": {
+      "rows": [
+        ".kk.........",
+        "kcykk.......",
+        "koyyokk.....",
+        "kcoayoaock..",
+        "kuuoooaaoock",
+        ".kuccoaauuk.",
+        "..kuuukkk...",
+        "...kkk......"
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "right-cap": {
+      "rows": [
+        ".......kkkkkk........",
+        ".....kkmrrrrmkk......",
+        "...kkmrrffrrrrmk.....",
+        "..kmmrrrfffrrrmk.....",
+        ".kmmrrrrrrrmmpppk....",
+        ".kpmrrrmmmppppppu....",
+        "..kpmmippkkuuuuckkkk.",
+        "...kpiyykpucccooooock",
+        "....kpuykpkkuuuuccuk.",
+        ".....kkkkk..kkkkkkk.."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-far-wing": {
+      "rows": [
+        "..kk...",
+        ".kbtk..",
+        "kbbtbk.",
+        "kbnbbk.",
+        ".knbbk.",
+        ".knbbbk",
+        ".kdnbbk",
+        "..kdnbk",
+        "..kdnbk",
+        "...kdk.",
+        "....k.."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-far-foot": {
+      "rows": [
+        "...knnk...",
+        "...knnk...",
+        "...knnk...",
+        "...knnk...",
+        "...kuck...",
+        "...kock...",
+        "...kock...",
+        "..kcoock..",
+        ".kcoooock.",
+        "kucococuck",
+        ".kkukukkk."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-near-shin": {
+      "rows": [
+        "....kbbk.",
+        "....kbbk.",
+        "....kbnk.",
+        "....kbnk.",
+        "....kcuk.",
+        "....kaok.",
+        "....koak.",
+        "...koaoak"
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-coat": {
+      "rows": [
+        ".......kkkkkkk.....",
+        ".....kkbtttttbkk...",
+        "....kdnbtiiittbnk..",
+        "...kdnnbivvvviibnk.",
+        "..kdnnbivwwwvvibnk.",
+        "..kdnbivwwwwwwvibk.",
+        ".kdnnbivwwwwwwwvik.",
+        ".kdnbivwwwwwwwwwvik",
+        "kddnbivwwwwwwwwwvik",
+        "kddnbivwwwwwwwwwvik",
+        "kddnbivwwwwwwwwwvik",
+        ".kdnbivvwwwwwwwvik.",
+        ".kdnbbivvvwwwwvik..",
+        "..kdnnbiiivvvvvik..",
+        "...kkdnbbttiiibk...",
+        ".....kkkkkkkkkk...."
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "points": {
+        "root": [
+          0,
+          0
+        ]
+      }
+    },
+    "down-sling": {
+      "rows": [
+        "...............uc",
+        "..............uac",
+        ".............uacu",
+        "...........uacuu.",
+        ".........uacuu...",
+        ".......uacuu.....",
+        ".....uacuu.......",
+        "...uacuu.........",
+        ".uacuu...........",
+        "ucu.............."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-satchel": {
+      "rows": [
+        "..kuuuk.....",
+        ".kcuuuck....",
+        ".ku..uck....",
+        ".ku...ck....",
+        ".ku...ck....",
+        "kgggggggkk..",
+        "kejlleejjgk.",
+        "kevwwwwwvejk",
+        "kewivvviwegk",
+        "kevviwivvejk",
+        "kejjeijejggk",
+        "kejjjeeegegk",
+        "kgccucccccuk",
+        ".kcuuccuuck.",
+        "..kkkkkkkk.."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-near-foot": {
+      "rows": [
+        "...koaoak...",
+        "..kcoaoaok..",
+        ".koaoaocoak.",
+        "kucuoccocuck",
+        ".kkukkukkkk."
+      ],
+      "anchor": [
+        0,
+        0
+      ],
+      "points": {
+        "root": [
+          0,
+          0
+        ]
+      }
+    },
+    "down-near-wing": {
+      "rows": [
+        "....kkk.",
+        "...kbttk",
+        "..kbtibk",
+        "..kbttbk",
+        ".kbtbbnk",
+        ".kbtbbnk",
+        "kbnbbnk.",
+        "kbnbbnk.",
+        "knbnbk..",
+        "kdnbbk..",
+        ".kdnk...",
+        "..kk...."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-head": {
+      "rows": [
+        ".......kkkkkkk......",
+        ".....kkbbbbbbnkk....",
+        "...kkbbbbbbbbnnnk...",
+        "..kdbbbnnnnnnnnnnk..",
+        ".kdbbnivvvnnvvvinbk.",
+        "kdnbniwwwwvvwwwwvik.",
+        "kdnbivwwwwwwwwwwwvik",
+        "kdnbivwwdkwwwwdkwwik",
+        "kdnbivwwkkwwwwkkwwik",
+        ".kdnbivwwwvvvvwwwvik",
+        ".kdnbivwwvvwwvvwvik.",
+        "..kdnnbivvwwwwvvik..",
+        "...kkdnbbivvvviik...",
+        ".....kkdnbbttbkk....",
+        ".......kkkkkkk......"
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-bill": {
+      "rows": [
+        "..kkk...",
+        ".kayaak.",
+        "kcyyaaok",
+        "kuoooock",
+        ".kcoock.",
+        "..kuck..",
+        "...kk..."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    },
+    "down-cap": {
+      "rows": [
+        "........kkkkk......",
+        ".....kkkmrrrmkk....",
+        "...kkmrrffrrrrmk...",
+        "..kmmrrfffrrrrrmk..",
+        ".kmmrrrrrrrrrmmpk..",
+        "kpmmrrppiiyypmmppk.",
+        ".kpppuuyyyykpuccck.",
+        "..kpuucccuuucccoock",
+        "...kpucccccoooocck.",
+        "....kkkuuuuuukkk..."
+      ],
+      "anchor": [
+        0,
+        0
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand-right",
+      "origin": [
+        18,
+        35
+      ],
+      "parts": [
+        {
+          "name": "far-wing",
+          "part": "right-far-wing",
+          "cleanup": false,
+          "at": [
+            1,
+            -18
+          ]
+        },
+        {
+          "name": "far-foot",
+          "part": "right-far-foot",
+          "cleanup": false,
+          "at": [
+            -5,
+            -11
+          ]
+        },
+        {
+          "name": "near-shin",
+          "part": "right-near-shin",
+          "cleanup": false,
+          "attach": {
+            "part": "near-foot",
+            "point": "root"
+          },
+          "at": [
+            2,
+            -5
+          ]
+        },
+        {
+          "name": "coat",
+          "part": "right-coat",
+          "cleanup": false,
+          "at": [
+            -12,
+            -21
+          ]
+        },
+        {
+          "name": "sling",
+          "part": "right-sling",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "satchel",
+          "part": "right-satchel",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            -3,
+            3
+          ]
+        },
+        {
+          "name": "near-foot",
+          "part": "right-near-foot",
+          "cleanup": false,
+          "at": [
+            -10,
+            -6
+          ]
+        },
+        {
+          "name": "near-wing",
+          "part": "right-near-wing",
+          "cleanup": false,
+          "at": [
+            -5,
+            -18
+          ]
+        },
+        {
+          "name": "head",
+          "part": "right-head",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            3,
+            -8
+          ]
+        },
+        {
+          "name": "bill",
+          "part": "right-bill",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            18,
+            -3
+          ]
+        },
+        {
+          "name": "cap",
+          "part": "right-cap",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            2,
+            -12
+          ]
+        }
+      ]
+    },
+    {
+      "name": "stand-down",
+      "origin": [
+        18,
+        35
+      ],
+      "parts": [
+        {
+          "name": "far-wing",
+          "part": "down-far-wing",
+          "cleanup": false,
+          "at": [
+            4,
+            -18
+          ]
+        },
+        {
+          "name": "far-foot",
+          "part": "down-far-foot",
+          "cleanup": false,
+          "at": [
+            -1,
+            -11
+          ]
+        },
+        {
+          "name": "near-shin",
+          "part": "down-near-shin",
+          "cleanup": false,
+          "attach": {
+            "part": "near-foot",
+            "point": "root"
+          },
+          "at": [
+            0,
+            -7
+          ]
+        },
+        {
+          "name": "coat",
+          "part": "down-coat",
+          "cleanup": false,
+          "at": [
+            -10,
+            -21
+          ]
+        },
+        {
+          "name": "sling",
+          "part": "down-sling",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            0,
+            2
+          ]
+        },
+        {
+          "name": "satchel",
+          "part": "down-satchel",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            -5,
+            4
+          ]
+        },
+        {
+          "name": "near-foot",
+          "part": "down-near-foot",
+          "cleanup": false,
+          "at": [
+            -9,
+            -4
+          ]
+        },
+        {
+          "name": "near-wing",
+          "part": "down-near-wing",
+          "cleanup": false,
+          "at": [
+            -10,
+            -18
+          ]
+        },
+        {
+          "name": "head",
+          "part": "down-head",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            0,
+            -8
+          ]
+        },
+        {
+          "name": "bill",
+          "part": "down-bill",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            7,
+            1
+          ]
+        },
+        {
+          "name": "cap",
+          "part": "down-cap",
+          "cleanup": false,
+          "attach": {
+            "part": "coat",
+            "point": "root"
+          },
+          "at": [
+            0,
+            -12
+          ]
+        }
+      ]
+    }
+  ],
+  "walkCycles": {
+    "walk-right": {
+      "rest": "stand-right",
+      "direction": "right",
+      "feet": [
+        "near-foot",
+        "far-foot"
+      ],
+      "arms": [
+        "near-wing",
+        "far-wing"
+      ],
+      "stride": 4,
+      "lift": 2,
+      "bob": 1,
+      "duration": 110
+    },
+    "walk-down": {
+      "rest": "stand-down",
+      "direction": "down",
+      "feet": [
+        "near-foot",
+        "far-foot"
+      ],
+      "arms": [
+        "near-wing",
+        "far-wing"
+      ],
+      "stride": 2,
+      "lift": 2,
+      "bob": 1,
+      "duration": 110
+    }
+  },
+  "animations": {
+    "stand-right": {
+      "frames": [
+        "stand-right"
+      ]
+    },
+    "stand-down": {
+      "frames": [
+        "stand-down"
+      ]
+    }
+  },
+  "sheet": {
+    "columns": 8,
+    "padding": 0
+  }
+}

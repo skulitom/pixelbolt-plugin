@@ -1,5 +1,6 @@
 // Advisory motion measurements at displayed-frame onsets. Never changes the artwork.
-import { PixelError, parseColor } from './core.js';
+import { PixelError, parseColor, stillsHaveNoAnimation } from './core.js';
+import { inspectCutoutWalk } from './cutout-review.js';
 import { angleDelta } from './pose-geometry.js';
 import { sinDeg, cosDeg, traceLine } from './craft.js';
 import { layoutText, FONT_CHARACTERS } from './font.js';
@@ -124,19 +125,40 @@ function jointDifference(a, b) {
   return { joints, maximum: joints.length ? Math.max(...joints.map(j => j.degrees)) : null };
 }
 
-export function inspectMotion(project, options = {}) {
-  const allowed = ['animation', 'metadata', 'speed', 'ground', 'scale', 'background'];
+// compile --size records where the new canvas starts in the old one (resized.offset), while the poses keep the old
+// canvas's coordinates: the markers, joints, part corners and the rig's ground are moved onto the new canvas.
+function onCanvas(metadata) {
+  const offset = metadata?.resized?.offset;
+  if (offset === undefined) return metadata;
+  if (!Array.isArray(offset) || offset.length !== 2 || offset.some(v => !Number.isInteger(v) || Math.abs(v) > 8192)) fail('metadata', 'resized.offset must be two integers within ±8192');
+  const [dx, dy] = offset, shape = value => value && typeof value === 'object' && !Array.isArray(value);
+  const move = at => Array.isArray(at) && at.length === 2 && at.every(Number.isInteger) ? [at[0] - dx, at[1] - dy] : at;
+  const part = p => !shape(p) ? p : { ...p, ...(p.anchor !== undefined && { anchor: move(p.anchor) }), ...(p.topLeft !== undefined && { topLeft: move(p.topLeft) }),
+    ...(shape(p.joints) && { joints: { ...p.joints, ...(p.joints.start !== undefined && { start: move(p.joints.start) }), ...(p.joints.end !== undefined && { end: move(p.joints.end) }) } }) };
+  const poses = Object.fromEntries(Object.entries(metadata.poses).map(([name, pose]) => [name, !shape(pose) ? pose : { ...pose,
+    ...(Array.isArray(pose.markers) && { markers: pose.markers.map(m => shape(m) ? { ...m, at: move(m.at) } : m) }),
+    ...(shape(pose.parts) && { parts: Object.fromEntries(Object.entries(pose.parts).map(([key, p]) => [key, part(p)])) }) }]));
+  return { ...metadata, poses, ...(shape(metadata.rig) && Number.isInteger(metadata.rig.ground) && { rig: { ...metadata.rig, ground: metadata.rig.ground - dy } }) };
+}
+
+export function inspectMotion(project, options = {}, recipe) {
+  const allowed = ['animation', 'metadata', 'speed', 'ground', 'scale', 'background', 'track'];
   if (!options || typeof options !== 'object' || Array.isArray(options)) fail('options', 'expected an object');
   for (const key of Object.keys(options)) if (!allowed.includes(key)) fail(key, 'unknown field for motion review');
+  // Stills keep their flipbook for viewing, but it is no animation to review.
+  if (project.stills) fail('animation', stillsHaveNoAnimation('review'));
   const animation = project.animations[options.animation];
   if (typeof options.animation !== 'string' || !animation) fail('animation', 'select a named animation');
-  const metadata = options.metadata;
-  if (metadata !== undefined && (metadata?.format !== 'pixelforge-pose-metadata' || metadata.version !== 1 || !metadata.poses || typeof metadata.poses !== 'object' || Array.isArray(metadata.poses))) fail('metadata', 'expected version-1 pose metadata from compilePoses');
+  if (options.metadata !== undefined && (options.metadata?.format !== 'pixelforge-pose-metadata' || options.metadata.version !== 1 || !options.metadata.poses || typeof options.metadata.poses !== 'object' || Array.isArray(options.metadata.poses))) fail('metadata', 'expected version-1 pose metadata from compilePoses');
+  const metadata = onCanvas(options.metadata);
   const speed = options.speed ?? metadata?.animations?.[options.animation]?.speed ?? null, ground = options.ground ?? metadata?.rig?.ground ?? null;
   if (speed !== null && (typeof speed !== 'number' || !Number.isFinite(speed) || Math.abs(speed) > 4096)) fail('speed', 'expected pixels per second within ±4096');
-  if (ground !== null && (!Number.isInteger(ground) || ground < 0 || ground >= project.height)) fail('ground', 'expected a pixel row inside the canvas');
+  if (ground !== null && (!Number.isInteger(ground) || ground < 0 || ground >= project.height)) fail('ground', options.ground === undefined && metadata.resized ? `the rig's ground, row ${ground} on this canvas after its resize, is outside it; pass ground` : 'expected a pixel row inside the canvas');
   const scale = options.scale ?? 4;
   if (!Number.isInteger(scale) || scale < 1 || scale > 16) fail('scale', 'expected an integer from 1 to 16');
+  const cutout = metadata?.animations?.[options.animation]?.cutout;
+  if (cutout !== undefined) return inspectCutoutWalk(project, options, metadata, cutout, recipe);
+  if (options.track !== undefined) fail('track', 'pixel tracking requires a cutout walk; inspect its pose source and a named walk animation');
   let time = 0;
   const entries = animation.frames.map((index, position) => {
     const frame = project.frames[index], entry = { frame, position, start: time, ...poseData(metadata, frame) };
@@ -329,30 +351,68 @@ function drawArcs(put, [ox, oy], { entries, tracks, landings, key, magnification
   return skipped;
 }
 
+// The image holds 4,194,304 pixels; the timing cells stay within 4096 a side, and the whole image (the arcs under the
+// cells, the trajectory beside them) within 8192.
+const STRIP_PIXELS = 4194304, STRIP_SIDE = 4096, IMAGE_SIDE = 8192;
+// The timing cells: at most 32 evenly spaced samples, endpoints included, in 4 columns; for frames too big for that
+// within the image, as many samples as fit in some number of columns, in the squarest grid that holds them. Both sides
+// stay within 4096, as a contact sheet's do, so many big frames never make one long row or column. A frame up to 1024 a
+// side and 262,144 pixels always fits once. `grids` is every column count that holds the samples, the chosen one first
+// and then the squarest, for arcs or a trajectory that do not fit beside the first.
+function timingGrid(entries, w, h) {
+  const fits = (n, c) => {
+    const width = c * (w + 4) + 4, height = Math.ceil(n / c) * (h + 4) + 4;
+    return width <= STRIP_SIDE && height <= STRIP_SIDE && width * height <= STRIP_PIXELS;
+  };
+  for (let count = Math.min(32, entries.length); count > 1; count--) {
+    const side = c => Math.max(c * (w + 4), Math.ceil(count / c) * (h + 4)), four = Math.min(4, count);
+    const grids = Array.from({ length: count }, (_, i) => i + 1).filter(c => fits(count, c)).sort((a, b) => side(a) - side(b) || a - b);
+    if (grids.includes(four)) grids.unshift(...grids.splice(grids.indexOf(four), 1));
+    if (grids.length) return { count, grids };
+  }
+  return { count: 1, grids: [1] };
+}
+
 function motionStrip(project, entries, motion, requestedScale, background, metadata) {
-  // The image is bounded independently of the report: at most 32 samples, explicit positions and omissions.
-  const count = Math.min(32, entries.length), positions = Array.from({ length: count }, (_, i) => count === 1 ? 0 : Math.round(i * (entries.length - 1) / (count - 1)));
-  const selected = positions.map(i => entries[i]), { width: w, height: h } = project;
+  // The image is bounded independently of the report: the samples that fit it, with their positions, and what was left out.
+  const { width: w, height: h } = project, { count, grids } = timingGrid(entries, w, h);
+  const positions = Array.from({ length: count }, (_, i) => count === 1 ? 0 : Math.round(i * (entries.length - 1) / (count - 1)));
+  const selected = positions.map(i => entries[i]);
   const travel = selected.map(e => Math.round((motion.speed ?? 0) * e.start / 1000)), left = Math.min(...travel), span = Math.max(...travel) - left;
-  const columns = Math.min(4, count), lanes = Math.min(8, count), timingWidth = columns * (w + 4) + 4, timingHeight = Math.ceil(count / columns) * (h + 4) + 4;
-  // The arcs go under the timing cells, magnified to about their width, and trace every displayed frame.
-  const tracks = metadata ? arcTracks(entries, metadata) : [], magnification = Math.max(3, Math.min(8, Math.floor((timingWidth - 4) / (w + 2))));
+  // The arcs go under the timing cells, magnified to about their width (3 to 8 times), and trace every displayed frame.
+  const tracks = metadata ? arcTracks(entries, metadata) : [];
   const partOf = (marker, position) => entries[position].markers.find(m => m.name === marker)?.part;
   const sideOf = (marker, position) => tracks.find(t => t.kind === 'foot' && t.part === partOf(marker, position))?.side ?? 'near';
   const landings = motion.slide.map(({ marker, samples }) => ({ position: samples[0].position, frame: samples[0].frame, marker, side: sideOf(marker, samples[0].position), part: partOf(marker, samples[0].position) }));
-  const arcsWidth = (w + 2) * magnification, key = arcKey(tracks, landings, Math.max(arcsWidth, timingWidth - 4));
-  const arcsHeight = (h + 2) * magnification + 3 + key.height + 2;
-  let trajectory = motion.speed !== null && span + w + 4 <= 4096, arcs = tracks.length > 0;
-  const measure = () => {
-    const panel = trajectory ? span + w + 8 : 0;
-    return { panel, width: panel + Math.max(timingWidth, arcs ? Math.max(arcsWidth, key.width) + 4 : 0), height: Math.max(timingHeight + (arcs ? arcsHeight : 0), trajectory ? lanes * (h + 4) + 4 : 0) };
+  const keys = new Map(), keyFor = wrap => { if (!keys.has(wrap)) keys.set(wrap, arcKey(tracks, landings, wrap)); return keys.get(wrap); };
+  // The trajectory is a panel left of the timing cells, its frames in up to 8 lanes; tall frames take fewer lanes when
+  // that is what keeps the image within 4,194,304 pixels.
+  const traceable = motion.speed !== null && span + w + 4 <= STRIP_SIDE, panelTried = traceable ? span + w + 8 : 0;
+  // A layout of the cells in `columns`, arcs magnified `magnification` times (0: none) and a trajectory in `lanes` (0: none).
+  const measure = (columns, magnification, lanes) => {
+    const timingWidth = columns * (w + 4) + 4, timingHeight = Math.ceil(count / columns) * (h + 4) + 4, panel = lanes ? panelTried : 0;
+    const arcsWidth = (w + 2) * magnification, key = magnification ? keyFor(Math.max(arcsWidth, timingWidth - 4)) : null;
+    const arcsHeight = magnification ? (h + 2) * magnification + 3 + key.height + 2 : 0;
+    return { columns, timingHeight, magnification, arcsWidth, key, lanes, panel,
+      width: panel + Math.max(timingWidth, magnification ? Math.max(arcsWidth, key.width) + 4 : 0), height: Math.max(timingHeight + arcsHeight, lanes ? lanes * (h + 4) + 4 : 0) };
   };
-  let layout = measure();
-  if (layout.width * layout.height > 4194304 && trajectory) { trajectory = false; layout = measure(); }
-  if (layout.width * layout.height > 4194304 && arcs) { arcs = false; layout = measure(); }
-  const { panel: panelWidth, width, height } = layout;
-  const actualScale = Math.max(1, Math.min(requestedScale, Math.floor(Math.sqrt(4194304 / (width * height)))));
-  if (width * height > 4194304) fail('image', 'motion strip exceeds 4,194,304 pixels');
+  // Keep the most: the arcs and the trajectory, then the arcs alone, then the trajectory alone. Each tries the chosen
+  // grid first, the arcs from their full magnification down and the lanes from 8 down to 2, then the other grids.
+  const down = (from, to) => Array.from({ length: Math.max(0, from - to + 1) }, (_, i) => from - i), most = Math.min(8, count);
+  const full = columns => Math.max(3, Math.min(8, Math.floor(columns * (w + 4) / (w + 2))));
+  const fitting = (arcs, trace) => {
+    if ((arcs && !tracks.length) || (trace && !traceable)) return null;
+    for (const columns of grids) for (const magnification of arcs ? down(full(columns), 3) : [0]) for (const lanes of trace ? down(most, Math.min(2, most)) : [0]) {
+      const layout = measure(columns, magnification, lanes);
+      if (layout.width * layout.height <= STRIP_PIXELS && layout.width <= IMAGE_SIDE && layout.height <= IMAGE_SIDE) return layout;
+    }
+    return null;
+  };
+  // Only a still bigger than any animation frame (one cell of it past the image) fits none of them.
+  const layout = fitting(true, true) ?? fitting(true, false) ?? fitting(false, true) ?? fitting(false, false)
+    ?? fail('image', `motion strip exceeds 4,194,304 pixels: one ${w}×${h} frame takes ${w + 8}×${h + 8} with its border; review the motion of an animation (frames up to 1024 a side always fit), or inspect a region of this frame instead`);
+  const { columns, timingHeight, magnification, arcsWidth, key, lanes, panel: panelWidth, width, height } = layout, arcs = magnification > 0, trajectory = lanes > 0;
+  const actualScale = Math.max(1, Math.min(requestedScale, Math.floor(Math.sqrt(STRIP_PIXELS / (width * height)))));
   const data = new Uint8ClampedArray(width * height * 4), bg = parseColor(background ?? '#18212b', project.palette, 'motion.background');
   for (let i = 0; i < data.length; i += 4) data.set(bg, i);
   const pixel = (x, y, color) => { if (x >= 0 && y >= 0 && x < width && y < height) data.set(color, (y * width + x) * 4); };
@@ -383,8 +443,12 @@ function motionStrip(project, entries, motion, requestedScale, background, metad
       mapping: 'panel x = origin[0] + (x + 1) * magnification + floor(magnification / 2), and likewise y',
       tracks: tracks.map(t => ({ kind: t.kind, part: t.part, side: t.side, color: hex(t.color), ...(t.side === 'far' && { dashed: true }) })),
       landings: landings.map(({ part, ...l }) => ({ ...l, ring: hex(LANDS[l.side]) })), ...(skipped && { skipped }) };
-  } else arcsReport = { shown: false, reason: tracks.length ? 'The arcs would take the image past 4,194,304 pixels.' : 'Arcs need pose metadata with a rig (legs, arms, head) or markers.' };
-  return { cells, omitted: entries.length - count, trajectory: { shown: trajectory, ...(trajectory ? { origin: -left, width: panelWidth, lanes } : { reason: motion.speed === null ? 'Specify speed to draw the trajectory.' : 'Travel exceeds the 4096-pixel width or 4,194,304-pixel image limit.' }) },
+  } else arcsReport = { shown: false, reason: tracks.length ? 'The arcs, magnified at least 3 times, would take the image past 4,194,304 pixels or 8192 a side.' : 'Arcs need pose metadata with a rig (legs, arms, head) or markers.' };
+  // Sampling is said as a contact sheet says it: only when cells were left out.
+  const sampling = count < entries.length ? { total: entries.length, shown: count, omitted: entries.length - count,
+    method: `evenly spaced, including endpoints: ${count < Math.min(32, entries.length) ? `as many ${w}×${h} frames as fit the 4,194,304-pixel image, 4096 a side` : 'at most 32'}` } : undefined;
+  return { cells, ...(sampling && { sampling }), trajectory: { shown: trajectory, ...(trajectory ? { origin: -left, width: panelWidth, lanes } : { reason: motion.speed === null ? 'Specify speed to draw the trajectory.' : !panelTried ? `Travel exceeds the 4096-pixel width: ${span} pixels of travel beside a ${w}-pixel frame.`
+      : `The trajectory panel (${panelTried} pixels wide, lanes of ${w}×${h} frames) does not fit beside the timing cells${arcs ? ' and arcs' : ''} within the 4,194,304-pixel image.` }) },
     arcs: arcsReport,
     nativeSheet: { width, height, scale: 1, data },
     sheet: { width: width * actualScale, height: height * actualScale, scale: actualScale, data: enlarge(data, width, height, actualScale) } };

@@ -1,13 +1,20 @@
 // Image sequences for video editors: one numbered PNG per video frame at a constant frame rate, on a canvas of the
 // video's size. Editors read these directly and keep the alpha; nothing here encodes video. Timing is exact integer
 // arithmetic on the frame rate as a fraction, so 29.97 means 30000/1001 and a sequence is the same on every machine.
-import { parseColor, fail } from './core.js';
-import { renderScene } from './scene.js';
+import { parseColor, fail, stillsHaveNoAnimation } from './core.js';
+import { renderScene, SCENE_SIDE, SCENE_AREA } from './scene.js';
 import { bodiesFrames } from './bodies.js';
+import { powderFrames } from './powder.js';
 import { encodePNG } from './png.js';
 
 export const MAX_SEQUENCE_FRAMES = 18000;
 const MAX_UNIQUE_PIXELS = 4294967296;
+// The most grid pixels of different frames a repeated falling-sand clip shows: sixteen times what a recipe holds.
+const REPEATED_PIXELS = 67108864;
+// A sequence canvas is at most SEQUENCE_SIDE a side and SEQUENCE_CANVAS_PIXELS in all (placeSprite); mcp.js's
+// SEQUENCE_PIXELS is another thing, a whole clip's budget. The studio's Frames dialog keeps a copy of both in studio.js
+// sequenceScale, since the studio cannot load this module, and test/interfaces.test.js holds the copy equal.
+export const SEQUENCE_SIDE = 4096, SEQUENCE_CANVAS_PIXELS = 16777216;
 export const VIDEO_SIZES = { '720p': [1280, 720], '1080p': [1920, 1080], '1440p': [2560, 1440], '4k': [3840, 2160], vertical: [1080, 1920], square: [1080, 1080] };
 const ALIGN = { 'top-left': [0, 0], top: [1, 0], 'top-right': [2, 0], left: [0, 1], center: [1, 1], right: [2, 1], 'bottom-left': [0, 2], bottom: [1, 2], 'bottom-right': [2, 2] };
 const NTSC = { '23.976': [24000, 1001], '23.98': [24000, 1001], '29.97': [30000, 1001], '59.94': [60000, 1001], '119.88': [120000, 1001] };
@@ -65,13 +72,14 @@ export function planSequence(durations, { fps, loop = true, loops = 1, seconds, 
 // How a project's timing sits on the frame grid of a video at `fps`, without making the sequence: the frames whose
 // durations are not whole video frames, and for each animation which positions a sequence would lengthen, shorten or
 // never show, and whether one pass ends on the grid. Video frame j starts at j × 1000 × denominator / numerator ms
-// and shows the pose active then, as in planSequence; counts are exact integer arithmetic.
+// and shows the pose active then, as in planSequence; counts are exact integer arithmetic. Stills have no animation, so
+// only their frames are measured.
 export function frameGrid(project, fps, path = 'validate.fps') {
   const rate = parseFrameRate(fps, path), { numerator, denominator } = rate, unit = 1000 * denominator, frameMs = unit / numerator;
   const round = value => Math.round(value * 1000) / 1000, round6 = value => Math.round(value * 1e6) / 1e6, ceilDiv = (a, b) => Math.floor((a + b - 1) / b);
   const offGrid = project.frames.filter(frame => frame.duration * numerator % unit).map(frame => ({ frame: frame.name, duration: frame.duration, videoFrames: round6(frame.duration * numerator / unit) }));
   const animations = {}, notes = [];
-  for (const [name, animation] of Object.entries(project.animations)) {
+  for (const [name, animation] of Object.entries(project.stills ? {} : project.animations)) {
     const changed = [], neverShown = [];
     let start = 0;
     for (const [position, index] of animation.frames.entries()) {
@@ -88,7 +96,7 @@ export function frameGrid(project, fps, path = 'validate.fps') {
     if (problems.length) notes.push(`${name}: ${problems.join(', ')}.`);
   }
   if (offGrid.length) notes.unshift(`${offGrid.length} of ${project.frames.length} frame durations are not whole video frames of ${round(frameMs)} ms; at integer milliseconds, whole frames at ${rate.label} fps are multiples of ${unit / gcd(unit, numerator)} ms.`);
-  return { fps: rate.label, numerator, denominator, frameMs: round(frameMs), offGrid, animations, notes };
+  return { fps: rate.label, numerator, denominator, frameMs: round(frameMs), offGrid, ...(!project.stills && { animations }), notes };
 }
 
 // Where a w × h sprite goes on the canvas. Without `size` the canvas is the sprite at `scale`. With `size`, `fit`
@@ -100,14 +108,14 @@ export function placeSprite(width, height, { size, scale, fit = 'contain', align
   let canvas = null;
   if (size !== undefined) {
     canvas = typeof size === 'string' ? VIDEO_SIZES[size.toLowerCase()] ?? (/^(\d{1,4})x(\d{1,4})$/i.exec(size)?.slice(1).map(Number)) : size;
-    if (!Array.isArray(canvas) || canvas.length !== 2 || !canvas.every(n => Number.isInteger(n) && n >= 1 && n <= 4096) || canvas[0] * canvas[1] > 16777216) fail(`${path}.size`, `expected ${Object.keys(VIDEO_SIZES).join(', ')} or WIDTHxHEIGHT up to 4096 on a side`);
+    if (!Array.isArray(canvas) || canvas.length !== 2 || !canvas.every(n => Number.isInteger(n) && n >= 1 && n <= SEQUENCE_SIDE) || canvas[0] * canvas[1] > SEQUENCE_CANVAS_PIXELS) fail(`${path}.size`, `expected ${Object.keys(VIDEO_SIZES).join(', ')} or WIDTHxHEIGHT up to ${SEQUENCE_SIDE} on a side`);
   } else if (cover) fail(`${path}.fit`, 'cover needs a size to cover');
   if (canvas && !cover && (width > canvas[0] || height > canvas[1])) fail(`${path}.size`, `the ${width}×${height} sprite is larger than the ${canvas[0]}×${canvas[1]} canvas; use fit cover to crop it`);
   const inside = canvas ? Math.min(256, Math.floor(Math.min(canvas[0] / width, canvas[1] / height))) : 1, over = canvas ? Math.ceil(Math.max(canvas[0] / width, canvas[1] / height)) : 1;
   if (cover && over > 256) fail(`${path}.fit`, `covering ${canvas[0]}×${canvas[1]} would need a scale of ${over}, above the limit of 256`);
   const factor = integerOption(scale ?? (cover ? over : inside), `${path}.scale`, 1, 256), w = width * factor, h = height * factor;
   canvas ??= [w, h];
-  if (canvas[0] > 4096 || canvas[1] > 4096 || canvas[0] * canvas[1] > 16777216) fail(`${path}.scale`, `${w}×${h} is above the 4096-pixel limit; lower the scale`);
+  if (canvas[0] > SEQUENCE_SIDE || canvas[1] > SEQUENCE_SIDE || canvas[0] * canvas[1] > SEQUENCE_CANVAS_PIXELS) fail(`${path}.scale`, `${w}×${h} is above the ${SEQUENCE_SIDE}-pixel limit; lower the scale`);
   if (!cover && (w > canvas[0] || h > canvas[1])) fail(`${path}.scale`, `at scale ${factor} the ${width}×${height} sprite is ${w}×${h} and does not fit the ${canvas[0]}×${canvas[1]} canvas; the largest scale that fits is ${inside}, or use fit cover to crop`);
   if (!Object.hasOwn(ALIGN, align)) fail(`${path}.align`, `expected one of ${Object.keys(ALIGN).join(', ')}`);
   if (!Array.isArray(offset) || offset.length !== 2 || !offset.every(n => Number.isInteger(n) && Math.abs(n) <= 4096)) fail(`${path}.offset`, 'expected [x, y] in whole canvas pixels');
@@ -150,7 +158,7 @@ function compose(pixels, width, height, place, background) {
 // With `stream`, for frames whose key never comes back once it changes (a match's), each frame's file is instead made
 // when it is written (writeBundle calls it, in order) and only the last is kept, for the video frames that hold it, so a
 // sequence holds one frame at a time however long it runs; `info.differentFrames` is counted as they are made.
-function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe, stream = false) {
+function build(name, sourceWidth, sourceHeight, count, imageAt, options, describe, stream = false, fine = 1) {
   const fps = options.rate, place = placeSprite(sourceWidth, sourceHeight, options);
   let background = options.background === undefined ? options.matte ?? null : null;
   if (options.background !== undefined && options.background !== 'transparent') {
@@ -159,7 +167,8 @@ function build(name, sourceWidth, sourceHeight, count, imageAt, options, describ
   }
   const digits = Math.max(4, String(count).length), pattern = `${name}_%0${digits}d.png`, files = new Map(), encoded = new Map();
   const fileOf = frame => `${name}_${String(frame + 1).padStart(digits, '0')}.png`, made = { different: 0, last: null };
-  const encode = pixels => encodePNG(compose(pixels(), sourceWidth, sourceHeight, place, background), place.width, place.height);
+  const drawn = fine > 1 ? { ...place, scale: place.scale / fine } : place;
+  const encode = pixels => encodePNG(compose(pixels(), sourceWidth * fine, sourceHeight * fine, drawn, background), place.width, place.height);
   for (let frame = 0; frame < count; frame++) {
     if (stream) {
       files.set(fileOf(frame), () => {
@@ -223,6 +232,12 @@ In a Windows batch file, write %% for each % in the file pattern.
 ${info.notes.length ? `\nNotes\n${info.notes.map(note => `- ${note}`).join('\n')}\n` : ''}
 sequence.json holds the same facts for programs, with the timing of every pose.
 `;
+// How many times finer than its own pixels a match is drawn for a placement: the whole enlargement where a frame that
+// size is within a still's limits, else the largest part of it that is (the rest enlarges the drawn frame).
+function fineness(width, height, scale) {
+  for (let k = scale; k > 1; k--) if (scale % k === 0 && width * k <= 4096 && height * k <= 4096 && width * k * height * k <= 16777216) return k;
+  return 1;
+}
 // `late` adds what is only known once every frame is made (a match's figures). A streamed sequence writes sequence.json
 // and the README after its frames, so they are made then.
 function finish(sequence, notes, late = () => {}) {
@@ -244,6 +259,7 @@ function common(options, allowed) {
 // One animation of a rendered project as a sequence: { info, files }, where files maps names to bytes.
 export function createSequence(project, options = {}) {
   const rate = common(options, KEYS), names = Object.keys(project.animations), animation = options.animation ?? names[0];
+  if (project.stills) fail('sequence', stillsHaveNoAnimation('make video frames of'));
   if (!Object.hasOwn(project.animations, animation)) fail('sequence.animation', `no animation named "${animation}"; choose one of: ${names.join(', ')}`);
   const sequence = project.animations[animation], frames = sequence.frames.map(index => project.frames[index]);
   const plan = planSequence(frames.map(frame => frame.duration), { fps: rate, loop: sequence.loop, loops: options.loops ?? 1, seconds: options.seconds, step: options.step ?? 1 });
@@ -259,49 +275,119 @@ export function createSequence(project, options = {}) {
   return finish(built, notes);
 }
 
+// A simulation only steps forward, while the poses of a clip that repeats come back. This draws a pose when a video
+// frame first shows it (build asks for a key's pixels once) and keeps each frame it passes on the way that a later
+// video frame shows first, so the simulation runs once however the passes fall.
+function firstShown(poses, image) {
+  const wanted = [...new Set(poses)].sort((a, b) => a - b), kept = new Map();
+  let next = 0;
+  return pose => {
+    for (; next < wanted.length && wanted[next] <= pose; next++) kept.set(wanted[next], image(wanted[next]));
+    const data = kept.get(pose);
+    kept.delete(pose);
+    return data;
+  };
+}
+// The most frames `firstShown` holds at one time: 1 when every pass shows its frames in order.
+function mostHeld(poses) {
+  const wanted = [...new Set(poses)].sort((a, b) => a - b), seen = new Set();
+  let next = 0, held = 0, most = 0;
+  for (const pose of poses) {
+    if (seen.has(pose)) continue;
+    seen.add(pose);
+    for (; next < wanted.length && wanted[next] <= pose; next++) held++;
+    most = Math.max(most, held--);
+  }
+  return most;
+}
+
 // A pixelforge-bodies match as a sequence: one effect (`animation` names it; the first by default) stepped frame after
 // frame and drawn straight to video frames, never kept as a recipe, so it may run past a recipe's 256 frames (up to
-// MATCH_FRAMES). It plays once and holds its last frame. info.figures carries the match's metadata (hits, the score).
+// MATCH_FRAMES). It plays once and holds its last frame, unless the effect has `loop` (cloth in a wind that repeats),
+// which cycles for as long as `loops` or `seconds` asks, as its compiled recipe does. info.figures carries the match's
+// metadata (hits, the score).
 // `budget`, for a caller with a time limit (MCP), is the most pixels of different frames it may write; past it the call
-// is refused before simulating, naming the command line, which has no limit. With `stream` (the command line), each
+// Where the frames are enlarged, the bodies and ropes are drawn at the video's own pixels (bodiesFrames' scale),
+// so a turned picture keeps every pixel; `info.placement.drawn` says how many times finer than the match's pixels.
+// is refused before simulating, naming the command line, which has no limit: `command`, the CLI as the caller runs it
+// (MCP names its own version, so the line runs the same release). With `stream` (the command line), each
 // frame is simulated, drawn and encoded as writeBundle writes it, and only one is held at a time, so a match is bounded
 // by its frames alone; without it, every frame's PNG is kept until the call returns, up to MAX_UNIQUE_PIXELS.
-export function createBodiesSequence(source, options = {}, { budget = Infinity, stream = false } = {}) {
-  const rate = common(options, KEYS.filter(key => key !== 'loops' && key !== 'step')), match = bodiesFrames(source, options.animation);
-  const plan = planSequence(new Array(match.frames).fill(match.duration), { fps: rate, loop: false, seconds: options.seconds });
+export function createBodiesSequence(source, options = {}, { budget = Infinity, stream = false, command = 'npx -y pixelbolt' } = {}) {
+  const rate = common(options, KEYS.filter(key => key !== 'step')), { loops = 1 } = options;
+  let sized = null;
+  const match = bodiesFrames(source, options.animation, { scale: (width, height) => { sized = [width, height]; return fineness(width, height, placeSprite(width, height, options).scale); } }), fine = match.scale;
+  // A match plays once, so one loop is what it does anyway (the help lists --loops for every sequence).
+  if (!match.loop && loops !== 1) fail('sequence.loops', 'a match plays once and does not repeat; leave loops out, and end it early with seconds');
+  const plan = planSequence(new Array(match.frames).fill(match.duration), { fps: rate, loop: match.loop, loops, seconds: options.seconds });
   // Every frame of a match differs, and a sequence made in memory keeps each different frame's PNG: say so before
   // simulating, not a minute in.
-  const place = placeSprite(match.width, match.height, options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
-  if (!stream && different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). Run it on the command line, which writes each frame as it is made: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
+  const place = placeSprite(sized[0], sized[1], options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height));
+  // A loop shown past one pass comes back to frames already made, so its PNGs are kept and it can't be streamed.
+  const repeats = plan.poses.some((pose, at) => at > 0 && pose < plan.poses[at - 1]), streamed = stream && !repeats;
+  if (!streamed && different > fits) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call${stream ? ', or one that repeats,' : ''} holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). ${repeats ? `A clip that repeats is not written a frame at a time: keep it to one pass (${Math.round(plan.pass) / 1000} seconds), or use a smaller size, a lower frame rate or fewer frames` : `Run it on the command line, which writes each frame as it is made: ${command} sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`}`);
   const most = Math.floor(budget / (place.width * place.height));
-  if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: npx -y pixelbolt sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
-  let shown = -1, picture = null;
-  const built = build(`${match.name}-${match.effect}`, match.width, match.height, plan.count, frame => {
-    const pose = plan.poses[frame];
-    if (pose !== shown) { picture = match.image(pose); shown = pose; }
-    const data = picture;
-    return { key: pose, pixels: () => data };
-  }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, stream);
+  if (different > most) fail('sequence', `the match shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: ${command} sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`);
+  // Frames a later pass shows first wait as whole pictures, so what they may hold is bounded as a repeated clip's is.
+  const held = repeats ? mostHeld(plan.poses) : 1;
+  if (held > 1 && held * match.width * match.height > REPEATED_PIXELS) fail('sequence.loops', `at ${rate.label} frames a second a later pass shows frames the first one skips, and ${held} frames of ${match.width}×${match.height} would wait for it, more than ${REPEATED_PIXELS.toLocaleString('en')} pixels. Use a frame rate that shows every frame in order, a smaller size or fewer frames`);
+  const picture = firstShown(plan.poses, match.image);
+  const built = build(`${match.name}-${match.effect}`, sized[0], sized[1], plan.count, frame => { const pose = plan.poses[frame]; return { key: pose, pixels: () => picture(pose) }; }, { ...options, rate, palette: match.palette }, { source: 'bodies', bodies: match.name, effect: match.effect }, streamed, fine);
+  if (fine > 1) built.info.placement.drawn = fine;
   const notes = [];
+  if (match.loop && options.seconds === undefined && !plan.seamless) notes.push(`One pass is ${Math.round(plan.exactFrames / loops * 1000) / 1000} video frames, so this clip does not end exactly where the loop does and will hitch if the editor loops it.${plan.loopsThatFit ? ` ${plan.loopsThatFit} loops fit the frame grid exactly (--loops ${plan.loopsThatFit}).` : ''}`);
   if (built.place.cropped) notes.push(cropNote('match', built.info));
   // A clip that `seconds` ends before the match does (fewer video frames than the match fills) cuts the frames after
   // the last one it shows: those are not skipped, so the skipped ones are counted up to it. Any other clip, held past
   // the match's end or not, is counted over the whole match.
-  const reach = plan.count < Math.ceil(plan.exactFrames) ? plan.poses[plan.poses.length - 1] + 1 : match.frames, missed = reach - different;
+  const reach = plan.count < Math.ceil(plan.exactFrames / loops) ? plan.poses[plan.poses.length - 1] + 1 : match.frames, missed = reach - different;
   if (missed > 0) notes.push(`${missed} of the match's ${reach < match.frames ? `first ${reach}` : match.frames} frames (${match.duration} ms each) ${missed === 1 ? 'falls' : 'fall'} between video frames at ${rate.label} frames per second and ${missed === 1 ? 'is' : 'are'} not shown; give the effect a duration of at least one video frame (${Math.ceil(1000 * rate.denominator / rate.numerator)} ms at this rate).`);
-  built.info.loop = { loops: 1, plays: 'once', passFrames: Math.round(plan.exactFrames * 1e6) / 1e6, seamless: false };
+  built.info.loop = { loops, plays: match.loop ? 'loops' : 'once', passFrames: Math.round(plan.exactFrames / loops * 1e6) / 1e6, seamless: match.loop && plan.seamless && options.seconds === undefined };
   return finish(built, notes, () => { built.info.figures = match.figures(); });
+}
+
+// One clip of a pixelforge-powder source as a sequence (`animation` names it; the first by default): the grid is
+// stepped as its frames are shown and drawn straight to video frames, never kept as a recipe, so a clip may run past a
+// recipe's 256 frames and its grid past a recipe's canvas (powderFrames). It plays once and holds its last frame, and
+// every frame is the one the compiled recipe shows. `budget`, `stream` and `command` are createBodiesSequence's; a clip
+// repeated with `loops` is held as other sequences are, since its frames come back, and is kept small
+// (REPEATED_PIXELS). info.ended says where the grid stood after the last frame made: its step, what is on it and
+// whether it has settled.
+export function createPowderSequence(source, options = {}, { budget = Infinity, stream = false, command = 'npx -y pixelbolt' } = {}) {
+  const rate = common(options, KEYS), clip = powderFrames(source, options.animation), loops = options.loops ?? 1, step = options.step ?? 1;
+  const plan = planSequence(new Array(clip.frames).fill(clip.duration), { fps: rate, loop: false, loops, seconds: options.seconds, step });
+  // As for a match: say what will not fit before simulating it.
+  const place = placeSprite(clip.width, clip.height, options), different = new Set(plan.poses).size, fits = Math.floor(MAX_UNIQUE_PIXELS / (place.width * place.height)), streamed = stream && loops === 1;
+  const line = `${command} sequence <source.json> --out <new folder> --fps ${rate.label}${options.size ? ` --size ${options.size}` : ''}; or use a smaller size, a lower frame rate or fewer frames`;
+  if (!streamed && different > fits) fail('sequence', `the clip shows ${different} different frames at ${place.width}×${place.height}; a sequence made in one call${stream ? ', or one that repeats,' : ''} holds at most ${fits} at that size (about ${Math.floor(fits * rate.denominator / rate.numerator)} seconds at ${rate.label} frames a second). ${stream ? 'Leave loops out, so each frame is written as it is made' : `Run it on the command line, which writes each frame as it is made: ${line}`}`);
+  const most = Math.floor(budget / (place.width * place.height));
+  if (different > most) fail('sequence', `the clip shows ${different} different frames at ${place.width}×${place.height}, more than one call draws in its time (about ${most} at that size). Run it on the command line, which has no time limit: ${line}`);
+  // A repeated clip's later passes show frames its earlier ones skipped, and a grid only steps forward: each frame it
+  // passes that a later video frame shows is kept until then, so the grid runs once however the passes fall.
+  if (loops > 1 && different * clip.width * clip.height > REPEATED_PIXELS) fail('sequence.loops', `a repeated clip keeps the frames a later pass shows, at most ${REPEATED_PIXELS.toLocaleString('en')} grid pixels of different frames; this one shows ${different} of ${clip.width}×${clip.height}. Leave loops out (it then plays once, a frame at a time), or use fewer frames or a smaller grid`);
+  const picture = streamed ? clip.image : firstShown(plan.poses, clip.image);
+  const built = build(`${clip.name}-${clip.clip}`, clip.width, clip.height, plan.count, frame => { const pose = plan.poses[frame]; return { key: pose, pixels: () => picture(pose) }; }, { ...options, rate, palette: clip.palette }, { source: 'powder', powder: clip.name, clip: clip.clip }, streamed);
+  const notes = [...clip.warnings];
+  if (step > 1) notes.push(`Animated on ${step}s: each sampled frame is held for ${step} video frames.`);
+  if (built.place.cropped) notes.push(cropNote('grid', built.info));
+  // Counted as a match's are: over the clip, or up to the last frame shown when `seconds` ends it early.
+  const reach = plan.count < Math.ceil(plan.exactFrames / loops) ? plan.poses[plan.poses.length - 1] + 1 : clip.frames, missed = reach - different;
+  if (missed > 0) notes.push(`${missed} of the clip's ${reach < clip.frames ? `first ${reach}` : clip.frames} frames (${clip.duration} ms each) ${missed === 1 ? 'falls' : 'fall'} between video frames at ${rate.label} frames per second${step > 1 ? ` on ${step}s` : ''} and ${missed === 1 ? 'is' : 'are'} not shown; give the clip a duration of at least ${step > 1 ? `${step} video frames` : 'one video frame'} (${Math.ceil(step * 1000 * rate.denominator / rate.numerator)} ms at this rate).`);
+  built.info.loop = { loops, plays: 'once', passFrames: Math.round(plan.exactFrames / loops * 1e6) / 1e6, seamless: false };
+  return finish(built, notes, () => { built.info.ended = clip.ended(); });
 }
 
 // A match's figures for a reply: the last frame's cells per team and the leader, totals, and the first powers taken.
 // Every frame's figures stay in sequence.json; a reply that carried them grew with the match (90 KB at 9000 frames).
 export function figuresSummary(figures) {
   if (!figures) return figures;
-  const { territory, powers, escaped, ...rest } = figures, total = value => (Array.isArray(value) ? value.reduce((sum, n) => sum + (Array.isArray(n) ? n.reduce((a, b) => a + b, 0) : Number(n) || 0), 0) : value);
+  const { territory, powers, escaped, paths, ...rest } = figures, named = Object.keys(paths ?? {}), total = value => (Array.isArray(value) ? value.reduce((sum, n) => sum + (Array.isArray(n) ? n.reduce((a, b) => a + b, 0) : Number(n) || 0), 0) : value);
   return {
     ...rest, ...(escaped?.length && { escaped: escaped.slice(0, 8), ...(escaped.length > 8 && { escapedInAll: escaped.length }) }),
     ...(territory && { territory: { teams: territory.teams, cells: territory.counts.at(-1), leader: territory.leader, changedHands: total(territory.flips) } }),
     ...(powers?.length && { powers: powers.slice(0, 8), ...(powers.length > 8 && { powersInAll: powers.length }) }),
+    // Where each named body ended, [x, y, angle] (null once it has left); its place on every frame is its path.
+    ...(named.length && { ended: Object.fromEntries(named.slice(0, 8).map(name => [name, paths[name].at(-1) ?? null])), ...(named.length > 8 && { namedBodies: named.length }) }),
     every: 'sequence.json has every frame\'s figures'
   };
 }
@@ -331,7 +417,7 @@ export function createSceneSequence(scene, name, options = {}) {
   if (options.seconds === undefined && !plan.seamless) notes.push(`The scene lasts ${Math.round(plan.exactFrames / (options.loops ?? 1) * 1000) / 1000} video frames, so this clip does not end exactly where the scene repeats.${plan.loopsThatFit ? ` ${plan.loopsThatFit} loops fit the frame grid exactly (--loops ${plan.loopsThatFit}).` : ''}`);
   // A shot usually wants to fill the frame; say what scene size would, at this enlargement.
   const { width, height, placement } = built.info;
-  if (!placement.fit && (placement.width !== width || placement.height !== height)) notes.push(`The scene covers ${placement.width}×${placement.height} of the ${width}×${height} canvas${scene.background[3] === 255 && options.background === undefined ? '; the margins take the scene\'s background colour' : ''}. Use fit cover to fill the canvas and crop the overhang${width % placement.scale === 0 && height % placement.scale === 0 && width / placement.scale <= 256 && height / placement.scale <= 256 ? `, or author the scene at ${width / placement.scale}×${height / placement.scale} to fill it exactly at this scale` : ''}.`);
+  if (!placement.fit && (placement.width !== width || placement.height !== height)) notes.push(`The scene covers ${placement.width}×${placement.height} of the ${width}×${height} canvas${scene.background[3] === 255 && options.background === undefined ? '; the margins take the scene\'s background colour' : ''}. Use fit cover to fill the canvas and crop the overhang${width % placement.scale === 0 && height % placement.scale === 0 && width / placement.scale <= SCENE_SIDE && height / placement.scale <= SCENE_SIDE && width * height / (placement.scale * placement.scale) <= SCENE_AREA ? `, or author the scene at ${width / placement.scale}×${height / placement.scale} to fill it exactly at this scale` : ''}.`);
   if (placement.cropped) notes.push(cropNote('scene', built.info));
   Object.assign(built.info, { loop: { loops: options.loops ?? 1, plays: 'loops', passFrames: Math.round(plan.exactFrames / (options.loops ?? 1) * 1e6) / 1e6, seamless: plan.seamless && options.seconds === undefined }, sceneDuration: scene.duration });
   return finish(built, notes);

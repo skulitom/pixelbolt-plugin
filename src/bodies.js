@@ -14,9 +14,9 @@
 // Same units as pixelforge-fluid (docs/physics-model.md, section 2): pixels, frames, pixels per frame and per frame².
 // Browser-compatible and deterministic: only + − × ÷ and sqrt, craft.js's polynomial trigonometry, fixed substeps
 // and iteration counts, and bodies, contacts and pixels visited in a fixed order.
-import { renderProject, fail, isObject, sameWidth } from './core.js';
-import { fields, number, integer } from './authoring.js';
-import { sinDeg, cosDeg, traceLine, turnRows, random } from './craft.js';
+import { renderProject, parseColor, blend, fail, isObject, sameWidth, STILL_SIDE } from './core.js';
+import { fields, number, integer, boolean, pair } from './authoring.js';
+import { sinDeg, cosDeg, traceLine, turnRows, rollRows, random } from './craft.js';
 import { atan2Deg } from './shapes.js';
 import { readTerritory, readPickups, readEvents, readStrikes, readHud, createTerritory } from './territory.js';
 import { readJoints, ropeJoint, jointPairs, pairKey, resetJoints, wakeJoints, solveJoints, correctJoints, breakJoints, paintRopes } from './constraints.js';
@@ -25,6 +25,10 @@ import { readCloths, createCloth, stepCloth, paintCloth, clothWork } from './clo
 export const BODY_SHAPES = ['circle', 'box', 'polygon', 'hoop'];
 export const BODY_WALLS = ['left', 'right', 'top', 'bottom'];
 const LIMITS = { effects: 16, entries: 64, bodies: 256, obstacles: 32, frames: 256, work: 400000000 };
+// A looping cloth is blown through whole cycles of its wind, undrawn, until one ends within SEAM pixels of where it
+// began: at most the cycles that make WARM frames, and never fewer than four.
+const LOOP = { warm: 192, seam: 1 / 16 };
+const loopCycles = frames => Math.max(4, Math.ceil(LOOP.warm / frames));
 // Split powers may make a crowd of up to this many bodies (an effect's `most`).
 export const CROWD = 4096;
 // A match written as numbered video frames (bodiesFrames) may run this long, and do this much work.
@@ -35,22 +39,22 @@ const PI = 3.141592653589793, RADIANS = PI / 180;
 const SLOP = 0.02, BIAS = 0.2, MAX_PUSH = 1;
 // The most times heavier than the other a body resting on (or under) another is solved as (see the substep).
 const HEAVIER = 10;
+// A knock passes through a body that can't break to what it touches: within this many pixels of it.
+const TOUCH = 0.05;
+// The pieces of a body that has just broken grip nothing for LOOSE_HOLD frames, and take their friction back over the
+// LOOSE_EASE frames after.
+const LOOSE_HOLD = 12, LOOSE_EASE = 8;
 // Impacts slower than this (pixels a frame) don't bounce, so a dropped ball settles; faster ones count as hits.
 const REST_SPEED = 0.3;
 // A body slower than SLEEP_SPEED (rim included) for SLEEP_FRAMES frames sleeps: it holds exactly still, as a solid,
 // until a body moving into it wakes it.
-const SLEEP_SPEED = 0.03, SLEEP_FRAMES = 12, WAKE_SPEED = 0.05;
+const SLEEP_SPEED = 0.03, SLEEP_FRAMES = 12, WAKE_SPEED = 0.05, GAINING = 6, GAIN = 0.0005;
 const MAX_SPEED = 8, MAX_SPIN = 45;
 // A body this far outside the canvas has left it for good.
 const GONE = 16;
 // Walls and obstacles without their own bounce and friction.
 const SURFACE = { bounce: 0, friction: 0.5 };
 
-const boolean = (value, path) => { if (typeof value !== 'boolean') fail(path, 'expected true or false'); return value; };
-const pair = (value, path, min, max) => {
-  if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
-  return value.map((n, i) => number(n, `${path}[${i}]`, min, max));
-};
 const identifier = (value, path) => {
   if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,59}$/.test(value) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(value)) fail(path, 'expected a portable name: a letter, then letters, digits, _ or -, at most 60 characters');
   return value;
@@ -113,7 +117,7 @@ function readMaterial(value, path, fixed) {
   };
 }
 
-const BODY_FIELDS = ['temperature', 'team', 'speed', 'name', 'shape', 'radius', 'size', 'points', 'sides', 'gap', 'thickness', 'at', 'pivot', 'angle', 'velocity', 'spin', 'fixed', 'weightless', 'asleep', 'tireless', 'density', 'bounce', 'friction', 'drag', 'spinDrag', 'fill', 'fillEvery', 'outline', 'symbol', 'trail', 'smear', 'breaks', 'ring', 'grid'];
+const BODY_FIELDS = ['temperature', 'team', 'speed', 'name', 'shape', 'radius', 'size', 'points', 'sides', 'gap', 'thickness', 'at', 'pivot', 'angle', 'velocity', 'spin', 'fixed', 'weightless', 'asleep', 'tireless', 'density', 'bounce', 'friction', 'drag', 'spinDrag', 'fill', 'fillEvery', 'outline', 'symbol', 'rolls', 'trail', 'smear', 'breaks', 'ring', 'grid'];
 
 // One entry of `bodies`: a body, or copies of it laid out on a ring or a grid. Returns the bodies it makes.
 function readBody(entry, path, context) {
@@ -188,6 +192,7 @@ function readBody(entry, path, context) {
     if (typeof entry.symbol !== 'string' || !Object.hasOwn(symbols, entry.symbol)) fail(`${path}.symbol`, `unknown symbol ${JSON.stringify(entry.symbol)}`);
     if (shape === 'hoop') fail(`${path}.symbol`, 'a hoop is drawn as its outline; give it fill');
     symbol = entry.symbol;
+    if (entry.rolls !== undefined && shape !== 'circle') fail(`${path}.rolls`, `a ${shape}'s picture always turns with it; rolls is for a circle, whose picture stays upright without it`);
     // A picture is drawn with its middle on the body's centre, and a polygon's centre is its centroid, which a lopsided
     // outline has off the middle its points were written around. The picture belongs where the points were written, so
     // it is padded with empty columns and rows until its middle is the centroid: a triangle's picture then stands on
@@ -200,6 +205,7 @@ function readBody(entry, path, context) {
       }
     }
   } else {
+    if (entry.rolls !== undefined) fail(`${path}.rolls`, 'rolls turns a circle\'s symbol as it rolls; a plain disc looks the same at every angle, so give the body a symbol');
     if (entry.fill === undefined) fail(`${path}.fill`, 'expected a palette key, or a list of keys to change to at each hit');
     fills = Array.isArray(entry.fill) ? entry.fill : [entry.fill];
     if (!fills.length || fills.length > 16) fail(`${path}.fill`, 'expected 1–16 palette keys');
@@ -247,11 +253,17 @@ function readBody(entry, path, context) {
   if (entry.breaks !== undefined) {
     if (!context.breakable) fail(`${path}.breaks`, 'bodies break in a pixelforge-bodies source; the bodies in a fluid do not break yet');
     if (!isObject(entry.breaks)) fail(`${path}.breaks`, 'expected { at, pieces, speed }');
-    fields(entry.breaks, ['at', 'pieces', 'speed'], `${path}.breaks`);
+    fields(entry.breaks, ['at', 'pieces', 'speed', 'fall'], `${path}.breaks`);
     if (shape === 'hoop') fail(`${path}.breaks`, 'a hoop is a container and does not break; an event can make it vanish');
     if (fixed) fail(`${path}.breaks`, 'a fixed body takes no knocks; break it on cue with an event whose power is break');
     if (area < 4) fail(`${path}.breaks`, 'the body is under 4 square pixels, too small to show pieces; make it bigger');
     breaks = { at: number(entry.breaks.at ?? 3, `${path}.breaks.at`, 0.1, 16), pieces: integer(entry.breaks.pieces ?? 6, `${path}.breaks.pieces`, 2, 16), speed: number(entry.breaks.speed ?? 0.5, `${path}.breaks.speed`, 0, MAX_SPEED) };
+    // The pieces of a weightless body float as it did, unless they `fall`: a shell that holds its shape in the air until
+    // it is hit, and crumbles down as it breaks. (An egg of weightless pieces left its bits hanging beside it.)
+    if (entry.breaks.fall !== undefined) {
+      if (boolean(entry.breaks.fall, `${path}.breaks.fall`) && !material.weightless) fail(`${path}.breaks.fall`, 'fall gives weight to the pieces of a weightless body; this body has weight, so its pieces fall already');
+      breaks.fall = entry.breaks.fall;
+    }
   }
   // Copies on a ring (each turned to face out from its centre, `at`) or on a grid (from `at`).
   if (entry.ring !== undefined && entry.grid !== undefined) fail(`${path}.grid`, 'copies go on a ring or a grid, not both');
@@ -283,7 +295,7 @@ function readBody(entry, path, context) {
     invMass: fixed ? 0 : 1 / mass, invInertia: fixed || shape === 'hoop' ? 0 : 1 / (mass * inertia),
     bounce: material.bounce, friction: material.friction, drag: material.drag, spinDrag: material.spinDrag,
     weightless: material.weightless, asleep: material.asleep, tireless: material.tireless, temperature, team, speed, fills, fillEvery, outline, symbol, trail, smear, breaks,
-    ...(rows && { rows }), ...(pivot && pivoted(x, y, a, pivot, velocity, spin))
+    ...(rows && { rows }), ...(entry.rolls !== undefined && boolean(entry.rolls, `${path}.rolls`) && { rolls: true }), ...(pivot && pivoted(x, y, a, pivot, velocity, spin))
   }));
 }
 // A fixed body turning about a pivot: `at` (x, y) is the pivot, its velocity the pivot's; the body's centre and its
@@ -425,8 +437,8 @@ function readRopes(list, path, { bodies, byName, palette, joints }) {
 
 function readEffect(effect, path, context) {
   if (!isObject(effect)) fail(path, 'expected an effect');
-  fields(effect, ['frames', 'duration', 'substeps', 'iterations', 'gravity', 'background', 'walls', 'obstacles', 'territory', 'bodies', 'joints', 'ropes', 'cloths', 'most', 'pickups', 'events', 'strikes', 'hud'], path);
-  const { width, height, symbols, palette } = context, most = context.frames ?? LIMITS.frames;
+  fields(effect, ['frames', 'duration', 'substeps', 'iterations', 'gravity', 'background', 'walls', 'obstacles', 'territory', 'bodies', 'joints', 'ropes', 'cloths', 'most', 'pickups', 'events', 'strikes', 'hud', 'loop'], path);
+  const { width, height, symbols, palette } = context, most = context.frames;
   const background = effect.background === undefined ? null : paletteKey(effect.background, `${path}.background`, palette);
   if (Number.isInteger(effect.frames) && effect.frames > most && effect.frames <= MATCH_FRAMES) fail(`${path}.frames`, `a recipe holds at most ${most} frames; write a longer match as numbered video frames: pixelbolt sequence <source> --out <folder> --fps 30, or pixel_compile with sequence`);
   const frames = integer(effect.frames, `${path}.frames`, 1, most);
@@ -473,7 +485,15 @@ function readEffect(effect, path, context) {
   // room for every body with breaks to break into all its pieces, up to CROWD.
   const pieces = bodies.reduce((sum, b) => sum + (b.breaks ? b.breaks.pieces : 0), 0);
   const crowd = integer(effect.most ?? Math.min(CROWD, Math.max(LIMITS.bodies, bodies.length + pieces)), `${path}.most`, bodies.length, CROWD);
-  return { frames, duration, substeps, iterations, gravity, background, walls: Object.fromEntries(BODY_WALLS.map(edge => [edge, walls.includes(edge)])), obstacles, territory, bodies, joints, ropes, cloths, most: crowd, pickups, events, strikes, hud };
+  // A loop is cloth in a wind that repeats every `frames` frames, on things that stay where they are: what falls, swings
+  // on a joint or is moved by keys plays once and ends somewhere else.
+  const loop = effect.loop === undefined ? false : boolean(effect.loop, `${path}.loop`);
+  if (loop) {
+    const once = !cloths.length ? 'no cloth' : bodies.some(b => !b.fixed) ? 'a body that is not fixed' : bodies.some(b => b.vx || b.vy || b.spin) ? 'a fixed body that moves' : joints.length ? 'joints or ropes'
+      : territory || pickups.length || events.length || strikes.length ? 'a territory, pickups, events or strikes' : cloths.some(cloth => cloth.pins.some(pin => pin.keys)) ? 'a pin moved by keys' : frames < 4 ? 'fewer than 4 frames' : null;
+    if (once) fail(`${path}.loop`, `a loop is cloth in a wind, pinned to points or to fixed bodies that stay still, and its wind repeats every \`frames\` frames (4 or more); this effect has ${once}, which plays once. Leave loop out`);
+  }
+  return { frames, duration, substeps, iterations, gravity, background, walls: Object.fromEntries(BODY_WALLS.map(edge => [edge, walls.includes(edge)])), obstacles, territory, bodies, joints, ropes, cloths, most: crowd, pickups, events, strikes, hud, loop };
 }
 
 // ---- Pixel obstacles --------------------------------------------------------------------------------------------------
@@ -754,7 +774,7 @@ export function createBodyWorld(effect, context) {
   });
   const ropes = (effect.ropes ?? []).map(rope => ({ ...rope, links: rope.linkIndices.map(index => bodies[index]), joints: rope.jointIndices.map(index => joints[index]) }));
   const chain = Math.max(0, ...ropes.map(rope => rope.links.length));
-  const cloths = (effect.cloths ?? []).map(definition => createCloth(definition, { bodies }));
+  const cloths = (effect.cloths ?? []).map(definition => createCloth(definition, { bodies, gravity }));
   // A cloth's solid test reads the live world grid, which a fluid may replace when its obstacles move.
   const solidAt = (x, y) => {
     const ix = Math.floor(x), iy = Math.floor(y);
@@ -793,6 +813,8 @@ export function createBodyWorld(effect, context) {
   // picture goes with the piece of the nearest site, so the picture breaks with it and none of it is lost. A piece moves as
   // its part of the body moved (velocity and turning), flung `kick` pixels a frame away from `at`; a sliver that holds no
   // pixel of the picture is dust and is dropped. The body is gone and what rested on it wakes; pieces never break again.
+  // Fresh pieces grip nothing (`fresh` counts their frames, see advance): they fit each other exactly, so with friction
+  // the ones left on two ledges locked as an arch, and held up for good the ball that had broken the crate.
   // Returns the number of pieces (none when it can't break into two).
   const shatter = (b, at, count, kick) => {
     if (b.gone || b.piece || b.shape === 'hoop') return 0;
@@ -871,7 +893,7 @@ export function createBodyWorld(effect, context) {
         ...b, name: null, shape: 'polygon', parts: [polygonPart(local)], size, extent: Math.max(size[0], size[1]) / 2, fixed: false, x, y, x0: x, y0: y,
         vx: b.vx - b.w * wy + (f > 1e-6 ? kick * fx / f : 0), vy: b.vy + b.w * wx + (f > 1e-6 ? kick * fy / f : 0), spin: 0,
         invMass: 1 / mass, invInertia: 1 / (mass * inertia), symbol: null, rows: picture.map(row => row.join('')), fills: null, fillEvery: null, outline: null, colour: 0,
-        trail: null, smear: null, speed: null, tireless: false, energy: undefined, breaks: null, piece: true, pivot: null, anchor: null, drift: null, cuts: false,
+        trail: null, smear: null, speed: null, tireless: false, energy: undefined, breaks: null, piece: true, fresh: 0, grip: b.friction, friction: 0, weightless: b.breaks?.fall ? false : b.weightless, pivot: null, anchor: null, drift: null, cuts: false,
         gone: false, asleep: false, sleepy: 0, hit: false, struck: false, hits: 0, history: [], poses: [], held: undefined, rested: b.rested ? { ...b.rested } : undefined
       });
     });
@@ -1093,11 +1115,13 @@ export function createBodyWorld(effect, context) {
   const substep = () => {
     placeMoving();
     wakeJoints(joints);
-    let contacts = collide();
     // Bodies joined by a joint with collide: false pass through each other (the links of a rope, a ragdoll's neighbours).
     const skip = jointPairs(joints.filter(joint => !joint.broken));
-    if (skip.size) contacts = contacts.filter(contact => !(contact.b && skip.has(pairKey(contact.a.index, contact.b.index))));
-    if (cutters) contacts = cut(contacts);
+    const gather = () => {
+      const met = skip.size ? collide().filter(contact => !(contact.b && skip.has(pairKey(contact.a.index, contact.b.index)))) : collide();
+      return cutters ? cut(met) : met;
+    };
+    let contacts = gather();
     // A body moving into a sleeping one wakes it; so does anything moving that it rests on, and a fixed body that moves
     // at all (a platform sinking slowly from under a box, or one turning under it, would leave it asleep in the air).
     const woken = new Set();
@@ -1115,7 +1139,7 @@ export function createBodyWorld(effect, context) {
     rouse(woken);
     // Woken bodies meet what they touch this substep too: gathered while they slept, a stack knocked from the side had
     // no contacts among its crates or with the floor, and its crates sank half a pixel into each other.
-    if (woken.size) { contacts = collide(); if (cutters) contacts = cut(contacts); }
+    if (woken.size) contacts = gather();
     // Velocities: gravity, drag, and the speed limits.
     for (const b of bodies) {
       if (!dynamic(b) || b.asleep) continue;
@@ -1139,11 +1163,12 @@ export function createBodyWorld(effect, context) {
       if (b.w > spinLimit) b.w = spinLimit; else if (b.w < -spinLimit) b.w = -spinLimit;
     }
     // Prepare each point: its arms, the approach speed it bounces from, the masses it is solved with and the impulses it
-    // starts with.
+    // starts with (again, for the contacts gathered after a body breaks).
     const next = new Map();
-    for (const contact of contacts) {
+    const prepare = () => contacts.forEach(contact => {
       const { a, b, nx, ny } = contact, tx = ny, ty = -nx;
-      let ma = solid(a) ? 0 : a.invMass, ia = solid(a) ? 0 : a.invInertia, mb = solid(b) ? 0 : b.invMass, ib = solid(b) ? 0 : b.invInertia;
+      // A body in a liquid moves with some of the liquid round it (`heft`, from fluid.js: its mass with that, over its own).
+      let ma = solid(a) ? 0 : a.invMass / (a.heft ?? 1), ia = solid(a) ? 0 : a.invInertia, mb = solid(b) ? 0 : b.invMass / (b.heft ?? 1), ib = solid(b) ? 0 : b.invInertia;
       for (const point of contact.points) {
         point.rax = point.x - a.x; point.ray = point.y - a.y; point.rbx = b ? point.x - b.x : 0; point.rby = b ? point.y - b.y : 0;
         const [dvx, dvy] = relative(contact, point);
@@ -1171,6 +1196,54 @@ export function createBodyWorld(effect, context) {
         const saved = warm.get(`${contact.key}:${point.id}`), { face } = contact, kept = saved && (!face || (saved[2] === face.nx && saved[3] === face.ny)) ? saved : null;
         point.normal = kept ? kept[0] : 0; point.tangent = kept ? kept[1] : 0; point.most = 0;
       }
+    });
+    prepare();
+    // How hard each body that breaks is knocked this substep, and where: at each point where something meets it, the speed
+    // the two meet at (with its bounce), shared out as easily as each side gives there (its weight and its turning about
+    // its centre both resist, so a box landing on a corner is knocked as hard as one landing flat, and a pebble barely
+    // knocks a heavy vase). Measured from the speed they meet at, not the pushes the solve passes on, so a knock breaks what
+    // it hits and not every crate in the row behind it at once: those break, if they do, as the pieces hit them.
+    if (breakable) {
+      const knocks = new Map(), give = (body, rx, ry, nx, ny) => { const arm = rx * ny - ry * nx; return body.invMass + body.invInertia * arm * arm; };
+      // A knock passes through what can't break. A body that is pressed from one side (met there, or leant on) meets what
+      // it touches on the other with that weight behind it: `backs` holds, for each body that can't break, what presses
+      // it, which way, the speed that side's knock gives it and how easily the two give together.
+      const backs = new Map(), pressing = point => point.approach < impact && point.sep + Math.min(0, point.approach) * dt <= TOUCH;
+      for (const contact of contacts) {
+        const { a, b, nx, ny } = contact;
+        for (const point of contact.points) {
+          const ka = point.ka = solid(a) ? 0 : give(a, point.rax, point.ray, nx, ny), kb = point.kb = solid(b) ? 0 : give(b, point.rbx, point.rby, nx, ny);
+          if (!pressing(point)) continue;
+          for (const [body, k, by, other, way] of [[a, ka, b, kb, -1], [b, kb, a, ka, 1]]) {
+            if (!k || body.breaks) continue;
+            if (!backs.has(body)) backs.set(body, []);
+            backs.get(body).push({ by, nx: way * nx, ny: way * ny, speed: Math.max(0, -point.approach) * k / (k + other), give: k * other / (k + other) });
+          }
+        }
+      }
+      for (const contact of contacts) {
+        if (!contact.a.breaks && !(contact.b && contact.b.breaks)) continue;
+        const { a, b, nx, ny } = contact;
+        for (const point of contact.points) {
+          const closing = Math.max(0, -point.approach);
+          for (const [body, k, by, other, way] of [[a, point.ka, b, point.kb, -1], [b, point.kb, a, point.ka, 1]]) {
+            if (!body || !body.breaks || !k) continue;
+            let speed = closing * k / (k + other);
+            if (by && other && pressing(point)) for (const back of backs.get(by) ?? []) {
+              const along = way * (back.nx * nx + back.ny * ny);
+              if (back.by !== body && along > 0.5) speed = Math.max(speed, (closing + back.speed * along) * k / (k + back.give));
+            }
+            speed *= 1 + contact.bounce;
+            if (speed > (knocks.get(body)?.speed ?? 0)) knocks.set(body, { speed, at: [point.x, point.y] });
+          }
+        }
+      }
+      // Bodies knocked harder than they hold break, in body order, before the knock is solved: what broke one meets its
+      // pieces, and goes on through them as its weight allows. Broken after the solve, a crate held on two ledges had
+      // already taken the whole of a falling ball's speed, and the ball stopped dead on its pieces.
+      let broke = 0;
+      for (const [b, knock] of [...knocks].sort((p, q) => p[0].index - q[0].index)) if (knock.speed >= b.breaks.at) broke += shatter(b, knock.at, b.breaks.pieces, b.breaks.speed);
+      if (broke) { contacts = gather(); prepare(); }
     }
     for (const contact of contacts) for (const point of contact.points) {
       const { nx, ny } = contact;
@@ -1214,26 +1287,11 @@ export function createBodyWorld(effect, context) {
         apply(contact, point, nx * impulse, ny * impulse);
       }
     }
-    // How hard each body that breaks was knocked this substep, and where: at each point where something met it, the speed
-    // the two met at (with its bounce), shared out as easily as each side gives there (its weight and its turning about
-    // its centre both resist, so a box landing on a corner is knocked as hard as one landing flat, and a pebble barely
-    // knocks a heavy vase). Measured from the speed they met at, not the pushes the solve passed on, so a knock breaks what
-    // it hits and not every crate in the row behind it at once: those break, if they do, as the pieces hit them.
-    const knocks = breakable ? new Map() : null;
-    const give = (body, rx, ry, nx, ny) => { const arm = rx * ny - ry * nx; return body.invMass + body.invInertia * arm * arm; };
     for (const contact of contacts) for (const point of contact.points) {
       next.set(`${contact.key}:${point.id}`, contact.face ? [point.normal, point.tangent, contact.face.nx, contact.face.ny] : [point.normal, point.tangent]);
       if (point.approach < -impact && point.most > 0) { contact.a.hit = contact.a.struck = true; if (contact.b) contact.b.hit = contact.b.struck = true; }
       // A strike's body strikes what it pushes, a hit or not: a blade that sweeps a ball along a wall keeps striking it.
       if (turf && contact.b && point.most > 0) turf.strike(contact.a, contact.b);
-      if (knocks && point.approach < 0 && (contact.a.breaks || (contact.b && contact.b.breaks))) {
-        const { a, b, nx, ny } = contact, ka = solid(a) ? 0 : give(a, point.rax, point.ray, nx, ny), kb = solid(b) ? 0 : give(b, point.rbx, point.rby, nx, ny);
-        for (const [body, k] of [[a, ka], [b, kb]]) {
-          if (!body || !body.breaks || !k) continue;
-          const speed = -point.approach * (1 + contact.bounce) * k / (ka + kb);
-          if (speed > (knocks.get(body)?.speed ?? 0)) knocks.set(body, { speed, at: [point.x, point.y] });
-        }
-      }
     }
     // The cells hit change hands; a body with a held speed goes on at it, along its own heading.
     if (turf) { for (const contact of contacts) if (contact.cell) turf.hit(contact, contact.cell); turf.settle(bodies); }
@@ -1249,8 +1307,6 @@ export function createBodyWorld(effect, context) {
       const [gx, gy] = pull(b), want = 2 * (b.energy + gx * b.x + gy * b.y - spinEnergy(b)), has = b.vx * b.vx + b.vy * b.vy;
       if (want > 0 && has > 1e-12) { const k = Math.sqrt(want / has); b.vx *= k; b.vy *= k; }
     }
-    // Bodies knocked harder than they hold break, in body order, as they move after the knock.
-    if (knocks) for (const [b, knock] of [...knocks].sort((p, q) => p[0].index - q[0].index)) if (knock.speed >= b.breaks.at) shatter(b, knock.at, b.breaks.pieces, b.breaks.speed);
     if (joints.length) breakJoints(joints, current, stats.jointBreaks);
     warm = next;
     time += dt;
@@ -1263,12 +1319,18 @@ export function createBodyWorld(effect, context) {
   }
   const advance = f => {
     current = f;
+    // Fresh pieces take their grip back, slowly at first.
+    if (f > 0) for (const b of bodies) if (b.fresh !== undefined) {
+      const t = Math.min(1, Math.max(0, (++b.fresh - LOOSE_HOLD) / LOOSE_EASE));
+      b.friction = b.grip * t * t;
+      if (t === 1) b.fresh = undefined;
+    }
     if (f > 0) for (let k = 0; k < substeps; k++) substep();
     // Moving fixed bodies are drawn (and met by a fluid) where they are at the frame's end, not where its last substep
     // started: a paddle drawn a substep behind showed a gap before the box it pushed.
     placeMoving();
     // Cloth steps with the frame, against the bodies where they now are. Its pins follow fixed bodies' end-of-frame places.
-    if (f > 0) for (const cloth of cloths) stepCloth(cloth, f, { substeps, iterations, gravity, solidAt, bodies, width, height });
+    if (f > 0) for (const cloth of cloths) stepCloth(cloth, f, { substeps, iterations, gravity, solidAt, bodies, width, height, cycle: effect.loop ? effect.frames : 0 });
     // Powers run out and are taken, and the score is counted, between frames. What a body that vanished held up wakes.
     if (turf) {
       const was = bodies.map(b => b.gone);
@@ -1286,7 +1348,14 @@ export function createBodyWorld(effect, context) {
       if (dynamic(b) && !b.asleep) {
         const fast = Math.max(Math.sqrt(b.vx * b.vx + b.vy * b.vy), Math.abs(b.w) * b.extent);
         b.sleepy = fast < SLEEP_SPEED ? b.sleepy + 1 : 0;
-        if (b.sleepy >= SLEEP_FRAMES) { b.asleep = true; b.vx = 0; b.vy = 0; b.w = 0; }
+        // One that is still gaining speed, however slowly, is not coming to rest: a tower tipping off its last
+        // support turns under SLEEP_SPEED for more than SLEEP_FRAMES frames, and its crates fell asleep mid-tip and
+        // held it there, hanging over nothing. Gaining is a frame faster than the last by GAIN or more, GAINING times
+        // running: a body that rests jitters up and down or creeps up by rounding (a plank on three balls gained a
+        // ten-millionth of a pixel a frame for ever), and one that settles slows.
+        b.gaining = fast > (b.pace ?? 0) + GAIN ? (b.gaining ?? 0) + 1 : 0;
+        b.pace = fast;
+        if (b.sleepy >= SLEEP_FRAMES && b.gaining < GAINING) { b.asleep = true; b.vx = 0; b.vy = 0; b.w = 0; }
       }
       const [x0, y0, x1, y1] = b.box;
       // Far past an open edge a body has left, unless gravity is bringing it back: a ball thrown over the top falls into
@@ -1304,9 +1373,11 @@ export function createBodyWorld(effect, context) {
   };
   // New obstacles (a fluid's that move, or its resting sand) wake the sleeping bodies within a pixel of a hard pixel that
   // came or went, and those resting on them: a crate asleep on a shelf that slid away hung in the air, and one beside a
-  // shelf rising into it was passed through.
+  // shelf rising into it was passed through. Soft ground (ice, sand at rest) wakes them where it goes, not where it
+  // comes: a box asleep on a floe hung in the air once the ice under it had melted, while sand settling beside a
+  // sleeper is no reason to stir it.
   const retrace = obstacles => {
-    const before = world.hard;
+    const before = world.hard, ground = world.solid;
     world = traceObstacles({ obstacles, walls: effect.walls }, width, height);
     const woken = [];
     for (const b of bodies) {
@@ -1314,7 +1385,7 @@ export function createBodyWorld(effect, context) {
       const [x0, y0, x1, y1] = b.box;
       let moved = false;
       for (let y = Math.max(0, Math.floor(y0) - 1); y <= Math.min(height - 1, Math.floor(y1) + 1) && !moved; y++) {
-        for (let x = Math.max(0, Math.floor(x0) - 1); x <= Math.min(width - 1, Math.floor(x1) + 1); x++) if (before[y * width + x] !== world.hard[y * width + x]) { moved = true; break; }
+        for (let x = Math.max(0, Math.floor(x0) - 1); x <= Math.min(width - 1, Math.floor(x1) + 1); x++) if (before[y * width + x] !== world.hard[y * width + x] || (ground[y * width + x] && !world.solid[y * width + x])) { moved = true; break; }
       }
       if (moved) { b.asleep = false; b.sleepy = 0; woken.push(b); }
     }
@@ -1360,17 +1431,30 @@ export function createBodyWorld(effect, context) {
     for (const joint of joints) { joint.aIndex = joint.a ? joint.a.index : -1; joint.bIndex = joint.b ? joint.b.index : -1; }
     warm = new Map();
   };
-  return { bodies, stats, gravity, advance, turf, retrace, retraceCells, add, place, compact, joints, ropes, cloths };
+  // A loop's cloth, blown through whole cycles of its wind before the first frame is drawn, until a cycle ends where it
+  // began. Returns the frames that took and how far the worst particle still is from closing the loop.
+  const settle = () => {
+    let warmed = 0, seam = Infinity;
+    for (let cycle = 0; cycle < loopCycles(effect.frames) && seam > LOOP.seam; cycle++) {
+      const before = cloths.map(cloth => cloth.particles.map(p => [p.x, p.y]));
+      for (let f = 1; f <= effect.frames; f++) advance(f);
+      warmed += effect.frames;
+      seam = 0;
+      cloths.forEach((cloth, c) => cloth.particles.forEach((p, k) => { if (p.present) seam = Math.max(seam, Math.sqrt((p.x - before[c][k][0]) ** 2 + (p.y - before[c][k][1]) ** 2)); }));
+    }
+    return { warmed, seam: round(seam) };
+  };
+  return { bodies, stats, gravity, advance, turf, retrace, retraceCells, add, place, compact, joints, ropes, cloths, settle, loop: effect.loop ? effect.frames : 0 };
 }
 
 // The bodies splits added to a world (the pieces of broken bodies are counted with them, under broken).
 const copiesOf = (world, effect) => world.bodies.length - effect.bodies.length - world.stats.broken.reduce((sum, entry) => sum + entry.pieces, 0);
 const clothFigures = cloths => cloths.length ? { cloths: cloths.map((cloth, index) => ({ name: cloth.definition.name ?? `cloth-${index}`, tears: cloth.tears, rest: cloth.rest })) } : {};
 function simulate(effect, context) {
-  const world = createBodyWorld(effect, context), drawn = [];
+  const world = createBodyWorld(effect, context), drawn = [], loop = effect.loop ? world.settle() : null;
   for (let f = 0; f < effect.frames; f++) { world.advance(f); drawn.push(drawFrame(world, context.width, context.height, context, f, effect.hud)); }
   if (world.cloths.length) world.stats.cloths = clothFigures(world.cloths).cloths;
-  return { drawn, stats: world.stats, turf: world.turf, steps: (effect.frames - 1) * effect.substeps, copies: copiesOf(world, effect) };
+  return { drawn, stats: world.stats, turf: world.turf, steps: ((loop ? loop.warmed : 0) + effect.frames - 1) * effect.substeps, copies: copiesOf(world, effect), loop };
 }
 
 // ---- Drawing ----------------------------------------------------------------------------------------------------------
@@ -1411,6 +1495,23 @@ function disc(d) {
     bounded(discs).set(d, cells);
   }
   return discs.get(d);
+}
+// The same disc as its rows, the first and last column of each (none where first > last), for a painter that fills
+// rows: a trail drawn at a video's pixels is discs thousands of pixels across, which as lists of cells held hundreds of
+// megabytes for as long as the module lived and took seconds a frame to lay.
+const discRows = new Map();
+function discSpans(d) {
+  if (!discRows.has(d)) {
+    const spans = new Int32Array(2 * d), r = d / 2;
+    for (let j = 0; j < d; j++) {
+      const v = (j + 0.5 - r) / r;
+      let first = d, last = -1;
+      for (let i = 0; i < d; i++) { const u = (i + 0.5 - r) / r; if (u * u + v * v <= 1) { if (first === d) first = i; last = i; } }
+      spans[2 * j] = first; spans[2 * j + 1] = last;
+    }
+    bounded(discRows).set(d, spans);
+  }
+  return discRows.get(d);
 }
 
 // A circle of pixels around a centre: one pixel thick, each column's top and bottom pixel on the top and bottom arcs
@@ -1568,11 +1669,12 @@ function uprightRows(b) {
 }
 
 // A picture turned (craft.js turnRows: its sides turned to whole pixel steps, so it stays crisp and keeps its shape, and
-// its outline and frame stay closed lines), cached by picture and angle.
+// its outline and frame stay closed lines), cached by picture and angle. A circle's picture rolls in place instead
+// (craft.js rollRows): its outline as drawn, the inside turned.
 const sprites = new Map();
-function sprite(rows, degrees) {
-  const key = `${rows.join('/')}@${degrees}`;
-  if (!sprites.has(key)) bounded(sprites).set(key, turnRows(rows, degrees));
+function sprite(rows, degrees, round) {
+  const key = `${rows.join('/')}@${degrees}${round ? 'o' : ''}`;
+  if (!sprites.has(key)) bounded(sprites).set(key, round ? { rows: rollRows(rows, degrees), origin: [0, 0] } : turnRows(rows, degrees));
   return sprites.get(key);
 }
 
@@ -1701,14 +1803,16 @@ function bodyPainter(grid, W, H, n) {
 }
 // Smears, under the bodies: each one's shape swept from where it was `smear.frames` frames ago to where it is, sampled
 // so its far end moves under half a (fine) pixel a sample, the oldest part first, so the colours run from the first,
-// just behind the body, to the last at the far end of the sweep, as a pixel artist draws a fast swing.
-function paintSmears(bodies, n, put) {
+// just behind the body, to the last at the far end of the sweep, as a pixel artist draws a fast swing. Drawn finer
+// still for a video (`n` above the source's own `sampled`), the sweep keeps the source's samples and each is filled
+// finer: sampled every half a video pixel, a sword's smear took half a second a frame for edges no smoother.
+function paintSmears(bodies, n, put, sampled = n) {
   for (const b of bodies) {
     if (b.gone || b.hidden || !b.smear || b.poses.length < 2) continue;
     const { colors, frames } = b.smear, codes = colors.map(key => key.charCodeAt(0)), poses = b.poses, spans = poses.length - 1;
     for (let k = 0; k < spans; k++) {
       const [ax, ay, ac, as] = poses[k], [bx, by, bc, bs] = poses[k + 1], from = atan2Deg(as, ac), turn = turnBetween(from, atan2Deg(bs, bc));
-      const reach = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) + Math.abs(turn) * RADIANS * b.extent, steps = Math.max(1, Math.ceil(reach * n * 2));
+      const reach = Math.sqrt((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) + Math.abs(turn) * RADIANS * b.extent, steps = Math.max(1, Math.ceil(reach * sampled * 2));
       for (let t = 0; t < steps; t++) {
         const u = t / steps, age = spans - k - u, a = from + turn * u, code = codes[Math.min(codes.length - 1, Math.floor(age / frames * codes.length))];
         const pose = { ...b, x: ax + (bx - ax) * u, y: ay + (by - ay) * u, c: cosDeg(a), s: sinDeg(a) };
@@ -1722,26 +1826,33 @@ function paintSmears(bodies, n, put) {
 /**
  * Draws the bodies `n` times finer than the world's pixels (a source's `subpixels`) into `grid` (character codes,
  * width × n by height × n): each body is its own picture, every pixel of it a square n fine pixels across, turned with
- * the body and placed where the body is to the fine pixel (held as heldFine and fineStep say), so it turns and moves
- * smoothly and never changes shape. A circle's picture doesn't turn, as at whole pixels; a hoop is drawn as at whole
- * pixels, enlarged.
+ * the body and placed where the body is to the fine pixel (held as heldTurn and heldFine say), so it turns and moves
+ * smoothly and never changes shape. A circle's picture doesn't turn unless it `rolls`, as at whole pixels; a hoop is
+ * drawn as at whole pixels, enlarged. `sampled` is the source's own subpixels where `n` is finer still (a video's
+ * pixels): smears and trails are sampled along their sweep as the source's are.
  */
-export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
+export function paintBodiesFine(bodies, grid, width, height, symbols, n, sampled = n) {
   const W = width * n, H = height * n;
   const put = (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; };
   // Trails first, under every body: a disc a pixel narrower than the body, along where it was in recent frames.
   for (const b of bodies) {
     if (b.gone || b.hidden || !b.trail || b.history.length < 2) continue;
-    const code = b.trail.color.charCodeAt(0), points = b.history.slice(-1 - b.trail.length), d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1) * n, cells = disc(d);
+    const code = b.trail.color.charCodeAt(0), points = b.history.slice(-1 - b.trail.length), d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1) * n, spans = discSpans(d);
+    // A disc each fine pixel along the way; finer than the source, as far apart as leaves the trail's edge within half
+    // a fine pixel of straight.
+    const every = n > sampled ? Math.max(1, Math.floor(Math.sqrt(2 * d))) : 1;
     for (let k = 0; k + 1 < points.length; k++) {
-      const [ax, ay] = points[k], [bx, by] = points[k + 1], steps = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay)) * n));
+      const [ax, ay] = points[k], [bx, by] = points[k + 1], steps = Math.max(1, Math.ceil(Math.max(Math.abs(bx - ax), Math.abs(by - ay)) * n / every));
       for (let s = 0; s < steps; s++) {
         const left = Math.round((ax + (bx - ax) * s / steps) * n - d / 2), top = Math.round((ay + (by - ay) * s / steps) * n - d / 2);
-        for (const [i, j] of cells) put(left + i, top + j, code);
+        for (let j = Math.max(0, -top), rows = Math.min(d, H - top); j < rows; j++) {
+          const x0 = Math.max(0, left + spans[2 * j]), x1 = Math.min(W - 1, left + spans[2 * j + 1]);
+          if (x0 <= x1) grid.fill(code, (top + j) * W + x0, (top + j) * W + x1 + 1);
+        }
       }
     }
   }
-  paintSmears(bodies, n, put);
+  paintSmears(bodies, n, put, sampled);
   const painter = bodyPainter(grid, W, H, n);
   for (const b of drawOrder(bodies)) {
     if (b.gone || b.hidden) continue;
@@ -1752,7 +1863,7 @@ export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
       for (const [x, y] of cover(b, b.x, b.y)) for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) put(x * n + i, y * n + j, code);
       continue;
     }
-    const { rows, cx, cy } = pictureOf(b, symbols), w = rows[0].length, h = rows.length, turns = b.shape !== 'circle';
+    const { rows, cx, cy } = pictureOf(b, symbols), w = rows[0].length, h = rows.length, turns = b.shape !== 'circle' || b.rolls;
     const rx = Math.max(cx, w - cx), ry = Math.max(cy, h - cy), reach = turns ? Math.sqrt(rx * rx + ry * ry) : Math.max(rx, ry);
     const degrees = turns ? heldTurn(b, reach, n) : 0, c = cosDeg(degrees), s = sinDeg(degrees);
     const q = ((Math.round(degrees / 90) % 4) + 4) % 4, x = heldFine(b, 0, [cx, -cy, -cx, cy][q], n, q), y = heldFine(b, 1, [cy, cx, -cy, -cx][q], n, q);
@@ -1767,21 +1878,82 @@ export function paintBodiesFine(bodies, grid, width, height, symbols, n) {
   }
 }
 
-// A frame of a bodies source: the territory's cells and waiting pickups, the bodies over them (n times finer with
-// subpixels) and the heads-up display's operations.
-function drawFrame(world, width, height, context, f, hud = []) {
-  const n = context.subpixels ?? 1, W = width * n, H = height * n, grid = new Uint16Array(W * H);
-  const put = (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; };
+// The cloths drawn under the bodies, or over them, into `grid` (n fine pixels to a world pixel).
+function paintCloths(world, where, grid, width, height, f, n) {
+  const W = width * n, H = height * n, cloths = world.cloths.filter(cloth => cloth.definition.draw === where);
+  if (cloths.length) paintCloth(cloths, (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; }, n, f, world.loop);
+}
+// The bodies into `grid`, with the ropes drawn under them and over them. `sampled` is the source's own subpixels.
+function paintMoving(world, grid, width, height, symbols, n, sampled = n) {
+  const W = width * n, H = height * n, put = (x, y, code) => { if (x >= 0 && y >= 0 && x < W && y < H) grid[y * W + x] = code; };
+  const beneath = world.ropes.filter(rope => rope.draw === 'under'), above = world.ropes.filter(rope => rope.draw === 'over');
+  if (beneath.length) paintRopes(beneath, put, n);
+  if (n > 1) paintBodiesFine(world.bodies, grid, width, height, symbols, n, sampled);
+  else paintBodies(world.bodies, grid, width, height, symbols);
+  if (above.length) paintRopes(above, put, n);
+}
+// A frame of a bodies source: the territory's cells and waiting pickups, the cloth, ropes and bodies over them (n times
+// finer with subpixels) and the heads-up display's operations.
+function drawFrame(world, width, height, context, f, hud) {
+  const n = context.subpixels, W = width * n, H = height * n, grid = new Uint16Array(W * H);
   if (world.turf) world.turf.draw(grid, width, height, f, context.symbols, n);
-  const beneathCloth = world.cloths.filter(cloth => cloth.definition.draw === 'under'), aboveCloth = world.cloths.filter(cloth => cloth.definition.draw === 'over');
-  const beneathRope = world.ropes.filter(rope => rope.draw === 'under'), aboveRope = world.ropes.filter(rope => rope.draw === 'over');
-  if (beneathCloth.length) paintCloth(beneathCloth, put, n);
-  if (beneathRope.length) paintRopes(beneathRope, put, n);
-  if (n > 1) paintBodiesFine(world.bodies, grid, width, height, context.symbols, n);
-  else paintBodies(world.bodies, grid, width, height, context.symbols);
-  if (aboveRope.length) paintRopes(aboveRope, put, n);
-  if (aboveCloth.length) paintCloth(aboveCloth, put, n);
+  paintCloths(world, 'under', grid, width, height, f, n);
+  paintMoving(world, grid, width, height, context.symbols, n);
+  paintCloths(world, 'over', grid, width, height, f, n);
   return { ...crop(grid, W, H), hud: world.turf && hud.length ? world.turf.hud(f, hud, n) : [] };
+}
+// The obstacles drawn under the bodies, or over them, as stamps on a canvas n times finer.
+const obstacleStamps = (effect, where, n) => effect.obstacles.filter(o => o.draw === where).map(o => ({ op: 'stamp', symbol: o.symbol, x: o.x * n, y: o.y * n, ...(n > 1 && { scale: n }) }));
+// A video frame, RGBA, with the bodies and ropes drawn `k` times finer again than the frame's own pixels: at the video's
+// pixels, where a turned picture keeps every one of its pixels, each a whole turned square. (Turned at the world's
+// pixels and then enlarged, a swinging monkey of 70 pixels lost up to 18 of them and drew 20 twice in a frame, each a
+// block ten video pixels wide.) The territory, the obstacles and the heads-up display are the world's own pixels, drawn
+// as ever and enlarged: they lie square on the grid, so nothing of them is lost. So is cloth, which has no picture to
+// keep: drawn that fine its cells are smooth flat shapes and its outline a hair, and it no longer reads as pixel art.
+// `grid` is the bodies and ropes, already drawn.
+function fineImage(world, effect, shell, width, height, context, f, k, grid) {
+  const n = context.subpixels, w = width * n, h = height * n, W = w * k, H = h * k, stamps = where => obstacleStamps(effect, where, n);
+  const layer = ops => renderProject({ ...shell, frames: [{ name: 'frame', ...(ops.length && { ops }) }] }).frames[0].data;
+  const beneath = new Uint16Array(w * h), cloth = new Uint16Array(w * h);
+  if (world.turf) world.turf.draw(beneath, width, height, f, context.symbols, n);
+  paintCloths(world, 'under', beneath, width, height, f, n);
+  paintCloths(world, 'over', cloth, width, height, f, n);
+  const cells = crop(beneath, w, h).op, draped = crop(cloth, w, h).op, hud = world.turf && effect.hud.length ? world.turf.hud(f, effect.hud, n) : [];
+  const ground = [...(effect.background ? [{ op: 'rect', x: 0, y: 0, w, h, color: effect.background }] : []), ...stamps('under')];
+  const under = layer([...ground, ...(cells ? [cells] : [])]);
+  const above = [...(draped ? [draped] : []), ...stamps('over'), ...hud], over = above.length ? layer(above) : null, out = new Uint8Array(W * H * 4), colours = new Map();
+  const colour = code => { if (!colours.has(code)) colours.set(code, parseColor(String.fromCharCode(code), shell.palette)); return colours.get(code); };
+  // What is under the bodies: each of the world's rows enlarged once and copied down the rows it fills.
+  for (let j = 0; j < h; j++) {
+    const first = j * k * W * 4;
+    for (let i = 0, to = first; i < w; i++) {
+      const from = (j * w + i) * 4, r = under[from], g = under[from + 1], b = under[from + 2], a = under[from + 3];
+      for (let x = 0; x < k; x++, to += 4) { out[to] = r; out[to + 1] = g; out[to + 2] = b; out[to + 3] = a; }
+    }
+    for (let r = 1; r < k; r++) out.copyWithin(first + r * W * 4, first, first + W * 4);
+  }
+  // The bodies and ropes, at the frame's own pixels. A colour that lets what is under it show is laid over the ground
+  // alone, as in the sprite sheet, where a body's pixel takes a cell's place in the grid: laid over the cell, a
+  // translucent body was one colour in the sheet and another in the video.
+  let bare = null;
+  for (let c = 0, to = 0; c < W * H; c++, to += 4) {
+    const code = grid[c];
+    if (!code) continue;
+    const rgba = colour(code);
+    if (rgba[3] === 255) { out[to] = rgba[0]; out[to + 1] = rgba[1]; out[to + 2] = rgba[2]; out[to + 3] = 255; continue; }
+    bare ??= cells ? layer(ground) : under;
+    const from = (Math.floor(Math.floor(c / W) / k) * w + Math.floor(c % W / k)) * 4;
+    out[to] = bare[from]; out[to + 1] = bare[from + 1]; out[to + 2] = bare[from + 2]; out[to + 3] = bare[from + 3];
+    blend(out, to, rgba);
+  }
+  // And what is drawn over them, at the world's pixels.
+  if (over) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const from = (j * w + i) * 4;
+    if (!over[from + 3]) continue;
+    const top = over.subarray(from, from + 4);
+    for (let y = j * k; y < (j + 1) * k; y++) for (let x = i * k; x < (i + 1) * k; x++) blend(out, (y * W + x) * 4, top);
+  }
+  return out;
 }
 
 /** Draws the bodies into `grid` (character codes, width × height): trails first, then each body in order (a cutter last). */
@@ -1816,8 +1988,8 @@ export function paintBodies(bodies, grid, width, height, symbols) {
     // picture that small shows a turn without a pinwheel.
     const upright = !b.symbol && !b.rows && (b.shape === 'box' || b.shape === 'polygon') && Math.max(b.size[0], b.size[1]) >= 6 ? uprightRows(b) : null;
     if (b.symbol || b.rows || upright) {
-      const rows = upright ?? b.rows ?? context.symbols[b.symbol], degrees = b.shape === 'circle' ? 0 : Math.round(drawnDegrees(b, [rows[0].length, rows.length])) % 360;
-      const { rows: turned, origin } = sprite(rows, b.shape === 'circle' ? 0 : degrees);
+      const rows = upright ?? b.rows ?? context.symbols[b.symbol], degrees = b.shape === 'circle' && !b.rolls ? 0 : Math.round(drawnDegrees(b, [rows[0].length, rows.length])) % 360;
+      const { rows: turned, origin } = sprite(rows, degrees, b.shape === 'circle');
       // Turned about its centre, which sits on the body's drawn centre: on a pixel's middle where the turned picture's
       // middle is one (mx a half), else on a pixel corner, so the turned picture lies on whole pixels with its middle
       // where the body is. (Snapped as the upright picture, then rounded, a turned picture sat a quarter pixel down and
@@ -1849,17 +2021,19 @@ function crop(grid, width, height) {
 
 // ---- Compiling --------------------------------------------------------------------------------------------------------
 // A source's `subpixels`: how many times finer than the world's pixels its bodies are drawn (1, the default, draws them
-// at whole pixels). The recipe's canvas is that many times larger, at most 256 a side for an animation.
+// at whole pixels). The recipe's canvas is that many times larger, at most BODIES_SIDE a side.
+// A bodies canvas keeps 256 a side, whatever an animation frame may be: the simulation's per-frame cost is not budgeted.
+const BODIES_SIDE = 256;
 // `effects`, the source's effects as written, only make the hint name a value the frames' pixels allow too.
 export function readSubpixels(value, path, width, height, effects) {
   if (value === undefined) return 1;
   const n = integer(value, `${path}.subpixels`, 1, 8);
   const frames = Object.values(isObject(effects) ? effects : {}).reduce((sum, effect) => sum + (Number.isInteger(effect?.frames) && effect.frames > 0 ? effect.frames : 0), 0);
-  if (Math.max(width, height) * n > 256) fail(`${path}.subpixels`, `a ${width}×${height} canvas drawn ${n} times finer is ${width * n}×${height * n}; an animation is at most 256 a side, so use subpixels of at most ${finest(width, height, frames)}`);
+  if (Math.max(width, height) * n > BODIES_SIDE) fail(`${path}.subpixels`, `a ${width}×${height} canvas drawn ${n} times finer is ${width * n}×${height * n}; a bodies effect is drawn at most ${BODIES_SIDE} a side, so use subpixels of at most ${finest(width, height, frames)}`);
   return n;
 }
-// The finest a canvas may be drawn: at most 256 a side and, with `frames`, 4,194,304 pixels over them.
-const finest = (width, height, frames) => Math.max(1, Math.min(8, Math.floor(256 / Math.max(width, height)), frames ? Math.floor(Math.sqrt(4194304 / (frames * width * height))) : 8));
+// The finest a canvas may be drawn: at most BODIES_SIDE a side and, with `frames`, 4,194,304 pixels over them.
+const finest = (width, height, frames) => Math.max(1, Math.min(8, Math.floor(BODIES_SIDE / Math.max(width, height)), frames ? Math.floor(Math.sqrt(4194304 / (frames * width * height))) : 8));
 // The frames a recipe drawn n times finer holds: their pixels together at most 4,194,304, the exporter's limit.
 export function framesFit(frames, width, height, n, path) {
   const pixels = frames * width * n * height * n;
@@ -1883,7 +2057,7 @@ export const scaleAnchor = (anchor, n) => (n > 1 && Array.isArray(anchor) && anc
 // its sweep. Weighed against time, a unit is about what the presets' pair tests and contacts cost: these cases and the
 // presets run at 18 to 85 ms a million.
 const FACE_WORK = 1, PIXEL_WORK = 0.25;
-function work(effect, { width, height, n = 1, symbols = {} }) {
+function work(effect, { width, height, n, symbols }) {
   const count = effect.bodies.length, margin = MAX_SPEED / effect.substeps + 0.1;
   // A fixed body an event breaks falls as pieces, so it is priced as a free body would be.
   const broken = (effect.events ?? []).filter(e => e.power === 'break' && effect.bodies[e.body].fixed);
@@ -1910,7 +2084,7 @@ function work(effect, { width, height, n = 1, symbols = {} }) {
     // A body's picture (its symbol, or its shape) within its reach, turned (a circle doesn't turn), then its trail and its
     // smear: a sample each half (fine) pixel its far end sweeps, each over the bounds it is turned in.
     const picture = b.rows ?? (b.symbol ? symbols[b.symbol] : null), w = Math.max(b.size[0], picture ? picture[0].length : 0), h = Math.max(b.size[1], picture ? picture.length : 0);
-    const reach = b.shape === 'circle' ? Math.max(w, h) / 2 : Math.sqrt(w * w + h * h) / 2, across = 2 * reach * n + 2;
+    const reach = b.shape === 'circle' && !b.rolls ? Math.max(w, h) / 2 : Math.sqrt(w * w + h * h) / 2, across = 2 * reach * n + 2;
     let cost = Math.min(width * height * n * n, across * across);
     if (b.trail) { const d = Math.max(1, Math.min(b.size[0], b.size[1]) - 1) * n; cost += b.trail.length * (MAX_SPEED * n + 1) * d * d; }
     if (b.smear) { const sweep = (b.fixed ? Math.sqrt(b.vx * b.vx + b.vy * b.vy) : MAX_SPEED) + Math.abs(b.spin) * RADIANS * 2 * reach; cost += b.smear.frames * Math.ceil(2 * n * sweep + 1) * across * across; }
@@ -1921,7 +2095,7 @@ function work(effect, { width, height, n = 1, symbols = {} }) {
   // Joints cost an impulse per iteration and substep; cloth adds its particles, constraints and drawn cells.
   const joints = effect.joints ?? [], cloths = effect.cloths ?? [];
   step += joints.length * effect.iterations * 8;
-  const clothCost = clothWork(cloths, { frames: effect.frames, substeps: effect.substeps, iterations: effect.iterations });
+  const clothCost = clothWork(cloths, { frames: effect.frames * (effect.loop ? 1 + loopCycles(effect.frames) : 1), substeps: effect.substeps, iterations: effect.iterations });
   return effect.frames * (effect.substeps * step + frame * PIXEL_WORK) + clothCost;
 }
 // The area of a body's shape: a circle's, or a polygon's (a box's) by its corners.
@@ -2049,7 +2223,7 @@ function readSource(source, frames) {
   if (source.format !== 'pixelforge-bodies' || source.version !== 1) fail('bodies', 'expected version-1 pixelforge-bodies');
   const palette = source.palette ?? {};
   if (!isObject(palette)) fail('bodies.palette', 'expected a palette object');
-  const width = integer(source.width, 'bodies.width', 4, 256), height = integer(source.height, 'bodies.height', 4, 256);
+  const width = integer(source.width, 'bodies.width', 4, BODIES_SIDE), height = integer(source.height, 'bodies.height', 4, BODIES_SIDE);
   // A recipe's frames share the exporter's pixels, so its hint counts them; a match written as video frames (bodiesFrames)
   // keeps none of them, and is held only to 256 a side.
   const n = readSubpixels(source.subpixels, 'bodies', width, height, frames === LIMITS.frames ? source.effects : undefined);
@@ -2078,7 +2252,7 @@ function readSource(source, frames) {
 // One frame's operations: the background, obstacles under the bodies, the bodies' grid, obstacles over them and the
 // heads-up display, on a canvas n times finer with subpixels (the world drawn in blocks that size).
 function frameOps(effect, drawn, width, height, n) {
-  const stamps = where => effect.obstacles.filter(o => o.draw === where).map(o => ({ op: 'stamp', symbol: o.symbol, x: o.x * n, y: o.y * n, ...(n > 1 && { scale: n }) }));
+  const stamps = where => obstacleStamps(effect, where, n);
   return [...(effect.background ? [{ op: 'rect', x: 0, y: 0, w: width * n, h: height * n, color: effect.background }] : []), ...stamps('under'), ...(drawn.op ? [drawn.op] : []), ...stamps('over'), ...drawn.hud];
 }
 // The territory's figures for the metadata (the teams, each frame's cells per team, the cells that changed hands and the
@@ -2089,7 +2263,8 @@ const territoryFigures = (turf, territory) => ({
   ...(turf && turf.stats.strikes && { strikes: turf.stats.strikes })
 });
 
-/** A version-1 pixelforge-bodies source → { recipe, metadata, warnings? }. One-shot: bodies don't loop. */
+/** A version-1 pixelforge-bodies source → { recipe, metadata, warnings? }. One-shot: bodies don't loop. The exception
+ * is an effect with `loop`, cloth in a wind that repeats, whose frames start once the cloth has settled into it. */
 export function compileBodies(source) {
   const { shell, width, height, n, symbols, effects } = readSource(source, LIMITS.frames);
   const frames = [], animations = {}, metadata = { format: 'pixelforge-bodies-metadata', version: 1, effects: {} }, warnings = [];
@@ -2105,15 +2280,17 @@ export function compileBodies(source) {
       frames.push({ name: `${name}-${i}`, duration: effect.duration, ...(ops.length && { ops }) });
       names.push(`${name}-${i}`);
     });
-    animations[name] = { frames: names, loop: false };
+    animations[name] = { frames: names, loop: effect.loop };
     const effectWarnings = run.stats.overlaps.map(pair => `${pair}; they push apart on the first frame. Move it clear`);
+    if (effect.territory?.uneven) effectWarnings.push(effect.territory.uneven);
     if (!run.drawn.some(frame => frame.pixels)) effectWarnings.push(`${path}: nothing is ever on the canvas; check at against width and height`);
+    if (run.loop && run.loop.seam > 0.5) effectWarnings.push(`${path}.loop: after ${run.loop.warmed} frames of its wind the cloth still ends a cycle ${run.loop.seam} px from where it began, so the last frame does not lead into the first; raise the cloth's damping or lower its gust`);
     const crowded = run.stats.crowded.size;
     if (crowded) effectWarnings.push(`${path}.most: ${crowded} ${crowded === 1 ? 'body' : 'bodies'} broke into fewer pieces than asked, or not at all, because the effect holds at most ${effect.most} bodies; raise most`);
     warnings.push(...effectWarnings);
     const played = territoryFigures(run.turf, effect.territory);
     metadata.effects[name] = {
-      frames: effect.frames, substeps: effect.substeps, steps: run.steps, bodies: effect.bodies.length, ...(run.copies && { copies: run.copies }), hits: run.stats.hits,
+      frames: effect.frames, ...(run.loop && { loop: run.loop }), substeps: effect.substeps, steps: run.steps, bodies: effect.bodies.length, ...(run.copies && { copies: run.copies }), hits: run.stats.hits,
       ...(effect.joints.length && { joints: effect.joints.length }), ...(effect.ropes.length && { ropes: effect.ropes.length }), ...(effect.cloths.length && { cloths: effect.cloths.length, clothFigures: run.stats.cloths }),
       ...(run.stats.jointBreaks.length && { brokenJoints: run.stats.jointBreaks }), ...(run.stats.cloths?.some(cloth => cloth.tears) && { clothTears: run.stats.cloths.filter(cloth => cloth.tears).reduce((sum, cloth) => sum + cloth.tears, 0) }),
       escaped: run.stats.escaped, ...(run.stats.broken.length && { broken: run.stats.broken }), rest: run.stats.rest, pixels: run.drawn.map(frame => frame.pixels), ...(Object.keys(run.stats.paths).length && { paths: run.stats.paths }), ...played, ...(effectWarnings.length && { warnings: effectWarnings })
@@ -2126,10 +2303,15 @@ export function compileBodies(source) {
 
 /** One effect of a pixelforge-bodies source stepped a frame at a time, for numbered video frames: a match may run up
  * to MATCH_FRAMES frames, past a recipe's 256, and none of it is kept as a recipe. Returns { name, effect, width,
- * height, palette, frames, duration, image(f), figures() }: image(f) is frame f's RGBA (f must never go back), and
- * figures() the metadata a compiled effect carries, so far. */
-export function bodiesFrames(source, effectName) {
+ * height, scale, palette, frames, duration, loop, image(f), figures() }: image(f) is frame f's RGBA (f must never go back),
+ * and figures() the metadata a compiled effect carries, so far: each named body's path too, [x, y, angle] a frame.
+ * `scale` (1 by default; a whole number, or a function of the match's width and height that returns one) is how many
+ * times the frames will be enlarged for video: the image is then that many times larger each way, with the bodies
+ * and ropes drawn at its own pixels (fineImage), so a picture turns and moves without losing a pixel. */
+export function bodiesFrames(source, effectName, { scale = 1 } = {}) {
   const { shell, width, height, n, palette, symbols, effects } = readSource(source, MATCH_FRAMES);
+  const k = integer(typeof scale === 'function' ? scale(width * n, height * n) : scale, 'sequence.scale', 1, 256);
+  if (width * n * k > STILL_SIDE || height * n * k > STILL_SIDE) fail('sequence.scale', `a ${width * n}×${height * n} match drawn ${k} times larger is ${width * n * k}×${height * n * k}, above ${STILL_SIDE} a side; lower the scale`);
   const chosen = effectName === undefined ? effects[0] : effects.find(entry => entry.name === effectName);
   if (!chosen) fail('sequence.animation', `no effect named "${effectName}"; choose one of: ${effects.map(entry => entry.name).join(', ')}`);
   const { name, path, effect } = chosen;
@@ -2137,9 +2319,12 @@ export function bodiesFrames(source, effectName) {
   if (needs > MATCH_WORK) fail(path, `the match needs about ${Math.round(needs / 1e6)} million updates, more than ${MATCH_WORK / 1e6} million; lower frames, substeps, iterations, the number or size of the bodies, the obstacle faces near them (a checkerboard has one on every pixel edge) or subpixels`);
   // The world gets the symbols too: a symbol body that breaks cuts its picture into the pieces.
   const context = { width, height, symbols, subpixels: n }, world = createBodyWorld(effect, context);
+  if (effect.loop) world.settle();
   let at = -1, image = null;
+  const fine = k > 1 ? new Uint16Array(width * n * k * height * n * k) : null;
+  const warnings = () => [...world.stats.overlaps.map(pair => `${pair}; they push apart on the first frame. Move it clear`), ...(effect.territory?.uneven ? [effect.territory.uneven] : [])];
   return {
-    name: source.name, effect: name, width: width * n, height: height * n, palette, frames: effect.frames, duration: effect.duration,
+    name: source.name, effect: name, width: width * n * k, height: height * n * k, scale: k, palette, frames: effect.frames, duration: effect.duration, loop: effect.loop,
     image: f => {
       if (!Number.isInteger(f) || f < 0 || f < at || f >= effect.frames) fail('sequence', `frame ${f} is not ahead of frame ${at} within the match's ${effect.frames}`);
       // Every frame is drawn, shown or not, as compileBodies draws them: a body's drawn place and angle hold from frame
@@ -2148,11 +2333,17 @@ export function bodiesFrames(source, effectName) {
       while (at < f) {
         at++;
         world.advance(at);
+        if (fine) {
+          fine.fill(0);
+          paintMoving(world, fine, width, height, symbols, n * k, n);
+          if (at === f) image = fineImage(world, effect, shell, width, height, context, at, k, fine);
+          continue;
+        }
         const drawn = drawFrame(world, width, height, context, at, at === f ? effect.hud : []);
         if (at === f) { const ops = frameOps(effect, drawn, width, height, n); image = renderProject({ ...shell, frames: [{ name: 'frame', ...(ops.length && { ops }) }] }).frames[0].data; }
       }
       return image;
     },
-    figures: () => ({ frames: at + 1, ...(copiesOf(world, effect) && { copies: copiesOf(world, effect) }), hits: world.stats.hits, ...(effect.joints.length && { joints: effect.joints.length }), ...(effect.ropes.length && { ropes: effect.ropes.length }), ...clothFigures(world.cloths), ...(world.stats.jointBreaks.length && { brokenJoints: world.stats.jointBreaks }), escaped: world.stats.escaped, ...(world.stats.broken.length && { broken: world.stats.broken }), ...territoryFigures(world.turf, effect.territory) })
+    figures: () => ({ frames: at + 1, ...(copiesOf(world, effect) && { copies: copiesOf(world, effect) }), hits: world.stats.hits, ...(effect.joints.length && { joints: effect.joints.length }), ...(effect.ropes.length && { ropes: effect.ropes.length }), ...clothFigures(world.cloths), ...(world.stats.jointBreaks.length && { brokenJoints: world.stats.jointBreaks }), escaped: world.stats.escaped, ...(world.stats.broken.length && { broken: world.stats.broken }), ...(world.stats.rest !== null && { rest: world.stats.rest }), ...(Object.keys(world.stats.paths).length && { paths: world.stats.paths }), ...territoryFigures(world.turf, effect.territory), ...(warnings().length && { warnings: warnings() }) })
   };
 }

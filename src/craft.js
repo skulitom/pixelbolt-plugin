@@ -46,6 +46,20 @@ export function ditherThreshold(pattern, [ox, oy] = [0, 0], seed = 0, scale = 4)
   const h = matrix.length, w = matrix[0].length, levels = Math.max(...matrix.flat()) + 1;
   return (x, y) => (matrix[(((y + oy) % h) + h) % h][(((x + ox) % w) + w) % w] + 0.5) / levels;
 }
+// How far each pixel's thresholds sit below a layer's on this canvas, as a share of the band's gap: (1 - pattern) ×
+// dither, for a layer holding `threshold` (a ditherThreshold) and `dither`. Worked out once per layer and canvas, since
+// the pattern never moves.
+const FEATHERS = new WeakMap();
+export function feathersOf(layer, width, height) {
+  let known = FEATHERS.get(layer);
+  if (!known || known.width !== width || known.height !== height) {
+    const values = new Float64Array(width * height);
+    for (let j = 0; j < height; j++) for (let i = 0; i < width; i++) values[j * width + i] = (1 - layer.threshold(i, j)) * layer.dither;
+    known = { width, height, values };
+    FEATHERS.set(layer, known);
+  }
+  return known.values;
+}
 
 // ---- Seeded hashing and engine-independent maths -----------------------------------------------------------------
 // A 32-bit hash of integers (MurmurHash3-style mixing). The same inputs give the same value on every platform.
@@ -163,7 +177,9 @@ export function idsOf(data) {
 const FOUR = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 // Proposes fixes on a working copy, in scan order, so the second pixel of a doubled pair is judged after the first.
 // strays: a pixel whose in-canvas eight neighbours all share one other colour takes that colour (noise, pinholes,
-//   isolated specks).
+//   isolated specks). An empty pixel closed in by drawn ones of several colours is a pinhole too (where two bands of
+//   one body meet, no neighbourhood is one colour) and takes the colour most of them have, the first met on a tie;
+//   so do the two cells of a hole that touch only at a corner, each closed in but for the other.
 // corners: the corner pixel of an L-shaped step in a one-pixel line (a "double") takes the colour outside the step,
 //   when those pixels agree. It needs exactly two perpendicular same-colour neighbours, a different colour on the
 //   diagonal between them (so filled areas are untouched) and at least one arm one pixel long, so real right-angle
@@ -191,6 +207,17 @@ export function cleanupIds(ids, width, height, { corners = false, strays = false
     if (uniform && shared >= 0 && shared !== work[i]) {
       work[i] = shared; kinds.set(i, 'stray');
       if (took) took(i, [[x - 1, y - 1], [x, y - 1], [x + 1, y - 1], [x - 1, y], [x + 1, y], [x - 1, y + 1], [x, y + 1], [x + 1, y + 1]].filter(inCanvas).map(indexOf), shared);
+    } else if (!uniform && work[i] === 0) {
+      // The empty neighbours of (px, py), leaving out (sx, sy).
+      const open = (px, py, sx, sy) => { const list = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && !(px + dx === sx && py + dy === sy) && at(px + dx, py + dy) === 0) list.push([px + dx, py + dy]); return list; };
+      const gaps = open(x, y, x, y);
+      if (gaps.length > 1 || (gaps.length === 1 && (gaps[0][0] === x || gaps[0][1] === y || open(gaps[0][0], gaps[0][1], x, y).length))) continue;
+      const counts = new Map();
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const n = dx || dy ? at(x + dx, y + dy) : -1; if (n > 0) counts.set(n, (counts.get(n) ?? 0) + 1); }
+      let most = 0, fill = 0;
+      for (const [id, count] of counts) if (count > most) { most = count; fill = id; }
+      work[i] = fill; kinds.set(i, 'stray');
+      if (took) took(i, [[x - 1, y - 1], [x, y - 1], [x + 1, y - 1], [x - 1, y], [x + 1, y], [x - 1, y + 1], [x, y + 1], [x + 1, y + 1]].filter(point => inCanvas(point) && at(point[0], point[1]) === fill).map(indexOf), fill);
     }
   }
   if (corners) for (let pass = 0; pass < 4; pass++) {
@@ -265,6 +292,29 @@ export function rotateRows(rows, degrees, pivot = [0, 0], { cleanup = true } = {
   const originX = left + x0, originY = top + y0;
   const map = ([px, py]) => { const [x, y] = forward(px + 0.5, py + 0.5); return [Math.floor(x + 1e-9) - originX, Math.floor(y + 1e-9) - originY]; };
   return { rows: rowsOf(trimmed, tw, th), pivot: [pivot[0] - originX, pivot[1] - originY], map };
+}
+
+// Turns a round picture clockwise by `degrees` in place, as a wheel rolls: its outline stays exactly as drawn (a disc
+// covers the same pixels at every angle), and what is inside turns. Every pixel copies the picture's pixel of its own
+// kind, on the edge or inside it, nearest the spot under its centre, so the rim stays one closed line with its marks
+// going round it. (turnRows turns a picture's sides, which a disc has none of: a cheese wheel came out a spiked blob.)
+// Returns rows the size of `rows`.
+export function rollRows(rows, degrees) {
+  const h = rows.length, w = rows[0].length, c = cosDeg(degrees), s = sinDeg(degrees);
+  const drawn = (x, y) => x >= 0 && y >= 0 && x < w && y < h && rows[y][x] !== '.' && rows[y][x] !== ' ';
+  const rim = (x, y) => !drawn(x - 1, y) || !drawn(x + 1, y) || !drawn(x, y - 1) || !drawn(x, y + 1);
+  if (((degrees % 360) + 360) % 360 === 0) return rows.slice();
+  return rows.map((row, y) => Array.from(row, (ch, x) => {
+    if (!drawn(x, y)) return ch;
+    const px = x + 0.5 - w / 2, py = y + 0.5 - h / 2, u = px * c + py * s + w / 2, v = py * c - px * s + h / 2, edge = rim(x, y);
+    let best = ch, near = Infinity;
+    for (let j = Math.floor(v) - 1; j <= Math.floor(v) + 1; j++) for (let i = Math.floor(u) - 1; i <= Math.floor(u) + 1; i++) {
+      if (!drawn(i, j) || rim(i, j) !== edge) continue;
+      const d = (i + 0.5 - u) * (i + 0.5 - u) + (j + 0.5 - v) * (j + 0.5 - v);
+      if (d < near) { near = d; best = rows[j][i]; }
+    }
+    return best;
+  }).join(''));
 }
 
 // Turns a picture clockwise by `degrees` about its centre the way a pixel artist draws a turned sprite: its sides turned

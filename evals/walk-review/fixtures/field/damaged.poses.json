@@ -1,0 +1,547 @@
+{
+  "format": "pixelforge-poses",
+  "version": 1,
+  "name": "saltmarsh-surveyor",
+  "width": 38,
+  "height": 38,
+  "palette": {
+    "k": "#262337",
+    "d": "#393649",
+    "b": "#404768",
+    "s": "#48677e",
+    "m": "#6392a2",
+    "l": "#a1c7bc",
+    "v": "#385052",
+    "e": "#58766c",
+    "g": "#8ba98a",
+    "u": "#986445",
+    "o": "#c38c46",
+    "y": "#e7b865",
+    "p": "#f6daa0",
+    "r": "#a24d48",
+    "a": "#e78362",
+    "f": "#cb8969",
+    "h": "#f2bf8c"
+  },
+  "parts": {
+    "right-sleeve-far": {
+      "rows": [
+        "..kk..",
+        ".kbsk.",
+        ".kssk.",
+        "..ksk.",
+        "..ksk.",
+        "..ksk.",
+        "..kdk.",
+        "..kfk.",
+        "..kffk",
+        "...kk."
+      ]
+    },
+    "right-wader-far": {
+      "rows": [
+        "..d....",
+        ".kdk...",
+        ".kdk...",
+        ".kbk...",
+        ".kbk...",
+        ".kvk...",
+        "kvvek..",
+        "kveek..",
+        "kveekk.",
+        "kveeeek",
+        ".kkkkkk"
+      ]
+    },
+    "right-wader-near": {
+      "rows": [
+        "ssssd....",
+        "sssddk...",
+        "sssdsk...",
+        "...dsk...",
+        "...kbsk..",
+        "...kvvk..",
+        "..keegk..",
+        "..kveek..",
+        "..kveekk.",
+        "..kvegggk",
+        "...kkkkkk"
+      ]
+    },
+    "right-coat": {
+      "rows": [
+        "....kkkkk....",
+        "...kssmmmk...",
+        "..kssmmllmk..",
+        "..ksmmllmsk..",
+        ".kbsmmlmmmsk.",
+        ".kbs.......k.",
+        ".kbs.......k.",
+        ".kbs.......k.",
+        ".kbs......sk.",
+        ".kbss.....sk.",
+        ".kbss.....sk.",
+        ".kbssmmmmmssk",
+        ".kbsssmmmmssk",
+        "..kbbsssssssk",
+        "...kkkbbsskk.",
+        "......kkkk..."
+      ]
+    },
+    "right-net": {
+      "rows": [
+        "...kkkkk...............",
+        ".kkpylsuk..............",
+        "kpl....suk.............",
+        "kl......uk.............",
+        "ks......sk.............",
+        "ks.....lsk.............",
+        ".ks...lsk..............",
+        ".kss.lsk...............",
+        "..kbssuk...............",
+        "...kkkuuy..............",
+        "......kukyy............",
+        ".........kkyy..........",
+        "...........kkyy........",
+        ".............kkyy......",
+        "...............kkyy....",
+        ".................kkyy..",
+        "...................kkyy",
+        ".....................kk"
+      ]
+    },
+    "right-sleeve-near": {
+      "rows": [
+        "...kkk..",
+        "..ksmmk.",
+        ".kssmlmk",
+        ".kbsmmsk",
+        ".kbsmmsk",
+        ".kbsmsk.",
+        "..ksssk.",
+        "..kllsk.",
+        "...kddk.",
+        "...khfk.",
+        "...khffk",
+        "....kkk."
+      ]
+    },
+    "right-scarf": {
+      "rows": [
+        "...kkk...",
+        "..kraark.",
+        ".kraaarrk",
+        "..krrrrk.",
+        "..karkk..",
+        ".krrk....",
+        ".kkk....."
+      ]
+    },
+    "right-face": {
+      "rows": [
+        "...kkkkkk...",
+        "..kruufhhk..",
+        ".kruufhhhk..",
+        ".kruuffhkhk.",
+        ".kruhhhfhfkk",
+        ".krufhfhhhfk",
+        "..kkufhfufk.",
+        "....kffhfk..",
+        ".....kffk...",
+        "......kk...."
+      ]
+    },
+    "right-hat": {
+      "rows": [
+        "......kkkkkk.....",
+        "....kkyyyyook....",
+        "...kyyppyyook....",
+        "...kyppyyyyoouk..",
+        "..kyyyyyooooouk..",
+        "..kourrrrrrruuk..",
+        ".koooyyyyyyyyook.",
+        "kkuuuuoooyyyppyyk",
+        ".kkkkkkkkkkkuuuuk",
+        "............kkkk."
+      ]
+    },
+    "down-sleeve-far": {
+      "rows": [
+        "...kkk..",
+        "..ksmmk.",
+        "..kssmk.",
+        "...kssk.",
+        "...ksssk",
+        "...ksssk",
+        "....kslk",
+        "....kdfk",
+        "....kffk",
+        ".....kk."
+      ]
+    },
+    "down-wader-far": {
+      "rows": [
+        ".kddk.",
+        ".kbsk.",
+        ".kbsk.",
+        ".kbsk.",
+        ".kbsk.",
+        ".kvvk.",
+        ".keek.",
+        ".kvek.",
+        ".kveek",
+        "kveggk",
+        "kkkkkk"
+      ]
+    },
+    "down-wader-near": {
+      "rows": [
+        "..kddk.",
+        "..kbsk.",
+        "..kbsk.",
+        "..kbsk.",
+        "..kbsk.",
+        "..kvvk.",
+        "..kegk.",
+        "..kvek.",
+        ".kveek.",
+        "kveggk.",
+        "kkkkkk."
+      ]
+    },
+    "down-coat": {
+      "rows": [
+        ".....kkkkk....",
+        "...kkssmmkk...",
+        "..kssmmmmmmk..",
+        ".kssmmllmlmsk.",
+        ".kbsmmlmmmlsk.",
+        ".kbsmmsmmmssk.",
+        ".kbsmmsmmmssk.",
+        ".kbsmmsmskkbk.",
+        ".kbsmmsmsllsk.",
+        ".kbsmmsmsmssk.",
+        ".kbsmmsmmmmmk.",
+        "kbssmmsmmmmmsk",
+        "kbsssmbsmmmmsk",
+        "kbbssmbsmmsssk",
+        ".kkkkkbssskkk.",
+        "......kkkk...."
+      ]
+    },
+    "down-net": {
+      "rows": [
+        ".............kkkk...",
+        "...........kkpllyk..",
+        "..........kpl....yk.",
+        "..........kl.....luk",
+        "..........ks......uk",
+        "..........ks.....lsk",
+        "..........kbs...lsk.",
+        "...........kss.lsk..",
+        "...........kusskk...",
+        "...........kuukk....",
+        "...........yuu......",
+        "..........yy........",
+        ".........yyk........",
+        "........yyk.........",
+        ".......yyk..........",
+        "......yyk...........",
+        ".....yyk............",
+        "....yyk.............",
+        "...yyk..............",
+        "..yyk...............",
+        ".yyk................",
+        "yyk.................",
+        "yk..................",
+        "k..................."
+      ]
+    },
+    "down-sleeve-near": {
+      "rows": [
+        "...kkk.",
+        "..ksmmk",
+        ".ksmmlk",
+        ".ksmmsk",
+        ".ksmmsk",
+        ".kssmsk",
+        ".ksssk.",
+        ".kllsk.",
+        "..kddk.",
+        "..kfhk.",
+        "..kffk.",
+        "...kk.."
+      ]
+    },
+    "down-scarf": {
+      "rows": [
+        "...kkkkkkk..",
+        "..krrraaark.",
+        ".krraaarrark",
+        "..krraarrkk.",
+        "...krrark...",
+        "....kark....",
+        "....krk.....",
+        "....kk......"
+      ]
+    },
+    "down-face": {
+      "rows": [
+        "...kkkkkkkk..",
+        "..krufhhhhuk.",
+        ".krufffhhhuk.",
+        ".krukhfhkhuk.",
+        ".kruhhffhhuk.",
+        "..kufhhfhfk..",
+        "...kufhhuk...",
+        "....kfffk....",
+        ".....kkk....."
+      ]
+    },
+    "down-hat": {
+      "rows": [
+        "......kkkkkk.....",
+        ".....kpyyyyok....",
+        "....kyppyyyook...",
+        "....kypyyyyyok...",
+        "...kyyyyyyooook..",
+        "...kurrrrrrruuk..",
+        "..kuooyyyyyyyook.",
+        ".kyyyypppppyyyook",
+        "kkuuuuuooyyuuuukk",
+        ".kkkkkkkkkkkkkk.."
+      ]
+    }
+  },
+  "poses": [
+    {
+      "name": "stand-right",
+      "origin": [
+        19,
+        35
+      ],
+      "parts": [
+        {
+          "name": "sleeve-far",
+          "part": "right-sleeve-far",
+          "at": [
+            0,
+            -18
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "wader-far",
+          "part": "right-wader-far",
+          "at": [
+            -2,
+            -11
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "wader-near",
+          "part": "right-wader-near",
+          "at": [
+            -6,
+            -11
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "coat",
+          "part": "right-coat",
+          "at": [
+            -8,
+            -21
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "net",
+          "part": "right-net",
+          "at": [
+            -17,
+            -26
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "sleeve-near",
+          "part": "right-sleeve-near",
+          "at": [
+            -5,
+            -18
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "scarf",
+          "part": "right-scarf",
+          "at": [
+            -5,
+            -21
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "face",
+          "part": "right-face",
+          "at": [
+            -6,
+            -26
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "hat",
+          "part": "right-hat",
+          "at": [
+            -9,
+            -33
+          ],
+          "cleanup": false
+        }
+      ]
+    },
+    {
+      "name": "stand-down",
+      "origin": [
+        19,
+        35
+      ],
+      "parts": [
+        {
+          "name": "sleeve-far",
+          "part": "down-sleeve-far",
+          "at": [
+            1,
+            -18
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "wader-far",
+          "part": "down-wader-far",
+          "at": [
+            1,
+            -11
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "wader-near",
+          "part": "down-wader-near",
+          "at": [
+            -6,
+            -11
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "coat",
+          "part": "down-coat",
+          "at": [
+            -7,
+            -21
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "net",
+          "part": "down-net",
+          "at": [
+            -3,
+            -29
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "sleeve-near",
+          "part": "down-sleeve-near",
+          "at": [
+            -9,
+            -18
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "scarf",
+          "part": "down-scarf",
+          "at": [
+            -6,
+            -21
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "face",
+          "part": "down-face",
+          "at": [
+            -7,
+            -26
+          ],
+          "cleanup": false
+        },
+        {
+          "name": "hat",
+          "part": "down-hat",
+          "at": [
+            -10,
+            -33
+          ],
+          "cleanup": false
+        }
+      ]
+    }
+  ],
+  "animations": {
+    "stand-right": {
+      "frames": [
+        "stand-right"
+      ]
+    },
+    "stand-down": {
+      "frames": [
+        "stand-down"
+      ]
+    }
+  },
+  "walkCycles": {
+    "walk-right": {
+      "rest": "stand-right",
+      "direction": "right",
+      "feet": [
+        "wader-far",
+        "wader-near"
+      ],
+      "arms": [
+        "sleeve-far",
+        "sleeve-near"
+      ],
+      "stride": 4,
+      "lift": 2,
+      "bob": 1,
+      "duration": 120
+    },
+    "walk-down": {
+      "rest": "stand-down",
+      "direction": "down",
+      "feet": [
+        "wader-far",
+        "wader-near"
+      ],
+      "arms": [
+        "sleeve-far",
+        "sleeve-near"
+      ],
+      "stride": 2,
+      "lift": 1,
+      "bob": 1,
+      "duration": 120
+    }
+  },
+  "sheet": {
+    "columns": 8
+  }
+}

@@ -68,6 +68,7 @@
     "assets": {
       "type": "object",
       "maxProperties": 64,
+      "description": "Together at most 4,194,304 pixels, every frame of every pass, so an overlay over a still backdrop of its size gets one frame fewer: 71 of 320×180, 31 of 480×270.",
       "additionalProperties": {
         "oneOf": [
           {
@@ -91,6 +92,9 @@
                   "revision"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "$ref": "#/$defs/stack"
               }
             ]
           },
@@ -118,6 +122,9 @@
                       "revision"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "$ref": "#/$defs/stack"
                   }
                 ]
               },
@@ -214,7 +221,28 @@
             },
             "maxItems": 2,
             "minItems": 2,
-            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+            "description": "Where it stands, in scene pixels. Give at, or on and cell."
+          },
+          "on": {
+            "type": "string",
+            "description": "Name of a tilemap placement to stand on, with cell, instead of at."
+          },
+          "cell": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -256,
+              "maximum": 512
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[column, row] on that map: the centre of an iso cell's diamond, or the middle of a square cell's bottom edge. Halves stand between cells. On a raised cell it is drawn that much higher and keeps its place in the order."
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 64,
+            "description": "With cell: the height it stands at, in the map's levels. Default: the height of its cell."
           },
           "anchor": {
             "oneOf": [
@@ -517,6 +545,32 @@
                 ],
                 "description": "square (default): cells side by side, each drawing from its top-left. iso: a 2:1 diamond grid (even tile sizes such as [32, 16]), drawn back to front, cell [x, y] at [(x - y + rows - 1) * w/2, (x + y) * h/2]; each drawing stands on its diamond, bottoms aligned and centred across, so a block taller than the tile rises above its cell."
               },
+              "heights": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[0-9. ]+$",
+                  "maxLength": 256
+                },
+                "maxItems": 256,
+                "description": "Iso maps: a row of digits for each row of the map, a cell's level; a dot is the ground. A raised cell is drawn higher and keeps its place in the order. Sort the map so it covers what stands behind it."
+              },
+              "rise": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "description": "With heights: pixels a level. Default: half the tile's height."
+              },
+              "solid": {
+                "type": "boolean",
+                "description": "With heights: draw the cell's tile again at each level under it, so a block tile at least `rise` thick leaves no gap."
+              },
+              "surface": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 256,
+                "description": "Iso maps: how far the ground stands above a cell's diamond, the thickness of a block tile. A placement standing on the map stands that much higher."
+              },
               "legend": {
                 "type": "object",
                 "propertyNames": {
@@ -745,8 +799,7 @@
           }
         },
         "required": [
-          "asset",
-          "at"
+          "asset"
         ],
         "additionalProperties": false
       },
@@ -1071,11 +1124,11 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 256
+        "maxLength": 1024
       },
-      "maxItems": 256,
+      "maxItems": 1024,
       "minItems": 1,
-      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+      "description": "Equal-width text rows, at most 262,144 characters in all. Every character is a palette key; dot and space skip a pixel."
     },
     "frame": {
       "type": "object",
@@ -1090,6 +1143,12 @@
           "minimum": 1,
           "maximum": 60000,
           "description": "Frame duration in milliseconds; default 100."
+        },
+        "time": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15360000,
+          "description": "Scale track sample time in ms. Defaults to total duration of preceding source frames."
         },
         "from": {
           "type": "string",
@@ -1233,6 +1292,27 @@
           "additionalProperties": false,
           "description": "This frame as a tile in the Godot TileSet: its terrain, weight and collision. A frame with tile makes the export write a TileSet."
         },
+        "groups": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "description": "Shared [dx, dy] translations for layers in this frame. A layer refers to one by group."
+        },
         "ops": {
           "type": "array",
           "items": {
@@ -1252,7 +1332,7 @@
           "items": {
             "$ref": "#/$defs/pixel"
           },
-          "maxItems": 65536,
+          "maxItems": 262144,
           "description": "Final canvas-coordinate RGBA replacements after ops and layers. Coordinates must be inside this canvas. Later entries win; transparent erases."
         }
       },
@@ -1294,6 +1374,11 @@
           "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
           "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
         },
+        "group": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Name in this frame’s groups. Its translation adds to this layer’s x and y."
+        },
         "visible": {
           "type": "boolean"
         },
@@ -1311,6 +1396,47 @@
           "type": "integer",
           "minimum": -4096,
           "maximum": 4096
+        },
+        "part": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Polygon part whose pivot lands at x/y plus group. Optional ops follow it in canvas coordinates."
+        },
+        "flipX": {
+          "type": "boolean"
+        },
+        "flipY": {
+          "type": "boolean"
+        },
+        "scale": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 16
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            }
+          ]
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": -15360000,
+          "maximum": 15360000,
+          "description": "Subtract this many ms from the scale track sample time."
         },
         "sort": {
           "enum": [
@@ -1336,7 +1462,54 @@
         }
       },
       "required": [],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependentRequired": {
+        "flipX": [
+          "part"
+        ],
+        "flipY": [
+          "part"
+        ],
+        "scale": [
+          "part"
+        ],
+        "delay": [
+          "part",
+          "scale"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "part"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "sort"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "delay"
+            ]
+          },
+          "then": {
+            "properties": {
+              "scale": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+              }
+            }
+          }
+        }
+      ]
     },
     "op": {
       "oneOf": [
@@ -1399,13 +1572,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1449,13 +1622,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1522,6 +1695,60 @@
           "type": "object",
           "properties": {
             "op": {
+              "const": "polygon"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "maxItems": 256,
+              "minItems": 3,
+              "description": "Ordered vertices relative to x/y. The closed edge includes its pixel endpoints. The interior uses even-odd fill."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "points",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
               "const": "clear"
             },
             "x": {
@@ -1538,13 +1765,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             }
           },
           "required": [
@@ -1846,22 +2073,22 @@
             "sx": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "sy": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "scale": {
               "type": "integer",
@@ -2125,13 +2352,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -2281,13 +2508,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "steps": {
               "type": "integer",
@@ -2431,7 +2658,7 @@
               "items": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 256
+                "maximum": 1024
               },
               "maxItems": 2,
               "minItems": 2,
@@ -2767,7 +2994,7 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 65536,
+              "maximum": 262144,
               "description": "Most replacements per rule per step."
             },
             "seed": {
@@ -2810,14 +3037,14 @@
         "width": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256,
-          "description": "A scene asset is at most 256 pixels a side."
+          "maximum": 1024,
+          "description": "A scene asset is at most 1024 pixels a side and 262,144 pixels in all (320×180, 640×360 and 512×512 fit), a still one too."
         },
         "height": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 256,
-          "description": "A scene asset is at most 256 pixels a side."
+          "maximum": 1024,
+          "description": "A scene asset is at most 1024 pixels a side and 262,144 pixels in all (320×180, 640×360 and 512×512 fit), a still one too."
         },
         "palette": {
           "type": "object",
@@ -2863,6 +3090,252 @@
             "$ref": "#/$defs/rows"
           }
         },
+        "parts": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "pivot": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "Local pixel placed at the instance position. Defaults to [0, 0]."
+              },
+              "ops": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "const": "polygon"
+                        },
+                        "x": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "y": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "points": {
+                          "type": "array",
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer",
+                              "minimum": -4096,
+                              "maximum": 4096
+                            },
+                            "maxItems": 2,
+                            "minItems": 2,
+                            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                          },
+                          "maxItems": 256,
+                          "minItems": 3
+                        },
+                        "color": {
+                          "type": "string",
+                          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                        },
+                        "filled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "op",
+                        "points",
+                        "color"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "const": "line"
+                        },
+                        "x": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "y": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "x2": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "y2": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "color": {
+                          "type": "string",
+                          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                        }
+                      },
+                      "required": [
+                        "op",
+                        "x2",
+                        "y2",
+                        "color"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "const": "pixel"
+                        },
+                        "x": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "y": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "color": {
+                          "type": "string",
+                          "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                        }
+                      },
+                      "required": [
+                        "op",
+                        "color"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 2048
+              }
+            },
+            "required": [
+              "ops"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "scaleTracks": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 15360000
+                    },
+                    "scale": {
+                      "oneOf": [
+                        {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 16
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 16
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "at",
+                    "scale"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 256,
+                "minItems": 1,
+                "description": "Ascending milliseconds. For a loop, start at 0 and end at its period."
+              },
+              "ease": {
+                "enum": [
+                  "linear",
+                  "hold",
+                  "in",
+                  "out",
+                  "inOut"
+                ]
+              },
+              "loop": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "keys"
+            ],
+            "additionalProperties": false,
+            "if": {
+              "required": [
+                "loop"
+              ],
+              "properties": {
+                "loop": {
+                  "const": true
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "keys": {
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "properties": {
+                        "at": {
+                          "const": 0
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
         "anchor": {
           "type": "array",
           "items": {
@@ -2882,11 +3355,75 @@
           "maxItems": 256,
           "minItems": 1
         },
+        "headings": {
+          "type": "object",
+          "properties": {
+            "frames": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+              },
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "The frame that stands at each heading: {\"0\": \"south\", \"90\": \"west\"}."
+            },
+            "animations": {
+              "type": "object",
+              "minProperties": 1,
+              "maxProperties": 64,
+              "additionalProperties": {
+                "type": "object",
+                "minProperties": 1,
+                "propertyNames": {
+                  "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+                },
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "description": "For a name, the animation that plays it at each heading: {\"walk\": {\"0\": \"walk-south\", \"90\": \"walk-west\"}}."
+            },
+            "toward": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": {
+                "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+              },
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "description": "The direction on screen the subject faces at a heading, [x, y] with y down, so a game can pick a heading by the way something moves."
+            }
+          },
+          "required": [],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "required": [
+                "frames"
+              ]
+            },
+            {
+              "required": [
+                "animations"
+              ]
+            }
+          ],
+          "description": "Which frames and animations show the subject at which heading, in whole degrees from 0 to 359. The atlas carries it as meta.headings and the Godot SpriteFrames as its \"headings\" metadata; a compiled sprite stack has it."
+        },
         "animations": {
           "type": "object",
-          "minProperties": 1,
           "maxProperties": 65524,
-          "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
+          "description": "Named animations; left out, one plays every frame in order. {} says the frames are stills (icons, UI states, tiles), exported with no animation. ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
           "propertyNames": {
             "type": "string",
             "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -2957,6 +3494,1164 @@
         "frames"
       ],
       "additionalProperties": false
+    },
+    "stack": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "title": "Pixelbolt sprite stack",
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "pixelforge-stack"
+        },
+        "version": {
+          "const": 1
+        },
+        "name": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+        },
+        "palette": {
+          "type": "object",
+          "propertyNames": {
+            "anyOf": [
+              {
+                "const": "$ref"
+              },
+              {
+                "pattern": "^[^ .\\u0000]$"
+              }
+            ]
+          },
+          "properties": {
+            "$ref": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^(transparent|#([a-fA-F0-9]{3,4}|[a-fA-F0-9]{6}|[a-fA-F0-9]{8}))$"
+          }
+        },
+        "sockets": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -512,
+                  "maximum": 512
+                },
+                "maxItems": 3,
+                "minItems": 3
+              },
+              "axis": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              },
+              "keys": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "heading": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 360
+                    },
+                    "offset": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -512,
+                        "maximum": 512
+                      },
+                      "maxItems": 3,
+                      "minItems": 3
+                    },
+                    "angle": {
+                      "type": "number",
+                      "minimum": -3600,
+                      "maximum": 3600
+                    }
+                  },
+                  "required": [
+                    "heading"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64
+              }
+            },
+            "required": [
+              "at"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "reliefs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "face": {
+                "enum": [
+                  "west",
+                  "east",
+                  "north",
+                  "south"
+                ]
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 512
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 512
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 128
+                    },
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 128
+                    }
+                  ],
+                  "minItems": 4,
+                  "maxItems": 4
+                },
+                "maxItems": 32,
+                "minItems": 2
+              },
+              "ramp": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32
+              },
+              "light": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -512,
+                  "maximum": 512
+                },
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "face",
+              "points",
+              "ramp"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 128
+        },
+        "contours": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 128,
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": -512,
+                "maximum": 512
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "maxItems": 32,
+            "minItems": 2
+          }
+        },
+        "lofts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "contours": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                },
+                "maxItems": 32,
+                "minItems": 2
+              },
+              "bands": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 32
+                },
+                "maxItems": 31,
+                "minItems": 1
+              },
+              "closed": {
+                "type": "boolean"
+              },
+              "mirror": {
+                "enum": [
+                  "x",
+                  "y",
+                  "z"
+                ]
+              },
+              "socket": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              },
+              "twoSided": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "contours",
+              "bands"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 128
+        },
+        "paths": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                    },
+                    "at": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -512,
+                        "maximum": 512
+                      },
+                      "maxItems": 3,
+                      "minItems": 3
+                    },
+                    "radius": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 128
+                    },
+                    "axis": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -512,
+                        "maximum": 512
+                      },
+                      "maxItems": 3,
+                      "minItems": 3
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "at",
+                    "radius"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 32,
+                "minItems": 2
+              },
+              "colors": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16,
+                "description": "Palette keys in order across the surface."
+              },
+              "sides": {
+                "type": "integer",
+                "minimum": 3,
+                "maximum": 16
+              },
+              "roll": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360
+              },
+              "socket": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              },
+              "attach": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              }
+            },
+            "required": [
+              "nodes",
+              "colors"
+            ],
+            "additionalProperties": false,
+            "not": {
+              "required": [
+                "socket",
+                "attach"
+              ]
+            }
+          }
+        },
+        "membranes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ribs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "uniqueItems": true
+              },
+              "colors": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 16,
+                "description": "Palette keys in order across the surface."
+              },
+              "sag": {
+                "type": "number",
+                "minimum": -64,
+                "maximum": 64
+              },
+              "scallop": {
+                "type": "number",
+                "minimum": -64,
+                "maximum": 64
+              },
+              "veins": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "color": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "maxItems": 3,
+                        "minItems": 3,
+                        "description": "Along, across, half-width. Both edges stay within the panel."
+                      },
+                      "maxItems": 16,
+                      "minItems": 2
+                    }
+                  },
+                  "required": [
+                    "color",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "ribs",
+              "colors"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "poses": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+            },
+            "maxProperties": 64,
+            "additionalProperties": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              },
+              "maxProperties": 32,
+              "additionalProperties": {
+                "type": "number",
+                "minimum": -360,
+                "maximum": 360
+              }
+            }
+          }
+        },
+        "poseKeys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "heading": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 360
+              },
+              "pose": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              }
+            },
+            "required": [
+              "heading",
+              "pose"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64
+        },
+        "facets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1
+              },
+              "socket": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+              },
+              "twoSided": {
+                "type": "boolean"
+              },
+              "points": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": -512,
+                        "maximum": 512
+                      },
+                      "maxItems": 3,
+                      "minItems": 3
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "at": {
+                          "type": "array",
+                          "items": {
+                            "type": "number",
+                            "minimum": -512,
+                            "maximum": 512
+                          },
+                          "maxItems": 3,
+                          "minItems": 3
+                        },
+                        "socket": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                        }
+                      },
+                      "required": [
+                        "at"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 16,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "color",
+              "points"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 2048
+        },
+        "slices": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 128,
+            "minItems": 1
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "description": "Equal-size top-down grids, lowest first. Dot or space is air."
+        },
+        "decals": {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 128,
+            "minItems": 1
+          }
+        },
+        "paint": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "face": {
+                    "enum": [
+                      "west",
+                      "east",
+                      "north",
+                      "south"
+                    ]
+                  },
+                  "at": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "maxItems": 128,
+                    "minItems": 1
+                  },
+                  "depth": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 128,
+                    "description": "0 paints only the face. Positive depth colours contiguous solid cells inward."
+                  }
+                },
+                "required": [
+                  "face",
+                  "rows"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "face": {
+                    "enum": [
+                      "west",
+                      "east",
+                      "north",
+                      "south"
+                    ]
+                  },
+                  "at": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  },
+                  "decal": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                  },
+                  "flipX": {
+                    "type": "boolean"
+                  },
+                  "flipY": {
+                    "type": "boolean"
+                  },
+                  "depth": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 128,
+                    "description": "0 paints only the face. Positive depth colours contiguous solid cells inward."
+                  }
+                },
+                "required": [
+                  "face",
+                  "decal"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "face": {
+                    "enum": [
+                      "west",
+                      "east",
+                      "north",
+                      "south"
+                    ]
+                  },
+                  "at": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 127
+                    },
+                    "maxItems": 2,
+                    "minItems": 2
+                  },
+                  "erase": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[x. ]+$"
+                    },
+                    "maxItems": 128,
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "face",
+                  "erase"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "maxItems": 1024
+        },
+        "parts": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "slices": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "maxItems": 128,
+                  "minItems": 1
+                },
+                "maxItems": 64,
+                "minItems": 1,
+                "description": "Equal-size top-down grids, lowest first. Dot or space is air."
+              },
+              "paint": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "face": {
+                          "enum": [
+                            "west",
+                            "east",
+                            "north",
+                            "south"
+                          ]
+                        },
+                        "at": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 127
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        "rows": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128
+                          },
+                          "maxItems": 128,
+                          "minItems": 1
+                        },
+                        "depth": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 128,
+                          "description": "0 paints only the face. Positive depth colours contiguous solid cells inward."
+                        }
+                      },
+                      "required": [
+                        "face",
+                        "rows"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "face": {
+                          "enum": [
+                            "west",
+                            "east",
+                            "north",
+                            "south"
+                          ]
+                        },
+                        "at": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 127
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        "decal": {
+                          "type": "string",
+                          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                        },
+                        "flipX": {
+                          "type": "boolean"
+                        },
+                        "flipY": {
+                          "type": "boolean"
+                        },
+                        "depth": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 128,
+                          "description": "0 paints only the face. Positive depth colours contiguous solid cells inward."
+                        }
+                      },
+                      "required": [
+                        "face",
+                        "decal"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "face": {
+                          "enum": [
+                            "west",
+                            "east",
+                            "north",
+                            "south"
+                          ]
+                        },
+                        "at": {
+                          "type": "array",
+                          "items": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 127
+                          },
+                          "maxItems": 2,
+                          "minItems": 2
+                        },
+                        "erase": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[x. ]+$"
+                          },
+                          "maxItems": 128,
+                          "minItems": 1
+                        }
+                      },
+                      "required": [
+                        "face",
+                        "erase"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "maxItems": 1024
+              },
+              "socket": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                "description": "The socket the part rides: it moves by the socket's offset and turns about its axis."
+              },
+              "at": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": -512,
+                  "maximum": 512
+                },
+                "maxItems": 3,
+                "minItems": 3,
+                "description": "The part's lowest corner from its socket's origin, in slice cells and slices; from the stack's own corner with no socket. Default [0, 0, 0]."
+              }
+            },
+            "required": [
+              "slices"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Solids of their own that ride sockets: each its slices, painted on its sides and shaded by the ramps like the stack."
+        },
+        "animations": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 32,
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "frames": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 256,
+                "description": "Frames at each heading."
+              },
+              "duration": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60000,
+                "description": "Milliseconds a frame; the stack's duration when left out."
+              },
+              "durations": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60000
+                },
+                "maxItems": 256,
+                "minItems": 1,
+                "description": "Milliseconds for each frame, in place of duration."
+              },
+              "loop": {
+                "type": "boolean",
+                "description": "Default true."
+              },
+              "headings": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 359
+                },
+                "maxItems": 256,
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "The headings it is baked for; the stack's headings when left out."
+              },
+              "sockets": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                },
+                "maxProperties": 64,
+                "additionalProperties": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "frame": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 256
+                      },
+                      "offset": {
+                        "type": "array",
+                        "items": {
+                          "type": "number",
+                          "minimum": -512,
+                          "maximum": 512
+                        },
+                        "maxItems": 3,
+                        "minItems": 3
+                      },
+                      "angle": {
+                        "type": "number",
+                        "minimum": -3600,
+                        "maximum": 3600
+                      },
+                      "ease": {
+                        "enum": [
+                          "linear",
+                          "hold",
+                          "in",
+                          "out",
+                          "inOut",
+                          "overshoot",
+                          "bounce"
+                        ],
+                        "description": "How the move to this key from the one before is eased; linear when left out."
+                      }
+                    },
+                    "required": [
+                      "frame"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 64
+                },
+                "description": "Keys by frame for named sockets, in increasing order; a key at the frame count is the pose a loop comes round to. A socket not named here keeps its keys by heading."
+              },
+              "poses": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "frame": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 256
+                    },
+                    "pose": {
+                      "type": "string",
+                      "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+                    },
+                    "ease": {
+                      "enum": [
+                        "linear",
+                        "hold",
+                        "in",
+                        "out",
+                        "inOut",
+                        "overshoot",
+                        "bounce"
+                      ],
+                      "description": "How the move to this key from the one before is eased; linear when left out."
+                    }
+                  },
+                  "required": [
+                    "frame",
+                    "pose"
+                  ],
+                  "additionalProperties": false
+                },
+                "maxItems": 64,
+                "description": "Named poses of the jointed paths by frame."
+              }
+            },
+            "required": [
+              "frames"
+            ],
+            "additionalProperties": false
+          },
+          "description": "Sockets and poses keyed by frame, baked for every heading: each plays at a heading as <name>-<heading>, or <name>-<direction> where directions names that heading, with frames <that>-0, <that>-1 and so on after the heading frames."
+        },
+        "directions": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$"
+          },
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 359
+          },
+          "description": "Names for headings, used in the names of animations and their frames: {\"south\": 180}."
+        },
+        "ramps": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "description": "Strings of palette keys from dark to light, a key in one ramp. With ramps, a face toward the light draws a step lighter and one turned from it a step darker."
+        },
+        "light": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": -512,
+            "maximum": 512
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "description": "Toward the light as the camera sees it: x right, y toward the viewer, z up. Default [-1, 1, 2]. Needs ramps."
+        },
+        "lightTurns": {
+          "type": "boolean",
+          "description": "The light turns with the model (x east, y south, z up) instead of staying with the camera."
+        },
+        "pivot": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 127
+          },
+          "maxItems": 2,
+          "minItems": 2
+        },
+        "projection": {
+          "enum": [
+            "oblique",
+            "iso"
+          ]
+        },
+        "squash": {
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 1
+        },
+        "resolution": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Output pixels per slice cell; default 4."
+        },
+        "cell": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "With projection iso, instead of resolution: puts the stack on a map's 2:1 grid. A slice cell steps this many pixels across and half as many down, and a slice rises as many: at 1, 16 cells cover a 32x16 tile and a cube is the standard block. Whole pixels at headings 0, 90, 180 and 270."
+        },
+        "spacing": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "headings": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 359
+          },
+          "maxItems": 256,
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        }
+      },
+      "required": [
+        "format",
+        "version",
+        "name",
+        "palette",
+        "slices"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "required": [
+          "projection"
+        ],
+        "properties": {
+          "projection": {
+            "const": "iso"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "squash"
+          ]
+        }
+      }
     }
   }
 }

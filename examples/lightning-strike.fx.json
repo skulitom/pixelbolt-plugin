@@ -8,7 +8,7 @@
   "symbols": { "spark": ["W"], "spark-c": ["c"], "spark-b": ["b"] },
   "effects": {
     "lightning-strike": {
-      "frames": 12,
+      "frames": 13,
       "edges": ["top"],
       "duration": { "from": 40, "to": 90, "ease": "in" },
       "seed": 5,
@@ -27,8 +27,9 @@
           "width": 3,
           "fill": 1,
           "squash": [1, 0.35],
-          "noise": 0.3,
-          "power": [1, 1, 0.6]
+          "noise": [0.3, 0.3, 0.8],
+          "power": [1, 1, 1, 0.55, 0.2],
+          "ease": "linear"
         },
         {
           "kind": "bolt",

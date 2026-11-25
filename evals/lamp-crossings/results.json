@@ -1,0 +1,310 @@
+{
+  "date": "2026-11-24",
+  "packagesSha256": {
+    "baseline": "b2ba6a2513083dbd7b4e543f40fac9a05437d95064b3fc25604023781acc167a",
+    "ownership probe": "00781cd50a65bfa484f4633245474a54651c654738a8a2bfe6f9d40b0ec1b8cb",
+    "current-owner edge": "b5aa2803a5e89f6c853dd0d72207a8acb7650077293cfc3d6a31b6f3cead3f38",
+    "both edges": "6b1c2929c392b1a575412a6903f1c78eec2636ce200d7b24c1a1d2815cd74da2"
+  },
+  "trials": [
+    {
+      "run": "station-baseline",
+      "scene": "Station",
+      "input": "damaged",
+      "build": "baseline",
+      "first": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "walkGifMissing": 1,
+          "standingMaterialOwner": 3,
+          "walkingMaterialOwner": 29,
+          "walkingMaterialRGBA": 19,
+          "visibleCarriedPropOutsideBoot": 6
+        },
+        "poseSha256": "b6d6881edf3a887271cc3dec3127a22fc06f04dfa9e8c6451717ba202df84990"
+      },
+      "final": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 16,
+          "walkingMaterialOwner": 133,
+          "walkingMaterialRGBA": 92,
+          "foregroundCrossing": 44
+        },
+        "poseSha256": "df08428502638226ecaf614d78d07867d4bfdf147391e70e0f7259330a902330"
+      }
+    },
+    {
+      "run": "station-candidate",
+      "scene": "Station",
+      "input": "damaged",
+      "build": "ownership probe",
+      "first": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 3,
+          "walkingMaterialOwner": 29,
+          "walkingMaterialRGBA": 19,
+          "visibleCarriedPropOutsideBoot": 6
+        },
+        "poseSha256": "844ac10cc839dc1db6e15be46ab21ec7d76089a78af10c5d8f78cc8d720b7386"
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "6edaa2baba197e917751ca30610c3c79cd85b1c7158fdfeab24bd2a664819a7d"
+      }
+    },
+    {
+      "run": "station-third",
+      "scene": "Station",
+      "input": "clean",
+      "build": "ownership probe",
+      "first": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "6edaa2baba197e917751ca30610c3c79cd85b1c7158fdfeab24bd2a664819a7d"
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "6edaa2baba197e917751ca30610c3c79cd85b1c7158fdfeab24bd2a664819a7d"
+      }
+    },
+    {
+      "run": "quarry-candidate",
+      "scene": "Quarry",
+      "input": "damaged",
+      "build": "ownership probe",
+      "first": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 4,
+          "walkingMaterialOwner": 40,
+          "walkingMaterialRGBA": 29,
+          "visibleCarriedPropOutsideBoot": 9
+        },
+        "poseSha256": "602109f42e6bc6b9fd5d50f2f985e6dc1e34a9a5bc594426cfb52ad5970450f6"
+      },
+      "final": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 2,
+          "walkingMaterialOwner": 16,
+          "walkingMaterialRGBA": 6,
+          "foregroundCrossing": 8
+        },
+        "poseSha256": "7e5a6c2edf4f6d3ee8baa3f0d897f5f1c13f6a66987c729dc0f8f73e64d976e5"
+      }
+    },
+    {
+      "run": "quarry-control",
+      "scene": "Quarry",
+      "input": "clean",
+      "build": "ownership probe",
+      "first": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "89f4f553eb95325fe8875d66997d999b77210687aac072c54292be070c41896a"
+      },
+      "final": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 2,
+          "walkingMaterialOwner": 16,
+          "walkingMaterialRGBA": 6,
+          "foregroundCrossing": 8
+        },
+        "poseSha256": "e3e838cd6495ba8e7d6127f35818cfba89ec0e792fb9dc998c3ec96bbd34ee10"
+      }
+    },
+    {
+      "run": "quarry-repeat",
+      "scene": "Quarry",
+      "input": "damaged",
+      "build": "current-owner edge",
+      "first": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "walkGifMissing": 1,
+          "standingMaterialOwner": 4,
+          "walkingMaterialOwner": 40,
+          "walkingMaterialRGBA": 29,
+          "visibleCarriedPropOutsideBoot": 9
+        },
+        "poseSha256": "602109f42e6bc6b9fd5d50f2f985e6dc1e34a9a5bc594426cfb52ad5970450f6"
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "85863e52b16dec009f8844cc41531aae01a6e31be708450b5340fc5b8d5a8611"
+      }
+    },
+    {
+      "run": "mine-surveyor",
+      "scene": "Quarry",
+      "input": "clean",
+      "build": "current-owner edge",
+      "first": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "89f4f553eb95325fe8875d66997d999b77210687aac072c54292be070c41896a"
+      },
+      "final": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 1,
+          "walkingMaterialOwner": 8,
+          "walkingMaterialRGBA": 5,
+          "foregroundCrossing": 3
+        },
+        "poseSha256": "9ffe33fcaae86f27d96c5316216e4323d2d6b9ba87827191438469481364613c"
+      }
+    },
+    {
+      "run": "quarry-shift",
+      "scene": "Quarry",
+      "input": "damaged",
+      "build": "both edges",
+      "first": {
+        "passed": false,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": false,
+          "walkingColors": false
+        },
+        "failures": {
+          "standingMaterialOwner": 4,
+          "walkingMaterialOwner": 40,
+          "walkingMaterialRGBA": 29,
+          "visibleCarriedPropOutsideBoot": 9
+        },
+        "poseSha256": "602109f42e6bc6b9fd5d50f2f985e6dc1e34a9a5bc594426cfb52ad5970450f6"
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "ecf594b7295bf5454692e040024d3120e0d61556549226bfed13d666f2331cf6"
+      }
+    },
+    {
+      "run": "quarry-level",
+      "scene": "Quarry",
+      "input": "clean",
+      "build": "both edges",
+      "first": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "89f4f553eb95325fe8875d66997d999b77210687aac072c54292be070c41896a"
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "standing": true,
+          "gait": true,
+          "ownership": true,
+          "walkingColors": true
+        },
+        "failures": {},
+        "poseSha256": "9a56016262b7964b637e1ad98fc148b84039f6e29544a1525298bd4ca6abbd66"
+      }
+    }
+  ]
+}

@@ -77,8 +77,33 @@ export function spriteFrames(atlas, { image = atlas.meta.image } = {}) {
     const frames = animation.frames.map((name, index) => `{\n"duration": ${real(timing.durations[index])},\n"texture": SubResource(${quote(id(name))})\n}`);
     return `{\n"frames": [${frames.join(', ')}],\n"loop": ${animation.loop ? 'true' : 'false'},\n"name": &${quote(key)},\n"speed": ${real(timing.speed)}\n}`;
   });
-  lines.push('[resource]', `animations = [${entries.join(', ')}]`, '');
+  lines.push('[resource]', `animations = [${entries.join(', ')}]`);
+  // A recipe's headings, as metadata a script reads with get_meta("headings"): each heading's frame as the animation
+  // that plays it and its place there, each animation's name at each heading, and the way each heading faces.
+  const headings = atlas.meta.headings && headingsMeta(atlas, animations);
+  if (headings) lines.push(`metadata/headings = ${headings}`);
+  // A slice sheet names the point its slices turn about at twice its coordinates (stack.js), since it may be a
+  // pixel's centre or its corner: here it is that point itself, get_meta("stack_pivot").
+  const twice = names.length ? atlas.frames[names[0]].points?.['pivot-x2'] : null;
+  if (twice) lines.push(`metadata/stack_pivot = Vector2(${real(twice.x / 2)}, ${real(twice.y / 2)})`);
+  lines.push('');
   return { text: lines.join('\n'), approximate };
+}
+
+// meta.headings as a Godot Dictionary with whole-number keys. A SpriteFrames holds frames only inside animations, so a
+// heading's frame is given as [animation, index]: the first animation that plays it, and where. A heading whose frame
+// no animation plays is left out.
+function headingsMeta(atlas, animations) {
+  const { frames, animations: named, toward } = atlas.meta.headings, parts = [];
+  const map = entries => `{\n${entries.map(([key, value]) => `${Number(key)}: ${value}`).join(',\n')}\n}`;
+  const placed = Object.entries(frames ?? {}).flatMap(([heading, frame]) => {
+    const playing = animations.find(([, animation]) => animation.frames.includes(frame));
+    return playing ? [[heading, `[&${quote(playing[0])}, ${playing[1].frames.indexOf(frame)}]`]] : [];
+  });
+  if (placed.length) parts.push(`"frames": ${map(placed)}`);
+  if (named) parts.push(`"animations": {\n${Object.entries(named).map(([key, each]) => `${quote(key)}: ${map(Object.entries(each).map(([heading, animation]) => [heading, `&${quote(animation)}`]))}`).join(',\n')}\n}`);
+  if (toward) parts.push(`"toward": ${map(Object.entries(toward).map(([heading, [x, y]]) => [heading, `Vector2(${real(x)}, ${real(y)})`]))}`);
+  return parts.length ? `{\n${parts.join(',\n')}\n}` : null;
 }
 
 // A resource written here, with its sheet named by another path relative to the .tres (for a copy saved elsewhere).
@@ -108,6 +133,10 @@ export function normalsYUp(data) {
 // top-left, so each plane is drawn at its position less parallax × the camera, as renderScene draws it. The root draws
 // with nearest filtering, which the planes take. `planes` lists { name, image (relative to the .tscn), at, parallax };
 // `background` is RGBA from 0 to 255 and `camera` the camera's start, [x, y].
+// An entry with `frames` instead of `image` is an animated placement: { name, frames (a SpriteFrames .tres relative to
+// the .tscn), animation, scale, parallax, at: [[x, y], …] (each copy's top-left in the scene) }, a Parallax2D holding an
+// AnimatedSprite2D per copy that plays the animation from the start (autoplay), drawn where the plane order puts it.
+// `scale` is the placement's pixels per sheet pixel (its scale over the sheet's).
 // Godot's node names can't hold . : @ / " or %, and siblings need their own names: those characters become
 // underscores, a plane's name a sibling already has gets a number, and an empty one is "plane" ("scene" for the root).
 export function parallaxScene({ name, width, height, background, camera, planes }) {
@@ -120,15 +149,27 @@ export function parallaxScene({ name, width, height, background, camera, planes 
     taken.add(id);
     return id;
   };
-  const lines = ['[gd_scene format=3]', '', ...planes.map((plane, k) => `[ext_resource type="Texture2D" path=${quote(plane.image)} id="${k + 1}_plane"]`), ...(planes.length ? [''] : []),
+  // One resource per image and per SpriteFrames, numbered in order of first use.
+  const resources = [], ids = new Map(), resource = (type, file, kind) => {
+    const key = `${kind} ${file}`;
+    if (!ids.has(key)) { ids.set(key, `${ids.size + 1}_${kind}`); resources.push(`[ext_resource type="${type}" path=${quote(file)} id="${ids.get(key)}"]`); }
+    return ids.get(key);
+  };
+  const used = planes.map(plane => (plane.frames === undefined ? resource('Texture2D', plane.image, 'plane') : resource('SpriteFrames', plane.frames, 'frames')));
+  const lines = ['[gd_scene format=3]', '', ...resources, ...(resources.length ? [''] : []),
     `[node name=${quote(clean(name) || 'scene')} type="Node2D"]`, 'texture_filter = 1', '',
     '[node name="Camera2D" type="Camera2D" parent="."]', ...(camera[0] || camera[1] ? [`position = ${vector(camera)}`] : []), 'anchor_mode = 0', '',
     '[node name="Background" type="Parallax2D" parent="."]', 'scroll_scale = Vector2(0, 0)', '',
     '[node name="Color" type="ColorRect" parent="Background"]', `offset_right = ${real(width)}`, `offset_bottom = ${real(height)}`, `color = Color(${background.map(channel).join(', ')})`, ''];
   planes.forEach((plane, k) => {
     const id = node(plane.name);
-    lines.push(`[node name=${quote(id)} type="Parallax2D" parent="."]`, ...(plane.parallax[0] !== 1 || plane.parallax[1] !== 1 ? [`scroll_scale = ${vector(plane.parallax)}`] : []), '',
-      `[node name="Image" type="Sprite2D" parent=${quote(id)}]`, ...(plane.at[0] || plane.at[1] ? [`position = ${vector(plane.at)}`] : []), `texture = ExtResource("${k + 1}_plane")`, 'centered = false', '');
+    lines.push(`[node name=${quote(id)} type="Parallax2D" parent="."]`, ...(plane.parallax[0] !== 1 || plane.parallax[1] !== 1 ? [`scroll_scale = ${vector(plane.parallax)}`] : []), '');
+    if (plane.frames === undefined) {
+      lines.push(`[node name="Image" type="Sprite2D" parent=${quote(id)}]`, ...(plane.at[0] || plane.at[1] ? [`position = ${vector(plane.at)}`] : []), `texture = ExtResource("${used[k]}")`, 'centered = false', '');
+      return;
+    }
+    plane.at.forEach((at, copy) => lines.push(`[node name="${copy ? `Sprite ${copy + 1}` : 'Sprite'}" type="AnimatedSprite2D" parent=${quote(id)}]`, ...(at[0] || at[1] ? [`position = ${vector(at)}`] : []),
+      ...(plane.scale !== 1 ? [`scale = ${vector([plane.scale, plane.scale])}`] : []), `sprite_frames = ExtResource("${used[k]}")`, `animation = &${quote(plane.animation)}`, `autoplay = ${quote(plane.animation)}`, 'centered = false', ''));
   });
   return lines.join('\n');
 }
@@ -173,7 +214,13 @@ const channel = value => String(Number((value / 255).toFixed(6)));
 // plain tiles, and its tile.collision polygons on physics layer 0, one-way with tile.oneWay. An atlas animation that
 // loops over frames of one terrain and mask, or plain frames, laid side by side in a row of the sheet becomes an
 // animated tile. Returns { text, warnings }; text is null when a terrain mixes blob, cardinal or corner masks.
-export function tileSets(sources) {
+//
+// With `iso`, a diamond's [width, height], the TileSet is isometric, laid out as Pixelbolt lays an iso map (Godot's
+// Diamond Down: a column steps down and right, a row down and left): its tile_size is the diamond, each tile's region
+// the whole frame, and a texture origin stands the frame on its diamond as the scene does, bottoms together. Its
+// tiles are plain: a terrain's peering bits are a square grid's, so terrains are left out, with a warning.
+export function tileSets(sources, { iso = null } = {}) {
+  if (iso) return isoTileSet(sources, iso);
   const warnings = [], size = source => { const { w, h } = source.atlas.frames[source.tiles[0]?.frame ?? source.layered?.[0]?.frame ?? source.plain[0]].frame; return [w, h]; };
   const [w, h] = size(sources[0]);
   const kept = sources.filter(source => {
@@ -293,6 +340,58 @@ export function tileSets(sources) {
     lines.push(`${set}/mode = ${TERRAIN_MODES.corner}`);
     layered.names.forEach((name, t) => lines.push(`${set}/terrain_${t}/name = ${quote(name)}`, `${set}/terrain_${t}/color = Color(${layered.colors[t].map(channel).join(', ')}, 1)`));
   }
+  lines.push(...ids.map((id, i) => `sources/${i} = SubResource("${id}")`), '');
+  return { text: lines.join('\n'), warnings };
+}
+// An isometric TileSet over the sheets of `sources` (see tileSets): every frame a plain tile.
+function isoTileSet(sources, [tw, th]) {
+  const warnings = [], lines = ['[gd_resource type="TileSet" format=3]', ''], kept = [];
+  for (const source of sources) {
+    const { w, h } = Object.values(source.atlas.frames)[0].frame;
+    // A texture origin is whole pixels: the frame is as far past the diamond on one side as the other, and stands
+    // on its bottom corner.
+    if ((w - tw) % 2 || (h - th) % 2) { warnings.push(`${source.name}: left out: its ${w}×${h} frames cannot be centred on a ${tw}×${th} diamond by whole pixels`); continue; }
+    if (source.tiles?.length || source.layered?.length) warnings.push(`${source.name}: its terrains are left out: a terrain's peering bits are a square grid's, so paint an isometric map tile by tile`);
+    kept.push({ source, w, h });
+  }
+  if (!kept.length) return { text: null, warnings };
+  lines.splice(2, 0, ...kept.map(({ source }, i) => `[ext_resource type="Texture2D" path=${quote(source.image ?? source.atlas.meta.image)} id="${i + 1}_sheet"]`), '');
+  const ids = kept.map((_, i) => `TileSetAtlasSource_tiles${i ? i + 1 : ''}`);
+  let solid = false;
+  kept.forEach(({ source, w, h }, i) => {
+    const { atlas, margin = 0, separation = 0 } = source, origin = [0, (h - th) / 2];
+    const coords = frame => { const { x, y } = atlas.frames[frame].frame; return [(x - margin) / (w + separation), (y - margin) / (h + separation)]; };
+    // Animated tiles as in a square set: a loop over frames side by side in one row.
+    const { claims, covered } = tileAnimations(atlas.animations, () => ''), animated = new Map(), still = [];
+    for (const { key, animation } of claims) {
+      const cells = animation.frames.map(coords), [col, row] = cells[0];
+      if (animation.loop && cells.every(([c, r], k) => c === col + k && r === row)) animated.set(animation.frames[0], animation.frames.map(frame => atlas.frames[frame].duration));
+      else still.push(key);
+    }
+    if (still.length) warnings.push(`${kept.length > 1 ? `${source.name}: ` : ''}animation${still.length === 1 ? '' : 's'} ${still.slice(0, 8).join(', ')}${still.length > 8 ? ', …' : ''} became still tiles: Godot animates a tile through frames side by side in one row of the sheet, looping`);
+    lines.push(`[sub_resource type="TileSetAtlasSource" id="${ids[i]}"]`, `resource_name = ${quote(source.name)}`, `texture = ExtResource("${i + 1}_sheet")`);
+    if (margin) lines.push(`margins = Vector2i(${margin}, ${margin})`);
+    if (separation) lines.push(`separation = Vector2i(${separation}, ${separation})`);
+    lines.push(`texture_region_size = Vector2i(${w}, ${h})`);
+    const heaviest = Math.max(1, ...Object.values(atlas.frames).map(frame => frame.tile?.weight ?? 1));
+    for (const frame of Object.keys(atlas.frames).filter(name => !covered.has(name))) {
+      const cell = coords(frame).join(':'), facts = atlas.frames[frame].tile ?? {}, at = `${cell}/0`;
+      animated.get(frame)?.forEach((ms, k) => lines.push(`${cell}/animation_frame_${k}/duration = ${real(ms / 1000)}`));
+      lines.push(`${at} = 0`);
+      if (origin[1]) lines.push(`${at}/texture_origin = Vector2i(${origin[0]}, ${origin[1]})`);
+      const probability = (facts.weight ?? 1) / heaviest;
+      if (probability !== 1) lines.push(`${at}/probability = ${Number(probability.toFixed(6))}`);
+      // Godot places a tile's polygons around the tile's centre, the middle of its diamond.
+      (facts.collision ?? []).forEach((polygon, k) => {
+        solid = true;
+        lines.push(`${at}/physics_layer_0/polygon_${k}/points = PackedVector2Array(${polygon.flatMap(({ x, y }) => [x - w / 2 - origin[0], y - h / 2 - origin[1]]).join(', ')})`);
+        if (facts.oneWay) lines.push(`${at}/physics_layer_0/polygon_${k}/one_way = true`);
+      });
+    }
+    lines.push('');
+  });
+  lines.push('[resource]', 'tile_shape = 1', 'tile_layout = 5', `tile_size = Vector2i(${tw}, ${th})`);
+  if (solid) lines.push('physics_layer_0/collision_layer = 1');
   lines.push(...ids.map((id, i) => `sources/${i} = SubResource("${id}")`), '');
   return { text: lines.join('\n'), warnings };
 }

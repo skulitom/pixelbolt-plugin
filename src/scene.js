@@ -1,14 +1,18 @@
 // Bounded scene review, not a game engine. In-memory recipes only; no filesystem or network access.
-import { renderProject, parseColor, animationPosition, tileRepeat, tileReport, rampShifter, reviewPixels, scalePixels, readGuides, drawGuides, CANVAS_SIDE, fail } from './core.js';
+// A placement stands at pixels (`at`) or on a cell of a named tilemap (`on`, `cell`). Where it stands orders it among
+// the sorted ones; `lift`, and the height of a raised iso cell (`raise`), only draw it higher. What stands on a cell of
+// an iso map is drawn with that cell, right after its tile, and a placement wider than a cell is drawn in pieces, one
+// for each cell it stands on (`pieces` in renderScene), so the ground under a building never covers it.
+import { renderProject, parseColor, animationPosition, tileRepeat, tileReport, rampShifter, reviewPixels, scalePixels, readGuides, drawGuides, CANVAS_SIDE, FRAME_AREA, FRAME_PIXELS, frameFits, frameAreaProblem, fail } from './core.js';
 import { EASINGS, ease, pixelId, random, nearestColor } from './craft.js';
-import { fields, point } from './authoring.js';
+import { fields, point, number, integer } from './authoring.js';
+import { compileStack } from './stack.js';
 import { expandTilemap, isoLayout } from './autotile.js';
 
 // A scene is one view: up to SCENE_SIDE pixels a side and SCENE_AREA in all (1024×256, 640×360, 512×512), so a level
-// some sixty tiles long is one picture. Its assets stay at the animation canvas, and a map may still be larger than it.
-export const SCENE_SIDE = 1024, SCENE_AREA = 262144;
-const int = (v, min, max, path) => { if (!Number.isInteger(v) || v < min || v > max) fail(path, `expected an integer from ${min} to ${max}`); return v; };
-const num = (v, min, max, path) => { if (typeof v !== 'number' || !Number.isFinite(v) || v < min || v > max) fail(path, `expected a number from ${min} to ${max}`); return v; };
+// some sixty tiles long is one picture. It is the size of an animation frame (core.js), and so is each asset at most,
+// a still one included; a map may still be larger than the view.
+export const SCENE_SIDE = CANVAS_SIDE, SCENE_AREA = FRAME_PIXELS;
 const smooth = t => t * t * (3 - 2 * t);
 // A light's flicker at `time`: seeded value noise from 0 to 1 over `steps` evenly spaced points per scene duration,
 // eased between them, wrapping at the duration so a looping scene flickers without a seam.
@@ -60,16 +64,23 @@ const alphaOver = (target, at, color) => {
 // Material passes must agree on the recipe's sheet settings; trimmed layouts may differ and are rebuilt as grids.
 const sheetSettings = sheet => JSON.stringify([sheet.columns, sheet.padding, sheet.scale, Boolean(sheet.trim)]);
 const MAX_DRAWS = 4096, MAX_WORK = 4194304, MAX_CASTS = 2048;
+// How far the bottom edge of a frame may step between neighbouring columns and still be one edge standing on the
+// ground (see `pieces` in renderScene): the near edge of a footprint turned to any of 32 headings steps less.
+const FOOT = 3;
 
 // Expands a tilemap placement into cells of one asset's frames and animations (see expandTilemap in autotile.js): each
 // cell's frame top-left in map pixels, and `bottom`, the map row below the line it stands on when the map is sorted.
 // A square cell's frame hangs from the cell's top-left and stands on its own bottom row. An iso map lays cells on a 2:1
 // diamond grid, back to front (see isoLayout); each frame stands on its diamond, bottoms aligned and centred across, and
 // stands just above the diamond's centre, so whatever stands at the centre of the same cell, on top of a block, is
-// drawn after it.
+// drawn after it. `heights` raises the cells of an iso map, a digit a cell, `rise` pixels a level (half the tile's height
+// unless set); a raised cell keeps `bottom`, its place on the ground, so it still covers what stands behind it and is
+// covered by what stands in front. A `solid` map draws the cell's tile again at each level under it, lowest first.
+// `surface` is how far the ground stands above a cell's diamond, the thickness of a block tile: nothing is drawn
+// differently, and a placement standing `on` the map stands that much higher.
 function sceneTilemap(tilemap, project, path) {
-  fields(tilemap, ['tile', 'rows', 'legend', 'outside', 'empty', 'classes', 'seed', 'layout'], path);
-  const tile = point(tilemap.tile ?? [project.width, project.height], `${path}.tile`, 256);
+  fields(tilemap, ['tile', 'rows', 'legend', 'outside', 'empty', 'classes', 'seed', 'layout', 'heights', 'rise', 'solid', 'surface'], path);
+  const tile = point(tilemap.tile ?? [project.width, project.height], `${path}.tile`, CANVAS_SIDE);
   if (tile.some(n => n < 1)) fail(`${path}.tile`, 'tile size must be positive');
   if (tilemap.layout !== undefined && tilemap.layout !== 'square' && tilemap.layout !== 'iso') fail(`${path}.layout`, 'expected square or iso');
   const iso = tilemap.layout === 'iso';
@@ -83,9 +94,18 @@ function sceneTilemap(tilemap, project, path) {
     if (iso) fail(`${path}.legend`, 'corner tiles sit where four square cells meet; an iso map takes frames and animations without autotile corner');
     if (w % 2 || h % 2) fail(`${path}.tile`, 'corner tiles sit where four cells meet, half a cell up and left of one; use an even cell width and height');
   }
-  if (!iso) return { tile, width: columns * w, height: rows * h, cells: expanded.cells.map(cell => ({ x: cell.x * w, y: cell.y * h, bottom: cell.y * h + project.height, [cell.kind]: cell.name })), columns, rows };
-  const cells = isoLayout(expanded.cells, rows, tile).map(cell => ({ x: cell.left + Math.floor((w - project.width) / 2), y: cell.top + h - project.height, bottom: cell.top + h / 2, [cell.kind]: cell.name }));
-  return { tile, width: (columns + rows) * w / 2, height: (columns + rows) * h / 2, cells, columns, rows, iso };
+  for (const key of ['heights', 'rise', 'solid']) if (tilemap[key] !== undefined && (!iso || tilemap.heights === undefined)) fail(`${path}.${key}`, iso ? 'rise and solid go with heights, a row of digits for each row of the map' : 'heights raise the cells of an iso map; set layout to iso');
+  if (!iso && tilemap.surface !== undefined) fail(`${path}.surface`, 'surface is how far the ground of an iso map stands above its cells; set layout to iso');
+  if (!iso) return { tile, width: columns * w, height: rows * h, ...(expanded.cells.some(cell => cell.corner) && { corner: true }), cells: expanded.cells.map(cell => ({ x: cell.x * w, y: cell.y * h, bottom: cell.y * h + project.height, [cell.kind]: cell.name })), columns, rows };
+  const { heights } = tilemap, rise = integer(tilemap.rise ?? h / 2, `${path}.rise`, 1, 256), surface = integer(tilemap.surface ?? 0, `${path}.surface`, 0, 256);
+  if (heights !== undefined && (!Array.isArray(heights) || heights.length !== rows || heights.some(row => typeof row !== 'string' || row.length !== columns || /[^0-9. ]/.test(row)))) fail(`${path}.heights`, `expected ${rows} rows of ${columns} characters, a digit for each cell's level and a dot for the ground`);
+  if (tilemap.solid !== undefined && typeof tilemap.solid !== 'boolean') fail(`${path}.solid`, 'expected a boolean');
+  const levels = heights?.map(row => [...row].map(Number).map(n => n || 0));
+  const cells = isoLayout(expanded.cells, rows, tile).flatMap(cell => {
+    const top = levels?.[cell.y][cell.x] ?? 0, drawn = { x: cell.left + Math.floor((w - project.width) / 2), bottom: cell.top + h / 2, [cell.kind]: cell.name };
+    return Array.from({ length: tilemap.solid ? top + 1 : 1 }, (_, k) => ({ ...drawn, y: cell.top + h - project.height - (tilemap.solid ? k : top) * rise }));
+  });
+  return { tile, width: (columns + rows) * w / 2, height: (columns + rows) * h / 2, cells, columns, rows, iso, surface, ...(levels && { levels, rise }) };
 }
 
 // A theme: palette overrides for keys the recipe already has, from the scene and then from the asset entry.
@@ -110,9 +130,9 @@ export function prepareScene(source) {
   // A map may be larger than the view: say so where a level's whole size was given as the scene's.
   const larger = 'a tilemap may be larger than the scene, which shows a part of it at a time (move the placement with at, or the view with camera)';
   for (const side of ['width', 'height']) if (Number.isInteger(source[side]) && source[side] > SCENE_SIDE) fail(`scene.${side}`, `expected an integer from 1 to ${SCENE_SIDE}: a scene is one view; ${larger}`);
-  const width = int(source.width, 1, SCENE_SIDE, 'scene.width'), height = int(source.height, 1, SCENE_SIDE, 'scene.height');
+  const width = integer(source.width, 'scene.width', 1, SCENE_SIDE), height = integer(source.height, 'scene.height', 1, SCENE_SIDE);
   if (width * height > SCENE_AREA) fail('scene', `${width}×${height} is ${(width * height).toLocaleString('en-US')} pixels, and a scene holds at most ${SCENE_AREA.toLocaleString('en-US')} (1024×256, 640×360, 512×512); ${larger}`);
-  const duration = int(source.duration ?? 2000, 1, 60000, 'scene.duration');
+  const duration = integer(source.duration ?? 2000, 'scene.duration', 1, 60000);
   // Reuse portable name validation.
   renderProject({ version: 1, name: source.name, width: 1, height: 1, frames: [{ name: 'check' }] });
   const background = parseColor(source.background ?? '#10121e');
@@ -133,7 +153,7 @@ export function prepareScene(source) {
     if (!source.cues || typeof source.cues !== 'object' || Array.isArray(source.cues) || Object.keys(source.cues).length > 64) fail('scene.cues', 'expected at most 64 named times in milliseconds');
     for (const [key, value] of Object.entries(source.cues)) {
       if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/.test(key)) fail(`scene.cues.${key}`, 'use 1–64 letters, digits, underscores or hyphens, starting with a letter');
-      cues[key] = int(value, 0, duration, `scene.cues.${key}`);
+      cues[key] = integer(value, `scene.cues.${key}`, 0, duration);
     }
   }
   const when = (value, path, max) => {
@@ -145,7 +165,7 @@ export function prepareScene(source) {
       if (time < 0 || time > max) fail(path, `${JSON.stringify(value)} is ${time} ms, outside 0–${max}`);
       return time;
     }
-    return int(value, 0, max, path);
+    return integer(value, path, 0, max);
   };
   // The camera: the scene point at the view's top-left corner, fixed or keyed over time. Without one the view is the
   // scene from [0, 0], as before.
@@ -167,9 +187,34 @@ export function prepareScene(source) {
     }
   }
   if (!source.assets || Array.isArray(source.assets) || typeof source.assets !== 'object' || Object.keys(source.assets).length > 64) fail('scene.assets', 'expected at most 64 inlined assets');
+  // Bake stack assets once, as whole sprites with a ground pivot shared by every heading.
+  const stackNames = new Set();
+  const assetSpecs = { ...source.assets };
+  let stackBudget = FRAME_AREA;
+  for (const [id, value] of Object.entries(assetSpecs)) {
+    const stack = value?.recipe ?? value;
+    if (stack?.format !== 'pixelforge-stack') continue;
+    const { recipe } = compileStack(stack, { maxPixels: stackBudget });
+    stackBudget -= recipe.width * recipe.height * recipe.frames.length;
+    assetSpecs[id] = value.recipe ? { ...value, recipe } : recipe;
+    stackNames.add(id);
+  }
   // Ramp shifters per asset (kept apart from the passes, which exports iterate as images).
-  const assets = Object.create(null), shifts = Object.create(null), warnings = []; let sourceArea = 0;
-  for (const [id, value] of Object.entries(source.assets)) {
+  // used: the pixels each asset's passes render (every frame of each), which together stay within 4,194,304.
+  const assets = Object.create(null), shifts = Object.create(null), warnings = [], used = new Map(); let sourceArea = 0;
+  // Every asset's pixels a frame (over all its passes) and in all, counted before any renders, so a refusal names a
+  // frame count that fits beside the whole scene, not only the passes before it.
+  const whole = new Map(); let sceneArea = 0;
+  for (const [id, value] of Object.entries(assetSpecs)) {
+    const entry = value?.recipe ? value : { recipe: value };
+    let frame = 0, all = 0;
+    for (const key of ['recipe', 'normal', 'emissive']) {
+      const area = entry[key]?.width * entry[key]?.height, frames = entry[key]?.frames?.length;
+      if (Number.isFinite(area * frames)) { frame += area; all += area * frames; }
+    }
+    whole.set(id, { frame, all, count: entry.recipe?.frames?.length }); sceneArea += all;
+  }
+  for (const [id, value] of Object.entries(assetSpecs)) {
     if (typeof value === 'string' || typeof value?.recipe === 'string' || typeof value?.normal === 'string' || typeof value?.emissive === 'string' || value?.revision !== undefined) fail(`scene.assets.${id}`, 'file and revision references are resolved by the CLI and MCP; inline the recipe to render here');
     const entry = value?.recipe ? value : { recipe: value };
     fields(entry, ['recipe', 'normal', 'emissive', 'palette'], `scene.assets.${id}`);
@@ -177,10 +222,25 @@ export function prepareScene(source) {
     const passes = {};
     for (const key of ['recipe', 'normal', 'emissive']) if (entry[key] !== undefined) {
       const spec = key === 'recipe' ? themed(entry[key], scenePalette, assetPalette) : entry[key];
-      // A still larger than 256 pixels a side renders on its own; scenes keep their assets to the animation canvas.
-      if (spec?.width > CANVAS_SIDE || spec?.height > CANVAS_SIDE) fail(`scene.assets.${id}`, `a scene asset is at most ${CANVAS_SIDE}×${CANVAS_SIDE} pixels; a larger still renders on its own, not in a scene`);
+      // A still larger than an animation frame renders on its own; scenes keep their assets to the frame's side and area.
+      if (Number.isFinite(spec?.width) && Number.isFinite(spec?.height) && !frameFits(spec.width, spec.height)) fail(`scene.assets.${id}`, `${frameAreaProblem(spec.width, spec.height)}, and a scene asset is one; a larger still renders on its own, not in a scene`);
       const area = spec?.width * spec?.height * spec?.frames?.length;
-      if (!Number.isFinite(area) || (sourceArea += area) > 4194304) fail(`scene.assets.${id}`, 'combined scene source passes exceed 4,194,304 pixels or have invalid dimensions');
+      if (!Number.isFinite(area)) fail(`scene.assets.${id}`, `its ${key} pass has invalid dimensions`);
+      if (sourceArea + area > 4194304) {
+        // What the assets before it use, the largest by name, and the asset to give fewer frames: the largest of all.
+        // An asset with a normal or emissive pass needs every pass's pixels, so its need is said for all of them.
+        const n = value => value.toLocaleString('en-US'), before = [...used].filter(([name]) => name !== id).sort((a, b) => b[1] - a[1]);
+        const largest = [...whole].reduce((top, entry) => entry[1].all > top[1].all ? entry : top)[0];
+        const uses = !before.length ? '' : before.length === 1 ? `${before[0][0]} uses ${n(before[0][1])}, and ` : `the assets before it use ${n(sourceArea - (used.get(id) ?? 0))} (${before.slice(0, 3).map(([name, pixels]) => `${name} ${n(pixels)}`).join(', ')}${before.length > 3 ? ', …' : ''}), and `;
+        const more = ['normal', 'emissive'].filter(pass => entry[pass] !== undefined);
+        const needs = more.length ? `${id} needs ${n(whole.get(id).all)} with its ${more.join(' and ')} pass${more.length > 1 ? 'es' : ''}` : `${id} needs ${n(area)}`;
+        // How many of its frames fit beside the whole rest of the scene (every pass of it counted per frame). Its own
+        // frames are set where it is made: dropping some of them to that count plays unevenly.
+        const { frame, all, count } = whole.get(largest), fit = Math.floor((4194304 - (sceneArea - all)) / frame);
+        const fewer = fit >= 1 ? `${largest} fits with ${fit} frame${fit === 1 ? '' : 's'}, so make it with ${fit} (in its source, rather than thinning its ${count} frames unevenly) or give it a smaller canvas` : `give ${largest} a smaller canvas`;
+        fail(`scene.assets.${id}`, `a scene's assets render at most 4,194,304 pixels in all, every frame of every pass; ${uses}${needs}: ${fewer}`);
+      }
+      sourceArea += area; used.set(id, (used.get(id) ?? 0) + area);
       passes[key] = renderProject(spec);
       warnings.push(...passes[key].warnings.map(message => `${id}.${key}: ${message}`));
     }
@@ -200,25 +260,36 @@ export function prepareScene(source) {
   source.instances.forEach((instance, i) => { if (typeof instance?.name === 'string') named.set(instance.name, named.has(instance.name) ? null : i); });
   const instances = source.instances.map((instance, i) => {
     const path = `scene.instances[${i}]`;
-    fields(instance, ['name', 'asset', 'at', 'anchor', 'scale', 'frame', 'animation', 'hidden', 'repeat', 'step', 'sequence', 'trajectory', 'attach', 'sort', 'lift', 'shade', 'tilemap', 'lit', 'haze', 'parallax', 'shadow'], path);
+    fields(instance, ['name', 'asset', 'at', 'on', 'cell', 'level', 'anchor', 'scale', 'frame', 'animation', 'hidden', 'repeat', 'step', 'sequence', 'trajectory', 'attach', 'sort', 'lift', 'shade', 'tilemap', 'lit', 'haze', 'parallax', 'shadow'], path);
     if (instance.name !== undefined && typeof instance.name !== 'string') fail(`${path}.name`, 'expected a string label');
     // `lit: false` keeps a placement's authored colours under scene lighting: a fire, a lamp or a glow is a light
     // source, not something the scene's lights fall on.
     if (instance.lit !== undefined && typeof instance.lit !== 'boolean') fail(`${path}.lit`, 'expected a boolean');
     if (instance.lit === false && instance.shade !== undefined) fail(`${path}.lit`, 'a shade placement draws no colours of its own to keep');
     if (typeof instance.asset !== 'string' || !Object.hasOwn(assets, instance.asset)) fail(`${path}.asset`, 'unknown asset');
+    if (stackNames.has(instance.asset) && !instance.tilemap) instance = { anchor: 'frame', sort: 'ground', ...instance };
     const project = assets[instance.asset].recipe;
     // `anchor: "frame"` places every drawn frame by its own atlas anchor (per-frame or recipe-level), so an animated
     // placement follows anchors that change between poses. Otherwise the anchor is one fixed [x, y] in asset pixels.
-    const at = point(instance.at, `${path}.at`), anchor = instance.anchor === 'frame' ? 'frame' : point(instance.anchor ?? [0, 0], `${path}.anchor`);
+    // `on` and `cell` stand a placement on a cell of a tilemap placement instead of at pixels; where is worked out
+    // once every placement is read, since the map may be listed after it.
+    let place = null;
+    if (instance.on !== undefined || instance.cell !== undefined || instance.level !== undefined) {
+      const index = typeof instance.on === 'string' ? named.get(instance.on) : undefined;
+      if (index == null || !source.instances[index]?.tilemap) fail(`${path}.on`, 'expected the name of a tilemap placement: the map whose cell this stands on');
+      if (!Array.isArray(instance.cell) || instance.cell.length !== 2) fail(`${path}.cell`, `expected [column, row] on ${instance.on}; halves stand between cells`);
+      for (const key of ['at', 'trajectory', 'attach', 'tilemap']) if (instance[key] !== undefined) fail(`${path}.${key}`, `a placement on a cell stands where the cell is; give cell or ${key}, not both`);
+      place = { index, cell: instance.cell.map((v, axis) => number(v, `${path}.cell[${axis}]`, -256, 512)), ...(instance.level !== undefined && { level: integer(instance.level, `${path}.level`, 0, 64) }) };
+    }
+    const at = place ? [0, 0] : point(instance.at, `${path}.at`), anchor = instance.anchor === 'frame' ? 'frame' : point(instance.anchor ?? [0, 0], `${path}.anchor`);
     if (anchor === 'frame' && !project.frames.some(frame => frame.anchor)) warnings.push(`${instance.name ?? i}: anchor "frame" but ${instance.asset} declares no anchors; its frames are placed by their top-left corner.`);
     if (instance.scale !== undefined && !Number.isInteger(instance.scale)) fail(`${path}.scale`, 'fractional sprite scaling creates inconsistent pixel sizes; use an integer or author a smaller asset');
-    const scale = int(instance.scale ?? 1, 1, 16, `${path}.scale`);
+    const scale = integer(instance.scale ?? 1, `${path}.scale`, 1, 16);
     // A shade placement draws no colours of its own: wherever its frame is opaque, the pixels already drawn move that
     // many steps along the asset's ramps (a shadow that is right on any floor).
     let shade = null;
     if (instance.shade !== undefined) {
-      shade = int(instance.shade, -8, 8, `${path}.shade`);
+      shade = integer(instance.shade, `${path}.shade`, -8, 8);
       if (!shade) fail(`${path}.shade`, 'expected a nonzero number of steps: negative darkens, positive lightens');
       if (!shifts[instance.asset]) fail(`${path}.shade`, `shade moves colours along ramps; declare ramps in ${instance.asset}'s recipe`);
     }
@@ -229,14 +300,15 @@ export function prepareScene(source) {
     if (instance.parallax !== undefined) {
       if (!camera) fail(`${path}.parallax`, 'parallax moves a placement with scene.camera; set a camera first');
       if (instance.attach !== undefined) fail(`${path}.parallax`, 'an attached placement moves with its target');
-      parallax = Array.isArray(instance.parallax) && instance.parallax.length === 2 ? instance.parallax.map((v, axis) => num(v, 0, 4, `${path}.parallax[${axis}]`)) : [num(instance.parallax, 0, 4, `${path}.parallax`), instance.parallax];
+      if (instance.on !== undefined) fail(`${path}.parallax`, 'a placement on a cell moves with its map; give the map the parallax');
+      parallax = Array.isArray(instance.parallax) && instance.parallax.length === 2 ? instance.parallax.map((v, axis) => number(v, `${path}.parallax[${axis}]`, 0, 4)) : [number(instance.parallax, `${path}.parallax`, 0, 4), instance.parallax];
     }
     // How far into the haze a placement stands: 0 is none, 1 is the haze colour itself. Kept to six decimals, as the
     // exports write it, so 0.3 and 0.1 + 0.2 are one amount: one hazed copy of a sheet, drawn alike.
     let fade = {};
     if (instance.haze !== undefined) {
       if (!haze) fail(`${path}.haze`, 'set scene.haze first: the colour far planes fade toward');
-      fade = { haze: Number(num(instance.haze, 0, 1, `${path}.haze`).toFixed(6)) };
+      fade = { haze: Number(number(instance.haze, `${path}.haze`, 0, 1).toFixed(6)) };
       if (instance.shade !== undefined) fail(`${path}.haze`, 'a shade placement draws no colours of its own to haze');
     }
     // A shadow is cast by the scene's lights, which are read after the placements.
@@ -256,7 +328,9 @@ export function prepareScene(source) {
     }
     const repeat = point(instance.repeat ?? [1, 1], `${path}.repeat`, 32);
     if (repeat.some(n => n < 1)) fail(`${path}.repeat`, 'repeat counts must be positive');
-    const step = point(instance.step ?? [project.width * scale, project.height * scale], `${path}.step`);
+    // A step the scene wrote is held to the coordinate bound; the default, the frame's own size at this scale, is not
+    // (a 1024-wide asset at scale 5 was refused for a step nobody wrote, and unused without repeat).
+    const step = instance.step === undefined ? [project.width * scale, project.height * scale] : point(instance.step, `${path}.step`);
     count += repeat[0] * repeat[1]; work += repeat[0] * repeat[1] * project.width * project.height * scale ** 2;
     if (count > MAX_DRAWS || work > MAX_WORK) fail(path, 'scene exceeds 4,096 draws or 4,194,304 drawing pixels');
     const selection = (entry, ep) => {
@@ -320,9 +394,9 @@ export function prepareScene(source) {
         if (time <= prior) fail(`${path}.lift`, 'key times must increase strictly');
         if (key.ease !== undefined && !EASINGS.includes(key.ease)) fail(`${kp}.ease`, `expected one of ${EASINGS.join(', ')}`);
         prior = time;
-        return { time, height: int(key.height, 0, 256, `${kp}.height`), ease: key.ease ?? 'linear' };
+        return { time, height: integer(key.height, `${kp}.height`, 0, 256), ease: key.ease ?? 'linear' };
       });
-    } else if (instance.lift !== undefined) lift = int(instance.lift, 0, 256, `${path}.lift`);
+    } else if (instance.lift !== undefined) lift = integer(instance.lift, `${path}.lift`, 0, 256);
     // A shadow is cast by the part of a frame above where it stands. Anchored on its top row (the default [0, 0]), none
     // is, unless it is always lifted or held at a frame point, which stands on its holder's ground.
     if (instance.shadow && !attach?.point && !(typeof lift === 'number' && lift > 0)) {
@@ -331,21 +405,35 @@ export function prepareScene(source) {
       if (anchor === 'frame' && project.frames.some(frame => !(frame.anchor?.[1] > 0))) warnings.push(`${label}: shadow, but its anchor is on its top row, so it casts nothing; anchor ${instance.asset}'s frames at their feet.`);
     }
     if (scale !== 1) warnings.push(`${instance.name ?? i}: ${scale}× pixels; compare density against neighboring 1× assets.`);
-    return { ...instance, ...fade, at, anchor, scale, repeat, step, shade, attach, lift, parallax, ...(instance.sequence && { sequence }), ...(trajectory && { trajectory }) };
+    return { ...instance, ...fade, at, anchor, scale, repeat, step, shade, attach, lift, parallax, ...(place && { place }), ...(instance.sequence && { sequence }), ...(trajectory && { trajectory }) };
   });
+  // A placement on a cell stands at the cell's ground point: the centre of an iso cell's diamond, or the middle of a
+  // square cell's bottom edge. On a raised cell it is drawn `raise` pixels higher and keeps its place in the order.
+  // It moves with its map as the camera does, and on a sorted iso map it is sorted too, so it is drawn with its cell.
+  for (const [i, instance] of instances.entries()) {
+    if (!instance.place) continue;
+    const map = instances[instance.place.index], { tilemap } = map, [w, h] = tilemap.tile, [c, r] = instance.place.cell;
+    instance.parallax = [...map.parallax];
+    if (tilemap.iso && map.sort === 'ground') instance.sort = 'ground';
+    const x = tilemap.iso ? (c - r + tilemap.rows) * w / 2 : (c + .5) * w, y = tilemap.iso ? (c + r + 1) * h / 2 : (r + 1) * h;
+    const level = instance.place.level ?? tilemap.levels?.[Math.round(r)]?.[Math.round(c)] ?? 0;
+    if (level && !tilemap.levels) fail(`scene.instances[${i}].level`, tilemap.iso ? `${instance.on} has no heights; give the map heights, or lift this placement by pixels` : `${instance.on} is a square map, which has no heights; lift this placement by pixels`);
+    instance.raise = (level * (tilemap.rise ?? 0) + (tilemap.surface ?? 0)) * map.scale;
+    instance.at = [map.at[0] + (Math.round(x) - map.anchor[0]) * map.scale, map.at[1] + (Math.round(y) - map.anchor[1]) * map.scale - instance.raise];
+  }
   let lighting = null;
   if (source.lighting !== undefined) {
     fields(source.lighting, ['ambient', 'bands', 'lights', 'scope', 'mode', 'steps'], 'scene.lighting');
     const { ambient = .35, bands = 5, lights = [], scope = 'passes', mode = 'multiply' } = source.lighting;
     if (typeof ambient !== 'number' || !Number.isFinite(ambient) || ambient < 0 || ambient > 1) fail('scene.lighting.ambient', 'expected 0–1');
-    int(bands, 2, 16, 'scene.lighting.bands');
+    integer(bands, 'scene.lighting.bands', 2, 16);
     // "passes" lights only assets with normal/emissive passes; "all" also lights plain assets as flat, facing surfaces.
     if (!['passes', 'all'].includes(scope)) fail('scene.lighting.scope', 'expected passes or all');
     // "multiply" scales colours by the light; "ramp" moves each colour along its asset's ramps instead, so a lit scene
     // keeps exactly its palette (light colours then only change brightness).
     if (!['multiply', 'ramp'].includes(mode)) fail('scene.lighting.mode', 'expected multiply or ramp');
     if (source.lighting.steps !== undefined && mode !== 'ramp') fail('scene.lighting.steps', 'steps apply to ramp lighting; set mode to ramp');
-    const steps = int(source.lighting.steps ?? 2, 1, 8, 'scene.lighting.steps');
+    const steps = integer(source.lighting.steps ?? 2, 'scene.lighting.steps', 1, 8);
     if (!Array.isArray(lights) || lights.length > 8) fail('scene.lighting.lights', 'expected at most 8 lights');
     lighting = { ambient, bands, scope, mode, steps, lights: lights.map((light, i) => {
       const lp = `scene.lighting.lights[${i}]`;
@@ -357,7 +445,7 @@ export function prepareScene(source) {
       if (light.sun !== undefined) {
         for (const key of ['at', 'height', 'radius', 'follow']) if (light[key] !== undefined) fail(`${lp}.${key}`, 'a sun has no position, height or reach: sun alone sets where its light comes from');
         if (!Array.isArray(light.sun) || light.sun.length !== 2) fail(`${lp}.sun`, 'expected [x, y]: how far a shadow falls across the ground per pixel of height');
-        sun = light.sun.map((v, axis) => num(v, -8, 8, `${lp}.sun[${axis}]`));
+        sun = light.sun.map((v, axis) => number(v, `${lp}.sun[${axis}]`, -8, 8));
       }
       // A following light rides a placement (where it stands) or one of its frame points; `at` is then an offset. It is
       // off while that placement is hidden or its current frame has no such point.
@@ -370,14 +458,14 @@ export function prepareScene(source) {
         follow = { index, point: light.follow.point ?? null };
       }
       const at = sun ? null : follow && light.at === undefined ? [0, 0] : point(light.at, `${lp}.at`);
-      const radius = sun ? null : int(light.radius ?? 96, 1, 512, `${lp}.radius`), strength = num(light.strength ?? 1, 0, 8, `${lp}.strength`);
+      const radius = sun ? null : integer(light.radius ?? 96, `${lp}.radius`, 1, 512), strength = number(light.strength ?? 1, `${lp}.strength`, 0, 8);
       // Flicker raises or lowers a light's strength by up to `amount` of it and its reach by up to half that, along seeded
       // noise that changes about every `every` ms and repeats once per scene duration.
       let flicker = null;
       if (light.flicker !== undefined) {
         fields(light.flicker, ['amount', 'every', 'seed'], `${lp}.flicker`);
-        const every = int(light.flicker.every ?? 80, 10, 10000, `${lp}.flicker.every`);
-        flicker = { amount: num(light.flicker.amount, 0, 1, `${lp}.flicker.amount`), steps: Math.max(1, Math.round(duration / every)), seed: int(light.flicker.seed ?? 0, 0, 2147483647, `${lp}.flicker.seed`) };
+        const every = integer(light.flicker.every ?? 80, `${lp}.flicker.every`, 10, 10000);
+        flicker = { amount: number(light.flicker.amount, `${lp}.flicker.amount`, 0, 1), steps: Math.max(1, Math.round(duration / every)), seed: integer(light.flicker.seed ?? 0, `${lp}.flicker.seed`, 0, 2147483647) };
       }
       // Keys set strength and radius over time, at milliseconds or cue times ("strike+70"): a flash, a lamp lit later.
       let keys = null;
@@ -392,10 +480,10 @@ export function prepareScene(source) {
           prior = time;
           if (key.ease !== undefined && !EASINGS.includes(key.ease)) fail(`${kp}.ease`, `expected one of ${EASINGS.join(', ')}`);
           if (sun && key.radius !== undefined) fail(`${kp}.radius`, 'a sun reaches everywhere; its keys set strength');
-          return { time, strength: key.strength === undefined ? strength : num(key.strength, 0, 8, `${kp}.strength`), radius: key.radius === undefined ? radius : int(key.radius, 1, 512, `${kp}.radius`), ease: key.ease ?? 'linear' };
+          return { time, strength: key.strength === undefined ? strength : number(key.strength, `${kp}.strength`, 0, 8), radius: key.radius === undefined ? radius : integer(key.radius, `${kp}.radius`, 1, 512), ease: key.ease ?? 'linear' };
         });
       }
-      return { at, height: sun ? null : int(light.height ?? 24, 1, 256, `${lp}.height`), radius, color: parseColor(light.color ?? '#fff', {}, `${lp}.color`), strength, follow, flicker, keys, ...(sun && { sun }) };
+      return { at, height: sun ? null : integer(light.height ?? 24, `${lp}.height`, 1, 256), radius, color: parseColor(light.color ?? '#fff', {}, `${lp}.color`), strength, follow, flicker, keys, ...(sun && { sun }) };
     }) };
     if (mode === 'ramp' && !Object.keys(shifts).length) warnings.push('Ramp lighting needs ramps in the recipes it lights; no asset declares any, so nothing is lit.');
   }
@@ -485,7 +573,7 @@ export function scenePlanes(scene, draws) {
       const project = scene.assets[draw.asset].recipe, frame = project.frames[draw.frame].data, s = draw.scale, [x0, y0] = boxes[k];
       for (let y = 0; y < project.height; y++) for (let x = 0; x < project.width; x++) {
         const at = (y * project.width + x) * 4;
-        if (!frame[at + 3]) continue;
+        if (!frame[at + 3] || (draw.cols && !draw.cols.some(([from, to]) => x >= from && x < to))) continue;
         for (let c = 0; c < 4; c++) rgba[c] = frame[at + c];
         if (draw.haze) rgba.set(hazed(draw.haze, rgba));
         for (let sy = 0; sy < s; sy++) for (let sx = 0; sx < s; sx++) alphaOver(data, ((y0 - top + y * s + sy) * width + x0 - left + x * s + sx) * 4, rgba);
@@ -496,11 +584,39 @@ export function scenePlanes(scene, draws) {
   return { planes, shaded: [...shaded], oversized };
 }
 
+// renderScene's `draws` for what draws a frame whole, as a Tiled object and a Godot sprite do: each placement that
+// is drawn in pieces (among the cells of the iso map it stands on) is drawn once, whole, where its last piece is, after
+// all the ground under it. `which` picks the placements to make whole (all of them unless given). `covered` names those
+// this changes a pixel of: something drawn between two of its pieces lies over the earlier one, and is behind it here.
+export function wholeDraws(scene, draws, which = () => true) {
+  const key = draw => `${draw.instance} ${draw.x} ${draw.y}`, pieced = draw => draw.cols && which(draw.instance), last = new Map(), out = [], covered = new Set();
+  for (const [k, draw] of draws.entries()) if (pieced(draw)) last.set(key(draw), k);
+  const box = draw => { const { width, height } = scene.assets[draw.asset].recipe; return [draw.x + draw.shift[0], draw.y + draw.shift[1], width * draw.scale, height * draw.scale]; };
+  const opaque = (draw, [left, top], X, Y) => {
+    const project = scene.assets[draw.asset].recipe, x = Math.floor((X - left) / draw.scale), y = Math.floor((Y - top) / draw.scale);
+    return (!draw.cols || draw.cols.some(([from, to]) => x >= from && x < to)) && project.frames[draw.frame].data[(y * project.width + x) * 4 + 3] > 0;
+  };
+  const over = (front, piece) => {
+    const a = box(front), b = box(piece), x1 = Math.min(a[0] + a[2], b[0] + b[2]), y1 = Math.min(a[1] + a[3], b[1] + b[3]);
+    for (let y = Math.max(a[1], b[1]); y < y1; y++) for (let x = Math.max(a[0], b[0]); x < x1; x++) if (opaque(piece, b, x, y) && opaque(front, a, x, y)) return true;
+    return false;
+  };
+  for (const [k, draw] of draws.entries()) {
+    if (!pieced(draw)) { out.push(draw); continue; }
+    const end = last.get(key(draw)), name = scene.instances[draw.instance].name ?? scene.instances[draw.instance].asset;
+    if (k === end) { const { cols, ...whole } = draw; out.push(whole); continue; }
+    if (covered.has(name)) continue;
+    for (let j = k + 1; j < end; j++) if (!draws[j].shade && key(draws[j]) !== key(draw) && over(draws[j], draw)) { covered.add(name); break; }
+  }
+  return { draws: out, covered: [...covered] };
+}
+
 // `depth: true` also records which placement drew each pixel last and who covers whom, for `depth` in the result and
 // for `sceneImage(view, { mode: 'depth' })`.
 // With `draws`, the result also lists every frame drawn, in drawing order: { instance, cell? (a tilemap cell's index),
 // asset, frame (its index), x, y (its top-left on screen), scale, shift (how far the camera moved it, so x + shift[0] is
-// where it is in the scene), shade?, haze? }. A Tiled map of the scene is made from it.
+// where it is in the scene), shade?, haze?, cols? }. A Tiled map of the scene is made from it. `cols` is on a piece of
+// a placement drawn in pieces: the columns of the frame it draws, as [from, to) runs of frame pixels.
 export function renderScene(scene, { time = 0, lit = true, density = false, depth = false, draws = false } = {}) {
   if (!Number.isFinite(time) || time < 0) fail('scene.time', 'expected a nonnegative finite time in milliseconds');
   if (typeof lit !== 'boolean' || typeof density !== 'boolean' || typeof depth !== 'boolean') fail('scene.preview', 'lit, density and depth must be booleans');
@@ -539,7 +655,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
   const hazed = sceneHaze(scene);
   // Shadows (below): per light, the rank of the last-drawn caster shadowing each pixel, or nothing when none does.
   let shadowMasks = [];
-  const drawFrame = (id, index, left, top, s, label, shade = null, unlit, entry, fade = 0, rank) => {
+  const drawFrame = (id, index, left, top, s, label, shade = null, unlit, entry, fade = 0, rank, within = null, only = null) => {
     const asset = assets[id], shift = shifts[id], project = asset.recipe, frame = project.frames[index];
     const normal = asset.normal?.frames[index].data, emission = asset.emissive?.frames[index].data;
     const light = !shade && !unlit && lit && lighting && (normal || emission || lighting.scope === 'all') && (lighting.mode === 'multiply' || shift);
@@ -547,7 +663,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     for (let y = 0; y < project.height; y++) for (let x = 0; x < project.width; x++) {
       const at = (y * project.width + x) * 4;
       for (let c = 0; c < 4; c++) rgba[c] = frame.data[at + c];
-      if (!rgba[3]) continue;
+      if (!rgba[3] || (only && !only[x])) continue;
       if (light) {
         let nx = 0, ny = 0, nz = 1;
         if (normal?.[at + 3]) { nx = normal[at] / 127.5 - 1; ny = normal[at + 1] / 127.5 - 1; nz = normal[at + 2] / 127.5 - 1; }
@@ -584,7 +700,11 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
       if (fade) rgba.set(hazed(fade, rgba));
       for (let sy = 0; sy < s; sy++) for (let sx = 0; sx < s; sx++) {
         const tx = left + x * s + sx, ty = top + y * s + sy;
-        if (tx < 0 || ty < 0 || tx >= width || ty >= height) { clipped.set(label, (clipped.get(label) ?? 0) + 1); continue; }
+        if (tx < 0 || ty < 0 || tx >= width || ty >= height) {
+          // Corner tiles reach half a cell past their map on every side; that fringe off the scene is no drawing lost.
+          if (!within || (tx >= within.x && ty >= within.y && tx < within.x + within.w && ty < within.y + within.h)) clipped.set(label, (clipped.get(label) ?? 0) + 1);
+          continue;
+        }
         const to = (ty * width + tx) * 4;
         if (shade) { const next = data[to + 3] ? shift(pixelId(data, to), shade) : null; if (next) data.set(next, to); }
         else {
@@ -657,6 +777,43 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
   // its cells joins the group, standing on the bottom row of its frame, so a wall or a tree taller than its tile covers
   // whoever stands behind it. Equal lines keep list order, then map order.
   // Each item's rank is where its placement, or its sorted group, starts drawing.
+  // What stands `on` a cell of an iso map is drawn with that cell: after its tile (and before the tiles of the next
+  // line), then in the order of where it stands. A placement wider than a cell stands on several, so it is drawn in
+  // pieces. The bottom edge of its frame is where it meets the ground: the lowest pixel of each column, followed out
+  // from the frame's lowest pixels for as long as it runs unbroken (a step of at most FOOT pixels between neighbouring
+  // columns). Each of those columns stands on the cell under its lowest pixel. The rest overhang, as a tree's crown
+  // does and a roof's eaves, and stand with the anchor; so does every column when the frame ends above its anchor. The
+  // columns standing on one cell are a piece, drawn with that cell. So the ground under a building never covers it,
+  // and a cliff or a barrel beside it covers only the part that stands behind it.
+  const pieces = (i, rx, ry) => {
+    const instance = scene.instances[i], state = states[i], map = scene.instances[instance.place.index], { tilemap } = map, [w, h] = tilemap.tile, s = instance.scale, ms = map.scale;
+    const project = assets[instance.asset].recipe, { data } = state.frame;
+    const left = map.at[0] - map.anchor[0] * ms, top = map.at[1] - map.anchor[1] * ms, dx = rx * instance.step[0], dy = ry * instance.step[1];
+    // The cell under a point of the ground: the line its tile is sorted by, and half a pixel after it.
+    const stand = (x, y) => {
+      const u = (x - left) / ms / (w / 2) - tilemap.rows, v = (y - top) / ms / (h / 2) - 1, c = Math.round((u + v) / 2), r = Math.round((v - u) / 2);
+      return { cell: `${c} ${r}`, ground: top + ((c + r + 1) * h / 2 - 1) * ms + .5, fine: y };
+    };
+    const whole = stand(state.position[0] + dx, state.position[1] + dy + instance.raise), found = new Map();
+    const bottoms = Array.from({ length: project.width }, (_, x) => { let y = project.height - 1; while (y >= 0 && !data[(y * project.width + x) * 4 + 3]) y--; return y; });
+    const low = Math.max(...bottoms), foot = new Uint8Array(project.width), next = [];
+    // The anchor is on the line above the row it names: a frame whose lowest row is that row, or the one above, stands there.
+    if (low >= (state.position[1] - state.lift - state.top) / s - 1) for (const [x, y] of bottoms.entries()) if (y === low) { foot[x] = 1; next.push(x); }
+    while (next.length) {
+      const x = next.pop();
+      for (const beside of [x - 1, x + 1]) if (bottoms[beside] >= 0 && !foot[beside] && Math.abs(bottoms[beside] - bottoms[x]) <= FOOT) { foot[beside] = 1; next.push(beside); }
+    }
+    for (const [x, y] of bottoms.entries()) {
+      if (y < 0) continue;
+      const at = foot[x] ? stand(state.left + dx + (x + .5) * s, state.top + dy + (y + .5) * s + state.lift + instance.raise) : whole;
+      const piece = found.get(at.cell) ?? { ...at, only: new Uint8Array(project.width) };
+      piece.only[x] = 1;
+      if (at.fine < piece.fine) piece.fine = at.fine;
+      found.set(at.cell, piece);
+    }
+    if (found.size < 2) return [{ i, rx, ry, ground: whole.ground, fine: whole.fine }];
+    return [...found.values()].map(({ ground, fine, only }) => ({ i, rx, ry, ground, fine, only, of: found.size }));
+  };
   const order = [], sorted = scene.instances.flatMap((instance, i) => instance.sort === 'ground' ? [i] : []);
   const copies = i => {
     const instance = scene.instances[i], s = instance.scale;
@@ -667,8 +824,27 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
       const top = instance.at[1] - instance.anchor[1] * s;
       return instance.tilemap.cells.map((cell, k) => ({ i, cell: k, ground: top + (cell.bottom - 1) * s }));
     }
-    const [columns, rows] = instance.repeat;
-    return Array.from({ length: columns * rows }, (_, k) => ({ i, rx: k % columns, ry: Math.floor(k / columns), ground: states[i].position[1] + Math.floor(k / columns) * instance.step[1] }));
+    const [columns, rows] = instance.repeat, cells = instance.sort === 'ground' && instance.place && scene.instances[instance.place.index].tilemap.iso && !states[i].hidden;
+    return Array.from({ length: columns * rows }, (_, k) => ({ i, rx: k % columns, ry: Math.floor(k / columns), ground: states[i].position[1] + (instance.raise ?? 0) + Math.floor(k / columns) * instance.step[1] }))
+      .flatMap(copy => cells ? pieces(i, copy.rx, copy.ry) : [copy]);
+  };
+  // Pieces of one copy that nothing is drawn between are one piece, and all of them are the placement, whole.
+  const joined = items => {
+    const out = [];
+    for (const item of items) {
+      const last = out.at(-1);
+      if (!item.only || !last?.only || last.i !== item.i || last.rx !== item.rx || last.ry !== item.ry) { out.push(item.only ? { ...item, parts: 1 } : item); continue; }
+      for (const [x, on] of item.only.entries()) if (on) last.only[x] = 1;
+      last.parts++;
+    }
+    const seen = new Set();
+    return out.map(item => {
+      if (!item.only) return item;
+      const { parts, of, ...piece } = item, key = `${item.i} ${item.rx} ${item.ry}`, later = seen.has(key);
+      seen.add(key);
+      if (parts === of) delete piece.only;
+      return { ...piece, ...(later && { later }) };
+    });
   };
   for (const [i, instance] of scene.instances.entries()) {
     const rank = order.length;
@@ -676,7 +852,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     if (i !== sorted[0]) continue;
     // A sorted tilemap is listed among the placements where its group starts.
     order.push(...sorted.filter(j => scene.instances[j].tilemap).map(j => ({ i: j, record: true, rank })));
-    order.push(...sorted.flatMap(copies).map((item, n) => ({ n, item })).sort((a, b) => a.item.ground - b.item.ground || a.n - b.n).map(({ item }) => ({ ...item, rank })));
+    order.push(...joined(sorted.flatMap(copies).map((item, n) => ({ n, item })).sort((a, b) => a.item.ground - b.item.ground || (a.item.fine ?? 0) - (b.item.fine ?? 0) || a.n - b.n).map(({ item }) => ({ ...item, rank }))));
   }
   // Shadows. A placement or tilemap with `shadow` stops each light that reaches it, over the shape its frame casts on
   // the ground: a cutout standing on its ground line and turned to face the light, falling away from the light, longer
@@ -729,7 +905,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     };
     for (const item of order) {
       const { i } = item, instance = scene.instances[i];
-      if (!instance.shadow || item.record) continue;
+      if (!instance.shadow || item.record || item.later) continue;
       const project = assets[instance.asset].recipe, s = instance.scale, shift = shiftOf(i);
       let casters;
       if (instance.tilemap) {
@@ -757,10 +933,13 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     }
   }
   const drawn = draws ? [] : null;
-  const record = (i, cell, frame, x, y) => {
-    const instance = scene.instances[i];
-    drawn?.push({ instance: i, ...(cell !== null && { cell }), asset: instance.asset, frame, x, y, scale: instance.scale, shift: shiftOf(i), ...(instance.shade && { shade: instance.shade }), ...(instance.haze && { haze: instance.haze }) });
+  const record = (i, cell, frame, x, y, only) => {
+    const instance = scene.instances[i], cols = [];
+    if (only) for (const [at, on] of only.entries()) if (on) { if (cols.at(-1)?.[1] === at) cols.at(-1)[1]++; else cols.push([at, at + 1]); }
+    drawn?.push({ instance: i, ...(cell !== null && { cell }), asset: instance.asset, frame, x, y, scale: instance.scale, shift: shiftOf(i), ...(instance.shade && { shade: instance.shade }), ...(instance.haze && { haze: instance.haze }), ...(only && { cols }) });
   };
+  // A placement drawn in pieces is one placement and one depth entry, listed where its first piece is drawn.
+  const begun = new Map();
   for (const item of order) {
     const { i } = item, instance = scene.instances[i], asset = assets[instance.asset], project = asset.recipe, s = instance.scale, label = instance.name ?? `${instance.asset}#${i}`;
     if (instance.tilemap) {
@@ -778,14 +957,14 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
           entry = entries.length - 1;
         }
         record(i, item.cell, frameIndex(project, cell, 0), x, y);
-        drawFrame(instance.asset, frameIndex(project, cell, 0), x, y, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+        drawFrame(instance.asset, frameIndex(project, cell, 0), x, y, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank, tilemap.corner ? box : null);
         continue;
       }
       if (!item.record) {
         const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted: false, covers: false }) - 1 : -1;
         for (const [k, cell] of tilemap.cells.entries()) {
           record(i, k, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s);
-          drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+          drawFrame(instance.asset, frameIndex(project, cell, 0), left + cell.x * s, top + cell.y * s, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank, tilemap.corner ? box : null);
         }
       }
       placements.push({ name: label, tilemap: true, ...box, tiles: tilemap.cells.length, scale: s, ...(instance.haze && { haze: instance.haze }) });
@@ -794,12 +973,18 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     const state = states[i], { rx, ry } = item;
     if (state.hidden) continue;
     const shift = shiftOf(i), left = state.left + rx * instance.step[0] - shift[0], top = state.top + ry * instance.step[1] - shift[1];
+    if (item.later) {
+      record(i, null, state.index, left, top, item.only);
+      drawFrame(instance.asset, state.index, left, top, s, label, instance.shade, instance.lit === false, begun.get(`${i} ${rx} ${ry}`), instance.haze, item.rank, null, item.only);
+      continue;
+    }
     placements.push({ name: instance.name ?? instance.asset, frame: state.frame.name, x: left, y: top, w: project.width * s, h: project.height * s, scale: s, ...(state.lift && { lift: state.lift }), ...(instance.haze && { haze: instance.haze }), ...(instance.shade && { shade: instance.shade }) });
     // A sorted copy stands at its placement point; its y is the ground line it was sorted by.
     const sorted = instance.sort === 'ground', at = [state.position[0] + rx * instance.step[0], state.position[1] + ry * instance.step[1]];
-    const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted, ...(sorted && { at }), ...(sorted && state.lift && { lift: state.lift }), box: { x: left, y: top, w: project.width * s, h: project.height * s }, shift, covers: false }) - 1 : -1;
-    record(i, null, state.index, left, top);
-    drawFrame(instance.asset, state.index, left, top, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank);
+    const entry = owner && !instance.shade ? entries.push({ instance: i, label, sorted, ...(sorted && { at }), ...(sorted && state.lift && { lift: state.lift }), ...(sorted && instance.raise && { raise: instance.raise }), box: { x: left, y: top, w: project.width * s, h: project.height * s }, shift, covers: false }) - 1 : -1;
+    if (item.only) begun.set(`${i} ${rx} ${ry}`, entry);
+    record(i, null, state.index, left, top, item.only);
+    drawFrame(instance.asset, state.index, left, top, s, label, instance.shade, instance.lit === false, entry, instance.haze, item.rank, null, item.only);
   }
   if (density) for (const box of placements) {
     const color = box.scale === 1 ? [65, 201, 240, 180] : [255, 70, 100, 255];
@@ -842,7 +1027,7 @@ export function renderScene(scene, { time = 0, lit = true, density = false, dept
     const overlaps = [...pairs].map(([key, pixels]) => { const [front, behind] = key.split(' ').map(Number); return { front: labels.get(front), behind: labels.get(behind), pixels }; }).sort((a, b) => b.pixels - a.pixels);
     const omitted = { ...(sorted.length > 64 && { sorted: sorted.length - 64 }), ...(overlaps.length > 32 && { overlaps: overlaps.length - 32 }) };
     // A row of a sorted tilemap is listed by the row it stands on and how many of its tiles stand there.
-    result.depth = { ...(sorted.length && { sorted: sorted.slice(0, 64).map(e => (e.spans ? { name: e.label, ground: e.ground, tiles: e.tiles } : { name: e.label, at: e.at, ...(e.lift && { lift: e.lift }) })) }), overlaps: overlaps.slice(0, 32), ...(Object.keys(omitted).length && { omitted }),
+    result.depth = { ...(sorted.length && { sorted: sorted.slice(0, 64).map(e => (e.spans ? { name: e.label, ground: e.ground, tiles: e.tiles } : { name: e.label, at: e.at, ...(e.lift && { lift: e.lift }), ...(e.raise && { raise: e.raise }) })) }), overlaps: overlaps.slice(0, 32), ...(Object.keys(omitted).length && { omitted }),
       ...(!scene.instances.some(instance => instance.sort === 'ground') && overlaps.length && { note: 'No placement has sort: "ground", so placements draw in list order. Give everything that stands on the ground sort: "ground" to draw it by where it stands.' }) };
     Object.defineProperty(result, 'depthMap', { value: { owner, entries } });
   }

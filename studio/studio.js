@@ -2,6 +2,8 @@ import { renderProject, buildAtlas, parseColor, reviewPixels, onionPixels, partC
 import { animationGIF } from '/gif.js';
 import { createDraftStore, claimTab, openTabs } from '/draft.js';
 import { compilePoses } from '/authoring.js';
+import { compileStack, prepareStack } from '/stack.js';
+import { stackEditor } from '/stack-editor.js';
 import { compileWaves } from '/wave.js';
 import { inspectMotion } from '/motion.js';
 import { $, toast, download, playButton } from '/page.js';
@@ -21,33 +23,49 @@ let sharedPalette = null;
 const isLinked = value => value?.palette !== null && typeof value?.palette === 'object' && Object.hasOwn(value.palette, '$ref');
 function withSharedPalette(value) {
   if (!isLinked(value)) return value;
-  const where = `${value.format === 'pixelforge-poses' ? 'poses' : value.format === 'pixelforge-wave' ? 'wave' : 'project'}.palette.$ref`, reference = JSON.stringify(value.palette.$ref);
+  const where = `${value.format === 'pixelforge-stack' ? 'stack' : value.format === 'pixelforge-poses' ? 'poses' : value.format === 'pixelforge-wave' ? 'wave' : 'project'}.palette.$ref`, reference = JSON.stringify(value.palette.$ref);
   if (!sharedPalette) throw new Error(`${where}: the studio reads a shared palette file only for the recipe pixelbolt preview opened, so it cannot draw ${reference}. Open this recipe with pixelbolt preview <file>, or put its colours in the palette.`);
   if (sharedPalette.$ref !== value.palette.$ref) throw new Error(`${where}: the studio has only ${JSON.stringify(sharedPalette.$ref)}, the palette file of the recipe pixelbolt preview opened, so it cannot draw ${reference}. Open this recipe with pixelbolt preview <file>.`);
   return inlineSharedPalette(value, sharedPalette);
 }
-const compileSource = value => { const drawn = withSharedPalette(value); return drawn?.format === 'pixelforge-poses' ? compilePoses(drawn) : drawn?.format === 'pixelforge-wave' ? compileWaves(drawn) : { recipe: drawn, metadata: null }; };
+const stackTools = stackEditor(index => document.querySelectorAll('.frame')[index]?.click(), resumeStackBake);
+let stackOpen = false, pendingStack = null;
+const compileSource = value => { const drawn = withSharedPalette(value); return drawn?.format === 'pixelforge-stack' ? compileStack(drawn) : drawn?.format === 'pixelforge-poses' ? compilePoses(drawn) : drawn?.format === 'pixelforge-wave' ? compileWaves(drawn) : { recipe: drawn, metadata: null }; };
 let elapsed = 0, lastTime = 0, zoom = 12, dirty = false, valid = false, compileTimer, loadVersion = 0;
 // Whether an Export assets request is on its way: the one thing the button's packing label and its being off while it
 // packs are drawn from. Otherwise the button is on exactly when the recipe is valid. Whatever compiles meanwhile
 // (typing, a sample, GIF, Frames) calls showExport, so it can neither turn the button on nor lose its label mid-export.
 let exporting = false;
 const exportLabel = [...$('export').childNodes];
+// What GIF, Frames and Motion say when the frames play: stills replace it with why each is off.
+const buttonTitles = Object.fromEntries(['gif', 'frames', 'motion-view'].map(id => [id, $(id).title]));
 function showExport() {
   const button = $('export');
   button.disabled = exporting || !valid;
   button.replaceChildren(...(exporting ? ['Packing assets…'] : exportLabel));
 }
 // Zoom is a whole number, or "fit": the whole picture in the artboard, at the largest whole number that fits or, for a
-// still larger than the artboard, scaled down smoothly so a dither reads as the tone it makes rather than as noise.
-// A still larger than 256 px a side opens fitted; the zoom chosen for sprites comes back when a sprite is shown again.
+// picture larger than the artboard, scaled down smoothly so a dither reads as the tone it makes rather than as noise.
+// A picture larger than 256 px a side, a still or an animation frame (320 × 180, 640 × 360: up to 1024 a side), opens
+// fitted; the zoom chosen for sprites comes back when a sprite is shown again.
 const ZOOMS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32];
 let spriteZoom = zoom, shownScale = 1;
-const isLarge = p => p.width > 256 || p.height > 256;
+const SPRITE_SIDE = 256;
+const isLarge = p => p.width > SPRITE_SIDE || p.height > SPRITE_SIDE;
 // The zoom as the GIF and frame exports take it: a whole number, at most `max`; a view fitted below 1× exports at 1×.
 const exportScale = max => Math.min(max, zoom === 'fit' ? Math.max(1, Math.floor(shownScale)) : zoom);
-function fitZoom(next) {
-  const wasLarge = project ? isLarge(project) : false, large = isLarge(next);
+// The largest scale whose frames pixelbolt sequence can make without a size: at most 4096 a side and 16,777,216 pixels.
+// A 256 px sprite keeps 16 and a 640 × 360 frame stops at 6, so the Frames dialog's "current zoom" never asks for more.
+// A copy of sequence.js SEQUENCE_SIDE and SEQUENCE_CANVAS_PIXELS (placeSprite's canvas limits): the studio cannot load that
+// module, which encodes PNGs with node:zlib, so whoever changes one changes the other (test/interfaces.test.js holds them equal).
+const SEQUENCE_SIDE = 4096, SEQUENCE_CANVAS_PIXELS = 16777216;
+function sequenceScale(width, height) {
+  let scale = 256;
+  while (scale > 1 && (width * scale > SEQUENCE_SIDE || height * scale > SEQUENCE_SIDE || width * scale * height * scale > SEQUENCE_CANVAS_PIXELS)) scale--;
+  return scale;
+}
+function fitZoom(next, isStack) {
+  const wasLarge = stackOpen || Boolean(project && isLarge(project)), large = isStack || isLarge(next);
   if (large === wasLarge) return;
   if (large) { spriteZoom = zoom; zoom = 'fit'; } else zoom = spriteZoom;
   $('zoom').value = String(zoom);
@@ -66,7 +84,7 @@ claimed.catch(() => {});
 let drafts = null, offer = null, offers = [], draftTimer, draftWarned = false;
 const ownOffer = () => offer !== null && offer.id === drafts.id;
 // Each example's frame count is added from its render when the list is built, so a changed example can't leave it stale.
-const examples = [{ file: 'forest-spirit', title: 'Forest spirit', type: 'Character' }, { file: 'ember', title: 'Campfire', type: 'Effect' }, { file: 'coin', title: 'Golden coin', type: 'Collectible' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light' }, { file: 'caption', title: 'Caption', type: 'Text, for video' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx' }, { file: 'interference.wave', title: 'Interference', type: 'Paired ripples' }, { file: 'portal.wave', title: 'Portal', type: 'Moving waves, steady rim' }];
+const examples = [{ file: 'forest-spirit', title: 'Forest spirit', type: 'Character' }, { file: 'ember', title: 'Campfire', type: 'Effect' }, { file: 'coin', title: 'Golden coin', type: 'Collectible' }, { file: 'shrine', title: 'Moonlit shrine', type: 'Dither, rewrite, rim light' }, { file: 'caption', title: 'Caption', type: 'Text, for video' }, { file: 'swing', title: 'Sword swing', type: 'Rotated, tweened poses' }, { file: 'effects', title: 'Particle effects', type: 'Compiled fx' }, { file: 'interference.wave', title: 'Interference', type: 'Paired ripples' }, { file: 'portal.wave', title: 'Portal', type: 'Moving waves, steady rim' }, { file:'copper-rally.stack', title:'Copper Rally', type:'Paintable sprite stack' }, { file:'lodekeeper-faceted.stack', title:'Lodekeeper', type:'Glass and moving attachments' }];
 const title = name => name.replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase());
 function imageCanvas(data, width, height) {
   const c = document.createElement('canvas'); c.width = width; c.height = height;
@@ -79,8 +97,16 @@ const playState = () => playButton(playing);
 function reviewMotion() {
   if (motionReview) return motionReview;
   const speed = $('motion-speed').value, ground = $('motion-ground').value;
-  motionReview = inspectMotion(project, { animation: $('animation').value, metadata: poseMetadata, scale: 1,
-    ...(speed !== '' && { speed: Number(speed) }), ...(ground !== '' && { ground: Number(ground) }) });
+  const isCutout = poseMetadata?.animations?.[$('animation').value]?.cutout;
+  if (isCutout) ownedProject ??= renderProject(spec, { owners: true });
+  motionReview = inspectMotion(isCutout ? ownedProject : project, { animation: $('animation').value, metadata: poseMetadata, scale: 1,
+    ...(speed !== '' && { speed: Number(speed) }), ...(ground !== '' && { ground: Number(ground) }) }, spec);
+  const cutout = motionReview.motion.cutout;
+  if (cutout) {
+    const slide = Math.max(...cutout.slide.map(foot => foot.pixels));
+    $('motion-summary').textContent = [`Foot slide ${slide} px`, `${cutout.separated.length} frames with separated pixels`, `${cutout.clipped.length} clipped frames`, ...cutout.fixes].join(' · ');
+    return motionReview;
+  }
   const names = { slide: 'Foot slide', ground: 'Ground contact', poseSpread: 'Pose changes', loopSeam: 'Loop join', armSwing: 'Arm swing', contactLegs: 'Knees at contact', kneeLift: 'Knee lift' };
   const report = motionReview.motion, details = {
     slide: `${Math.max(0, ...report.slide.map(p => p.pixels ?? 0))} px`,
@@ -120,14 +146,24 @@ function render() {
   let review;
   try { if (isMotion) review = reviewMotion(); }
   catch (error) { $('motion-summary').textContent = error.message; return; }
-  const width = isMotion ? review.nativeSheet.width : isSheet ? atlas.width : project.width, height = isMotion ? review.nativeSheet.height : isSheet ? atlas.height : project.height;
+  const motionSheet = review?.nativeSheet ?? review?.sheet;
+  const width = isMotion ? motionSheet.width : isSheet ? atlas.width : project.width, height = isMotion ? motionSheet.height : isSheet ? atlas.height : project.height;
   canvas.width = width; canvas.height = height;
   context.imageSmoothingEnabled = false;
   const animation = project.animations[$('animation').value], view = $('review-view').value;
   // Parts colours one frame at a time, onion skin or not; the sheet and the motion review stay in colour.
+  // Scrubbing during a paint bake gives that heading priority too.
+  if (pendingStack && !isSheet && !pendingStack.shown.has(selected)) {
+    const single = pendingStack.model.recipe(selected), fresh = renderProject(single).frames[0];
+    spec.frames[selected] = single.frames[0];
+    project.frames[selected] = fresh;
+    frameImages[selected] = imageCanvas(fresh.data, width, height);
+    pendingStack.shown.add(selected);
+    ownedProject = null; partsView = null;
+  }
   const parts = view === 'parts' && !isSheet && !isMotion;
   $('parts-legend').hidden = !parts;
-  const pixels = parts ? reviewParts().pixels.get(selected) ?? project.frames[selected].data : isMotion ? review.nativeSheet.data : isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
+  const pixels = parts ? reviewParts().pixels.get(selected) ?? project.frames[selected].data : isMotion ? motionSheet.data : isSheet ? atlas.data : $('onion').getAttribute('aria-pressed') === 'true' ? onionPixels(project, animation, position) : project.frames[selected].data;
   context.putImageData(new ImageData(new Uint8ClampedArray(view === 'parts' ? pixels : reviewPixels(pixels, view)), width, height), 0, 0);
   if (!isSheet && !isMotion && poseMetadata && $('contacts').getAttribute('aria-pressed') === 'true') {
     const pose = poseMetadata.poses[project.frames[selected].name], ground = $('motion-ground').value;
@@ -136,15 +172,17 @@ function render() {
     context.fillStyle = '#ffce53';
     for (const marker of pose.markers) if (pose.contacts?.includes(marker.name)) context.fillRect(marker.at[0] - 1, marker.at[1] + 1, 3, 1);
   }
-  // The native-size preview shows a sprite at 1× beside the zoomed view; a large still is its own 1× view.
+  // The native-size preview shows a sprite at 1× beside the zoomed view. A large picture, a still or a big animation
+  // frame, would not fit the playback bar: zoom 1 shows it at 1×.
   const native = $('native-canvas');
-  native.parentElement.hidden = isLarge(project);
-  if (!isLarge(project)) { native.width = project.width; native.height = project.height; native.getContext('2d').drawImage(frameImages[selected], 0, 0); }
+  native.parentElement.hidden = isLarge(project) || project.height > 38; // 59 px bar minus padding and border.
+  if (!native.parentElement.hidden) { native.width = project.width; native.height = project.height; native.getContext('2d').drawImage(frameImages[selected], 0, 0); }
   const fit = Math.max(1, Math.floor(($('artboard').clientWidth - 48) / width));
   const displayScale = zoom === 'fit' ? fittedScale(width, height) : isSheet || isMotion ? Math.min(zoom, fit) : zoom;
   shownScale = displayScale;
   canvas.style.width = `${width * displayScale}px`; canvas.style.height = `${height * displayScale}px`;
-  canvas.classList.toggle('smooth', displayScale < 1);
+  canvas.classList.toggle('smooth', displayScale < 1 && !stackOpen);
+  if (stackOpen) stackTools.heading(selected, !isSheet && !isMotion ? context : null);
   const board = $('artboard');
   board.classList.toggle('pannable', board.scrollWidth > board.clientWidth || board.scrollHeight > board.clientHeight);
   $('canvas-wrap').style.setProperty('--pixel-size', `${displayScale}px`);
@@ -168,7 +206,7 @@ function animationChanged() {
     const button = document.createElement('button'); button.className = 'frame'; button.title = `${frame.name} · ${frame.duration}ms`; button.setAttribute('aria-label', `Select position ${sequencePosition + 1}: ${frame.name}`);
     const block = document.createElement('div'); block.className = 'frame-image';
     const number = document.createElement('span'); number.className = 'number'; number.textContent = String(sequencePosition + 1).padStart(2, '0');
-    const image = thumbnail(frameImages[index]); image.classList.toggle('smooth', isLarge(project));
+    const image = thumbnail(frameImages[index]); image.classList.toggle('smooth', isLarge(project) && !stackOpen);
     block.append(image, number);
     const caption = document.createElement('small');
     const label = document.createElement('span'); label.textContent = frame.name;
@@ -188,18 +226,34 @@ function compile() {
   clearTimeout(compileTimer);
   try {
     const nextSpec = JSON.parse(source.value.replace(/^\uFEFF/, ''));
-    const compiled = compileSource(nextSpec), nextProject = renderProject(compiled.recipe), nextAtlas = buildAtlas(nextProject);
-    fitZoom(nextProject);
+    const isStack = nextSpec.format === 'pixelforge-stack';
+    const resolved = isStack ? withSharedPalette(nextSpec) : null;
+    const model = isStack ? pendingStack?.model ?? prepareStack(resolved) : null;
+    pendingStack = null;
+    const compiled = model ? { recipe: model.recipe() } : compileSource(nextSpec);
+    const nextProject = renderProject(compiled.recipe), nextAtlas = buildAtlas(nextProject);
+    const keepHeading = isStack && stackOpen && !playing ? project?.frames[selected]?.name : null;
+    fitZoom(nextProject, isStack);
+    stackOpen = isStack;
+    stackTools.update(isStack ? nextSpec : null, model, resolved?.palette);
     spec = compiled.recipe; poseMetadata = compiled.metadata?.format === 'pixelforge-pose-metadata' ? compiled.metadata : null; project = nextProject; atlas = nextAtlas;
     motionReview = null; ownedProject = null; partsView = null;
-    $('motion-view').disabled = !poseMetadata; $('contacts').disabled = !poseMetadata;
+    // Stills ("animations": {}) keep their flipbook to step through, but have no animation to pick, make a GIF of,
+    // export as frames or review for motion: the picker is hidden, and those are off, each saying why.
+    const stills = project.stills === true, reviewable = Boolean(poseMetadata) && !stills;
+    $('animation').hidden = stills; $('animation-label').hidden = stills;
+    for (const [id, what] of [['gif', 'make a GIF of'], ['frames', 'export as frames'], ['motion-view', 'review for motion']]) {
+      $(id).title = stills ? `The frames are stills ("animations": {}), so there is no animation to ${what}.` : buttonTitles[id];
+      if (id !== 'motion-view') $(id).disabled = stills;
+    }
+    $('motion-view').disabled = !reviewable; $('contacts').disabled = !poseMetadata;
     $('motion-tools').hidden = !poseMetadata;
     $('motion-ground').value = poseMetadata?.rig?.ground ?? '';
-    if (!poseMetadata && mode === 'motion') mode = 'animation';
+    if (!reviewable && mode === 'motion') mode = 'animation';
     frameImages = project.frames.map(f => imageCanvas(f.data, project.width, project.height));
     $('project-name').textContent = title(project.name);
     $('dimensions').textContent = `${project.width} × ${project.height} px`;
-    $('source-filename').textContent = `${project.name}${poseMetadata ? '.poses' : nextSpec.format === 'pixelforge-wave' ? '.wave' : ''}.json`;
+    $('source-filename').textContent = `${project.name}${poseMetadata ? '.poses' : nextSpec.format === 'pixelforge-wave' ? '.wave' : isStack ? '.stack' : ''}.json`;
     const oldAnimation = $('animation').value;
     $('animation').replaceChildren(...Object.keys(project.animations).map(key => { const option = document.createElement('option'); option.value = key; option.textContent = title(key); return option; }));
     if (project.animations[oldAnimation]) $('animation').value = oldAnimation;
@@ -219,11 +273,38 @@ function compile() {
     const warnings = [...(compiled.warnings ?? []), ...project.warnings];
     $('compile-status').textContent = warnings.length ? warnings.join(' ') : '● All pixels accounted for';
     valid = true; showExport(); animationChanged(); setMode(mode);
+    if (keepHeading) {
+      const index=nextProject.frames.findIndex(f=>f.name===keepHeading);
+      if(index>=0) document.querySelectorAll('.frame')[index]?.click();
+    }
     source.dispatchEvent(new CustomEvent('pixelbolt:rendered'));
   } catch (error) {
-    valid = false; $('error').textContent = error.message; $('error').hidden = false;
-    $('compile-status').textContent = 'Fix the recipe to update the preview'; showExport();
+    compileError(error);
   }
+}
+function compileError(error) {
+  pendingStack = null; stackTools.reset();
+  valid = false; $('error').textContent = error.message; $('error').hidden = false;
+  $('compile-status').textContent = 'Fix the recipe to update the preview'; showExport();
+}
+// Yield between headings. A new edit supersedes queued work. A held pointer resumes the
+// same job on release or cancel, without rebuilding the drawing canvas under the brush.
+function resumeStackBake() {
+  const job = pendingStack;
+  if (!job || job.scheduled || stackTools.busy) return;
+  job.scheduled = true;
+  const step = deadline => {
+    job.scheduled = false;
+    if (pendingStack !== job || stackTools.busy) return;
+    try {
+      const count = job.model.count;
+      do { job.model.frame(job.index++); }
+      while (job.index < count && deadline && deadline.timeRemaining() > 8);
+      if (job.index === count) compile(); else resumeStackBake();
+    } catch (error) { compileError(error); }
+  };
+  if (window.requestIdleCallback) window.requestIdleCallback(step, { timeout: 200 });
+  else setTimeout(step, 16);
 }
 // Keeps the edited recipe as this tab's draft. When it cannot, the user is told once: the browser refused it, or
 // start-up ended without a draft store (while the studio starts there is none yet, and nothing can be typed).
@@ -250,7 +331,7 @@ function offerDraft(next) {
     : `A draft of ${offer.name} from another tab, last edited ${when}, is kept in this browser.${more ? ` ${more} more from other tabs ${more === 1 ? 'is' : 'are'} offered after it.` : ''}`;
 }
 function setSource(value, exampleFile) {
-  loadVersion++;
+  pendingStack = null; stackTools.reset(); loadVersion++;
   source.value = JSON.stringify(value, null, 2); settle();
   document.querySelectorAll('.example').forEach(button => button.classList.toggle('active', button.dataset.file === exampleFile));
   compile(); playState();
@@ -273,7 +354,16 @@ function setMode(next) {
   $('artboard-caption').textContent = mode === 'motion' ? 'Movement at left · poses at right · limb arcs below them · yellow marks planted feet' : mode === 'sheet' ? 'Export layout · transparent padding' : 'Transparent background';
   render();
 }
-source.addEventListener('input', () => { dirty = true; valid = false; showExport(); clearTimeout(compileTimer); compileTimer = setTimeout(compile, 20); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400); });
+source.addEventListener('input', event => {
+  dirty = true; valid = false; showExport();
+  clearTimeout(compileTimer); clearTimeout(draftTimer); draftTimer = setTimeout(keepDraft, 400);
+  pendingStack = null;
+  if (!event.detail?.stack) { compileTimer = setTimeout(compile, 20); return; }
+  pendingStack = { model: event.detail.stack, index: 0, shown: new Set(), scheduled: false };
+  playing = false; playState();
+  $('compile-status').textContent = 'Updating headings…';
+  try { setMode('animation'); resumeStackBake(); } catch (error) { compileError(error); }
+});
 // Tab indents, as in any code editor, but must not trap the keyboard: Shift+Tab always moves back, and Escape lets
 // the next Tab move on.
 let leavingEditor = false;
@@ -392,7 +482,7 @@ $('new').addEventListener('click', () => {
 function savedName() {
   let format;
   try { format = JSON.parse(source.value.replace(/^﻿/, ''))?.format; } catch { /* Broken drafts can still be saved. */ }
-  return `${project?.name ?? 'sprite'}.${format === 'pixelforge-poses' ? 'poses' : format === 'pixelforge-wave' ? 'wave' : 'pixel'}.json`;
+  return `${project?.name ?? 'sprite'}.${format === 'pixelforge-poses' ? 'poses' : format === 'pixelforge-wave' ? 'wave' : format === 'pixelforge-stack' ? 'stack' : 'pixel'}.json`;
 }
 // The browser may ask where to save, and the page never learns whether the file was kept, so nothing is settled here:
 // the draft stays until the user edits again (the draft then follows) or confirms replacing or leaving the recipe.
@@ -411,7 +501,7 @@ $('gif').addEventListener('click', () => {
 });
 // Frames for a video editor: the server builds them exactly as `pixelbolt sequence` does. The dialog also shows that
 // call, and the MCP one, because agents are who usually make these.
-const framesSettings = () => ({ fps: $('frames-fps').value, animation: $('animation').value, ...($('frames-size').value ? { size: $('frames-size').value } : { scale: exportScale(256) }) });
+const framesSettings = () => ({ fps: $('frames-fps').value, animation: $('animation').value, ...($('frames-size').value ? { size: $('frames-size').value } : { scale: Math.min(exportScale(256), sequenceScale(project.width, project.height)) }) });
 function showFramesCall() {
   const settings = framesSettings(), sizing = settings.size ? `--size ${settings.size}` : `--scale ${settings.scale}`;
   $('frames-call').textContent = `pixelbolt sequence ${savedName()} --fps ${settings.fps} ${sizing} --animation ${settings.animation} --out frames\n\npixel_render { "revision": "…", "sequence": ${JSON.stringify(settings)} }`;
@@ -435,7 +525,7 @@ $('frames-export').addEventListener('click', async () => {
 });
 $('draft-restore').addEventListener('click', () => {
   if (!mayReplace('Replace your edited recipe with the draft? Save JSON first if you want to keep it.')) return;
-  loadVersion++; source.value = offer.text; dirty = true;
+  pendingStack = null; stackTools.reset(); loadVersion++; source.value = offer.text; dirty = true;
   // A closed tab's draft becomes this tab's: it is kept under this tab's id before the closed tab's copy goes.
   if (!ownOffer() && drafts.save(offer.text, offer.name)) drafts.forget(offer.id);
   // Other closed tabs' drafts stay kept and are offered on the next visit.
@@ -483,10 +573,10 @@ async function boot() {
   let failure = null;
   const part = async run => { try { return await run(); } catch (error) { failure ??= error; return null; } };
   for (const example of examples) await part(async () => {
-    const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value).recipe);
+    const response = await fetch(`/examples/${example.file}.json`); const value = await response.json(), preview = renderProject(compileSource(value.format === 'pixelforge-stack' ? { ...value, headings:[value.headings?.[0] ?? 0] } : value).recipe);
     const button = document.createElement('button'); button.className = 'example'; button.dataset.file = example.file;
     const label = document.createElement('span'), strong = document.createElement('strong'), small = document.createElement('small');
-    const count = preview.frames.length;
+    const count = value.format === 'pixelforge-stack' ? value.headings?.length ?? 16 : preview.frames.length;
     strong.textContent = example.title; small.textContent = `${example.type} · ${count} frame${count === 1 ? '' : 's'}`; label.append(strong, small);
     button.append(thumbnail(imageCanvas(preview.frames[0].data, preview.width, preview.height)), label);
     button.addEventListener('click', () => loadExample(example)); $('examples').append(button);

@@ -1,0 +1,22 @@
+{
+  "files": {
+    "score.py": "ea1ed85d33da04b0ff59f971343853a2306f506b390ebe6fe410962a51437aa5",
+    "native.mjs": "0813b9cf60f21589d80877583f0323b0f2385799a07c84c3176c301a23919b19"
+  },
+  "criteria": {
+    "passing": "Every structural, witness, collateral and delivery gate passes. Exact RGBA and owner differences over all native frames are separate secondary measurements.",
+    "standing": "All supplied standing PNGs must match the restored source pixel-for-pixel.",
+    "gait": "Preserve clipped animation membership, phase order, loop, frame duration, source ground anchors and rigid part displacement sequences.",
+    "witnesses": "Opening pixels remain transparent. Crossings retain the correct foreground carrier and a matching painted occludand. Equipment keeps its visible colour and semantic carrier, including same-colour cases. Joint and shaft pixels match visible colour and realized carrier unless eligible underpaint applies.",
+    "underpaint": "Only for originally concealed opaque artist joint/shaft pixels in the damaged variant. An alternate fill must move with the expected carrier, differ from the damaged colour, and appear on the same clean layer within three native pixels (Chebyshev distance) in that phase. All raw differences remain reported.",
+    "underpaintDecision": "A one-pixel neighbourhood excluded valid local material shades in the development baseline. The three-pixel radius was selected after checking the development baseline, before any candidate result was read.",
+    "collateral": "Reject new visible or carrier regressions and colour deviations outside artist defect witnesses. Strict clean controls retain every public RGBA and carrier.",
+    "delivery": "Verify the first native raster, all final frame PNGs, atlas rectangles and playback, walks as unscaled GIFs with transparency, disposal, loop and centisecond timing, unchanged initial source and a review record."
+  },
+  "artistPriorsVerified": [
+    "field",
+    "loft",
+    "marsh"
+  ],
+  "candidateResultsInspected": false
+}

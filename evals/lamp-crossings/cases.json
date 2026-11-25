@@ -1,0 +1,24 @@
+{
+  "format": "pixelbolt-crossing-fixtures",
+  "version": 1,
+  "referenceTool": "pixelbolt@0.20.0",
+  "artCredit": "Original station porter and mine surveyor sprites drawn as indexed pixel grids for the Pixelbolt crossing evaluation in November 2026. Authoring source and palette are in build.py. No external artwork.",
+  "cases": [
+    {
+      "case": "station",
+      "distribution": "development",
+      "brief": "Our night porter is going into a side-view station scene. Review this handoff, make any necessary repairs, and deliver an editable Pixelbolt pose source, a native-size frame export with atlas, and a looping walk GIF. Keep the standing drawing pixel-identical and retain the supplied facing, ground anchor, eight-frame stride and timing. The character and equipment should read as the same drawing throughout the walk. Include a short handoff note explaining any edits and how you checked the result.",
+      "participantFiles": ["station/participant/sprite.png", "station/participant/cuts.json"],
+      "controlSubstitutions": {"cuts.json": "station/private/control.cuts.json"},
+      "expected": {"sourceSize":[34,36], "sourcePivot":[17,34], "direction":"right", "frames":8, "frameDurationMs":90, "introducedTransfers":3, "coveredLampPixelsByFrame":[0,0,2,12,18,12,0,0]}
+    },
+    {
+      "case": "quarry",
+      "distribution": "held-out",
+      "brief": "We need this mine surveyor’s left-facing side walk for a quarry level. The low lamp swings with the far hand, and the foreground boot passes in front of it. Review the supplied handoff and make any repairs it needs for production. Preserve the standing PNG, ground anchor, eight-frame stride and timing. Deliver an editable Pixelbolt pose source, native frame export with atlas, looping GIF, and a short note describing your review and changes.",
+      "participantFiles": ["quarry/participant/sprite.png", "quarry/participant/cuts.json", "quarry/participant/starter.poses.json"],
+      "controlSubstitutions": {"cuts.json": "quarry/private/control.cuts.json", "starter.poses.json": "quarry/private/control/sprite.poses.json"},
+      "expected": {"sourceSize":[39,39], "sourcePivot":[20,36], "direction":"left", "frames":8, "frameDurationMs":110, "introducedTransfers":4, "coveredLampPixelsByFrame":[0,0,3,4,12,4,0,0]}
+    }
+  ]
+}

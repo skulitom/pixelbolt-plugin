@@ -9,6 +9,7 @@ import { renderProject, MAX_REQUEST_BYTES, PixelError } from './core.js';
 import { createSequence } from './sequence.js';
 import { prepareScene } from './scene.js';
 import { compilePoses } from './authoring.js';
+import { compileStack } from './stack.js';
 import { compileWaves } from './wave.js';
 import { EFFECT_PRESETS } from '../studio/effects-controls.js';
 import { POWDER_PRESETS } from '../studio/powder-controls.js';
@@ -25,6 +26,8 @@ const routes = new Map([
   ['/authoring.js', ['./authoring.js', 'text/javascript; charset=utf-8']],
   ['/pose-geometry.js', ['./pose-geometry.js', 'text/javascript; charset=utf-8']],
   ['/motions.js', ['./motions.js', 'text/javascript; charset=utf-8']],
+  ['/cutout-review.js', ['./cutout-review.js', 'text/javascript; charset=utf-8']],
+  ['/cutout-track.js', ['./cutout-track.js', 'text/javascript; charset=utf-8']],
   ['/motion.js', ['./motion.js', 'text/javascript; charset=utf-8']],
   ['/autotile.js', ['./autotile.js', 'text/javascript; charset=utf-8']],
   ['/terrain.js', ['./terrain.js', 'text/javascript; charset=utf-8']],
@@ -39,10 +42,15 @@ const routes = new Map([
   ['/fluid-controls.js', ['../studio/fluid-controls.js', 'text/javascript; charset=utf-8']],
   ['/fluid.js', ['./fluid.js', 'text/javascript; charset=utf-8']],
   ['/electric.js', ['./electric.js', 'text/javascript; charset=utf-8']],
+  ['/light.js', ['./light.js', 'text/javascript; charset=utf-8']],
   ['/bodies.js', ['./bodies.js', 'text/javascript; charset=utf-8']],
   ['/constraints.js', ['./constraints.js', 'text/javascript; charset=utf-8']],
   ['/cloth.js', ['./cloth.js', 'text/javascript; charset=utf-8']],
   ['/territory.js', ['./territory.js', 'text/javascript; charset=utf-8']],
+  ['/stack-paths.js', ['./stack-paths.js', 'text/javascript; charset=utf-8']],
+  ['/stack-facets.js', ['./stack-facets.js', 'text/javascript; charset=utf-8']],
+  ['/stack.js', ['./stack.js', 'text/javascript; charset=utf-8']],
+  ['/stack-editor.js', ['../studio/stack-editor.js', 'text/javascript; charset=utf-8']],
   ['/wave.js', ['./wave.js', 'text/javascript; charset=utf-8']],
   ['/page.js', ['../studio/page.js', 'text/javascript; charset=utf-8']],
   ['/effects.html', ['../studio/effects.html', 'text/html; charset=utf-8']],
@@ -59,11 +67,12 @@ const routes = new Map([
   ...POWDER_PRESETS.map(({ file }) => [`/examples/${file}.powder.json`, [`../examples/${file}.powder.json`, 'application/json']]),
   // The effects lab compiles these sources in the browser.
   ...EFFECT_PRESETS.map(({ file }) => [`/examples/${file}.fx.json`, [`../examples/${file}.fx.json`, 'application/json']]),
+  ...['copper-rally', 'lodekeeper-faceted'].map(name => [`/examples/${name}.stack.json`, [`../examples/${name}.stack.json`, 'application/json']]),
   ...['interference', 'portal'].map(name => [`/examples/${name}.wave.json`, [`../examples/${name}.wave.json`, 'application/json']]),
   ['/schema.json', ['../schema.json', 'application/json']],
   ...['forest-spirit', 'ember', 'coin', 'shrine', 'caption', 'swing', 'effects'].map(name => [`/examples/${name}.json`, [`../examples/${name}.json`, 'application/json']]),
   // The fluid lab compiles these sources in the browser.
-  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
+  ...['campfire', 'explosion', 'smoke-puff', 'steam-vent', 'magic-swirl', 'torch', 'wall-torch', 'chimney-smoke', 'fireball-explosion', 'cannon-smoke', 'campfire-stones', 'splash', 'waterfall', 'drip', 'potion', 'honey', 'slime', 'roof-snow', 'dam-break', 'dust-wave', 'slime-burst', 'honey-drop', 'aquarium', 'honey-dipper', 'glug', 'jacobs-ladder', 'lightning', 'plasma-globe', 'ice-melt', 'pond-freeze', 'boiling-pot', 'frost-window', 'dry-ice', 'lightning-pond', 'hourglass', 'sand-gate', 'sand-plough', 'crate-splash', 'sand-slide', 'water-wheel', 'hot-stone', 'plank-tip'].map(name => [`/examples/${name}.fluid.json`, [`../examples/${name}.fluid.json`, 'application/json']])
 ]);
 // Every path the studio answers with GET, for checks that walk the whole allowlist.
 export const STUDIO_PATHS = [...routes.keys(), '/scene.json', '/scene-source.json', '/project.json', '/shared-palette.json'];
@@ -94,7 +103,7 @@ export async function startStudio({ port = STUDIO_PORT, fallback = false, projec
   const scene = project?.format === 'pixelforge-scene';
   if (project) {
     if (scene) prepareScene(project);
-    else renderProject(project.format === 'pixelforge-poses' ? compilePoses(project).recipe : project.format === 'pixelforge-wave' ? compileWaves(project).recipe : project);
+    else renderProject(project.format === 'pixelforge-stack' ? compileStack(project).recipe : project.format === 'pixelforge-poses' ? compilePoses(project).recipe : project.format === 'pixelforge-wave' ? compileWaves(project).recipe : project);
   }
   const server = http.createServer(async (req, res) => {
     const address = server.address(), hosts = [`127.0.0.1:${address.port}`, `localhost:${address.port}`];

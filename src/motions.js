@@ -1,5 +1,5 @@
 // Motion templates lower to editable poses. Kept separate from rasterization and file I/O.
-import { PixelError, fail } from './core.js';
+import { PixelError, fail, paletteOverride } from './core.js';
 import { sinDeg, cosDeg, rasterizeMass } from './craft.js';
 
 const id = (value, path) => { if (typeof value !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) fail(path, 'expected a name of at most 64 characters'); return value; };
@@ -63,11 +63,108 @@ export function validateRig(rig, height) {
   }
 }
 
+// Eight poses of a drawn cutout: the planted foot travels back for half a stride, the returning foot lifts
+// at the pass. Travel is in half-strides; lift and upper-body rise are in half-heights.
+const CUTOUT_STEP = [[2, 0, 0], [1, 0, 0], [0, 0, 2], [-1, 0, 1], [-2, 0, 0], [-1, 1, 0], [0, 2, 2], [1, 1, 1]];
+
+function expandWalkCycles(source) {
+  const cycles = source.walkCycles;
+  if (source.walkReview !== undefined) fail('poses.walkReview', 'walkCycles generates the review annotations; omit walkReview until after --expand');
+  const reviews = Object.create(null);
+  if (!cycles || typeof cycles !== 'object' || Array.isArray(cycles) || Object.keys(cycles).length > 16)
+    fail('poses.walkCycles', 'expected up to sixteen named walk cycles');
+  if (!Array.isArray(source.poses) || source.poses.length > 256) fail('poses.poses', 'expected up to 256 authored poses');
+  if (source.animations !== undefined && (!source.animations || typeof source.animations !== 'object' || Array.isArray(source.animations)))
+    fail('poses.animations', 'expected an object of named animations');
+  const rests = new Map(source.poses.map(pose => [pose?.name, pose]));
+  const names = new Set(rests.keys());
+  const animations = Object.assign(Object.create(null), source.animations);
+  for (const [name, cycle] of Object.entries(cycles)) {
+    const path = `poses.walkCycles.${name}`;
+    object(cycle, ['rest', 'direction', 'feet', 'arms', 'stride', 'lift', 'bob', 'duration', 'mirrorAs'], path);
+    const rest = rests.get(id(cycle.rest, `${path}.rest`));
+    if (!Array.isArray(rest?.parts) || rest.parts.length > 64 || rest.parts.some(part => !part || typeof part !== 'object'))
+      fail(`${path}.rest`, 'name a drawn rest pose with up to 64 placed parts');
+    for (const [i, part] of rest.parts.entries()) {
+      if (part.at !== undefined && (!Array.isArray(part.at) || part.at.length !== 2 || !part.at.every(Number.isInteger)))
+        fail(`poses.poses[${source.poses.indexOf(rest)}].parts[${i}].at`, 'expected two integer coordinates');
+    }
+    const direction = cycle.direction;
+    if (!['up', 'down', 'left', 'right'].includes(direction)) fail(`${path}.direction`, 'expected up, down, left or right');
+    const side = direction === 'left' || direction === 'right';
+    const sign = direction === 'left' || direction === 'up' ? -1 : 1;
+    const roles = new Map();
+    for (const role of ['feet', 'arms']) {
+      if (role === 'arms' && cycle.arms === undefined) continue;
+      if (!Array.isArray(cycle[role]) || cycle[role].length !== 2) fail(`${path}.${role}`, 'expected two rest-pose instance names');
+      cycle[role].forEach((key, i) => {
+        id(key, `${path}.${role}[${i}]`);
+        const part = rest.parts.find(part => part.name === key);
+        if (!part || part.attach || part.reach || roles.has(key)) fail(`${path}.${role}[${i}]`, 'name a distinct root instance without a reach target');
+        roles.set(key, { role, offset: 4 * i });
+      });
+    }
+    const setting = (key, fallback, min, max) => number(cycle[key], fallback, min, max, `${path}.${key}`, true);
+    const stride = setting('stride', side ? 2 : 1, 1, 32), lift = setting('lift', 1, 0, 16);
+    const bob = setting('bob', 1, 0, 8), duration = setting('duration', 100, 1, 60000);
+    const clips = [name];
+    if (cycle.mirrorAs !== undefined) {
+      if (!side) fail(`${path}.mirrorAs`, 'horizontal mirrors make the opposite side view; supply a drawn up or down view');
+      // Reflecting pixel x about corner p maps it to 2*p-1-x. At either canvas edge the source and
+      // its reflection cannot both be visible. An omitted pose origin normally means the top-left.
+      const pivotX = rest.origin === undefined ? 0 : rest.origin?.[0];
+      if (Number.isInteger(source.width) && Number.isInteger(pivotX) && (pivotX <= 0 || pivotX >= source.width))
+        fail(`${path}.mirrorAs`, `the rest pose "${rest.name}" reflects about x=${pivotX}, outside the interior of the ${source.width}px canvas. Place its origin between the left and right edges and subtract the origin change from each root part's at to keep the drawing in place, or draw the other profile separately`);
+      clips.push(id(cycle.mirrorAs, `${path}.mirrorAs`));
+    }
+    if (source.poses.length + clips.length * 8 > 256) fail(path, 'expanded source exceeds 256 poses');
+    for (const [clipIndex, clip] of clips.entries()) {
+      id(clip, path);
+      if (Object.hasOwn(animations, clip) || Object.hasOwn(source.motions ?? {}, clip)) fail(path, `animation "${clip}" is already defined`);
+      const frames = [];
+      for (let step = 0; step < 8; step++) {
+        const frame = id(`${clip}-${step + 1}`, path);
+        if (names.has(frame)) fail(path, `generated pose "${frame}" is already defined`);
+        names.add(frame);
+        frames.push(frame);
+        if (clipIndex) {
+          source.poses.push({ name: frame, mirror: animations[name].frames[step], duration });
+          continue;
+        }
+        const rise = Math.round(CUTOUT_STEP[step][2] * bob / 2);
+        const parts = rest.parts.map(part => {
+          if (part.attach) return part; // The parent carries its children.
+          const [x, y] = part.at ?? [0, 0];
+          const limb = roles.get(part.name);
+          if (!limb) return { ...part, at: [x, y - rise] };
+          const [travel, height] = CUTOUT_STEP[(step + limb.offset) % 8];
+          const arm = limb.role === 'arms';
+          const reach = Math.sign(travel) * Math.round(Math.abs(travel) * stride / (arm ? 4 : 2)) * sign * (arm ? -1 : 1);
+          const upwards = arm ? rise : Math.round(height * lift / 2);
+          return { ...part, at: [x + (side ? reach : 0), y + (side ? 0 : reach) - upwards] };
+        });
+        const pose = { ...rest, name: frame, duration, parts };
+        delete pose.contacts; // A static rest's contact declarations don't describe this moving foot.
+        source.poses.push(pose);
+      }
+      animations[clip] = { frames, loop: true };
+      const facing = clipIndex ? (direction === 'right' ? 'left' : 'right') : direction;
+      reviews[clip] = { rest: cycle.rest, direction: facing, feet: cycle.feet,
+        speed: (facing === 'up' || facing === 'left' ? -1 : 1) * 500 * stride / duration,
+        ...(clipIndex && { mirroredFrom: name }) };
+    }
+  }
+  source.animations = animations;
+  source.walkReview = reviews;
+  delete source.walkCycles;
+}
+
 // compileRest and probeJoints are supplied by authoring.js so this module has no circular compiler import. probeJoints
 // resolves one pose's joints without assembling or validating a recipe.
 export function expandMotions(input, compileRest, probeJoints) {
   if (!input || input.format !== 'pixelforge-poses' || input.version !== 1) fail('poses', 'expected version-1 pixelforge-poses');
   const source = structuredClone(input);
+  if (source.walkCycles !== undefined) expandWalkCycles(source);
   if (source.motions === undefined) return source;
   if (source.motionInfo !== undefined) fail('poses.motionInfo', 'motions generate this annotation; omit it until after --expand');
   validateRig(source.rig, source.height);
@@ -222,7 +319,10 @@ export function expandMotions(input, compileRest, probeJoints) {
     const gait = ['speed', 'stride', 'lift', 'bob', 'lean', 'swapDepth'];
     const fields = { walk: gait, trot: gait, run: [...gait, ...(quad ? ['flex'] : [])], idle: ['breath', 'squash'], jump: ['crouch', 'stretch', 'apex'], attack: ['arm', 'windup', 'strike', 'hold'], hurt: ['recoil', 'squash'] };
     if (template === 'run' && !quad && motion.flex !== undefined) fail(`${path}.flex`, 'flex bends a four-legged spine in its gallop; this rig has no rig.fore and rig.hind');
-    object(motion, ['template', 'frames', 'duration', 'follow', ...fields[template]], path);
+    object(motion, ['template', 'frames', 'duration', 'follow', 'palette', ...fields[template]], path);
+    // A palette recolours every pose the motion makes (a hurt's flash); without one they keep the rest pose's, and an
+    // empty one, `{}`, gives them none.
+    if (motion.palette !== undefined) paletteOverride(motion.palette, source.palette ?? {}, `${path}.palette`, 'a motion palette recolours keys declared in poses.palette');
     const p = (key, fallback, lo, hi, integer = false) => number(motion[key], fallback, lo, hi, `${path}.${key}`, integer);
     // How far the tail swings from its rest angles as it follows through: 0 holds it as drawn, 2 swings it twice as far.
     const follow = p('follow', 1, 0, 2);
@@ -345,6 +445,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     for (let i = 0; i < count; i++) {
       const pose = structuredClone(rest), label = locomotion ? labels.get(i) ?? `between-${i}` : fixedLabels[template][i];
       pose.name = id(`${name}-${label}`, path); pose.duration = duration;
+      if (motion.palette !== undefined) pose.palette = structuredClone(motion.palette);
       pose.origin = [...(rest.origin ?? [0, 0])]; pose.contacts = []; pose.markers = [...(rest.markers ?? [])];
       const parts = new Map(pose.parts.map(p => [p.name, p])), torso = parts.get(rig.body), angle = Math.round(i * 360 / count) + (template === 'idle' && count === 2 ? 90 : 0);
       const setAngle = setAngleOf;
@@ -514,7 +615,7 @@ export function expandMotions(input, compileRest, probeJoints) {
     try { drawn = compileRest({ ...checkSource, poses: source.poses, animations: { check: { frames: standIns, loop: false } } }); }
     catch (error) { if (!(error instanceof PixelError)) throw error; }
     for (const pose of drawn ? standIns : []) {
-      const placed = drawn.metadata.poses[pose].parts[rig.body], rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
+      const parts = drawn.metadata.poses[pose].parts, placed = Object.hasOwn(parts, rig.body) ? parts[rig.body] : undefined, rows = placed && drawn.recipe.symbols[placed.symbol ?? placed.definition];
       const lowest = placed ? placed.topLeft[1] + rows.findLastIndex(row => /[^. ]/.test(row)) : null, at = `poses.poses[${inputIndex.get(pose)}]`;
       const about = `"${pose}" stands in for a pose of the grounded idle "${groundedPoses.get(pose)}", so`;
       if (lowest === null) fail(at, `${about} it needs the body instance "${rig.body}" standing on rig.ground (row ${rig.ground})`);

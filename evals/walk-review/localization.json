@@ -1,0 +1,250 @@
+{
+  "field": {
+    "clean": {
+      "findingGroups": {
+        "new-opening": 3
+      },
+      "defects": []
+    },
+    "damaged": {
+      "findingGroups": {
+        "underpaint-gap": 1,
+        "exposed-shaft": 1,
+        "new-opening": 3
+      },
+      "defects": [
+        {
+          "id": "F1",
+          "kind": "shaft",
+          "phases": 3,
+          "localized": 3,
+          "samples": {
+            "walk-right-1": [
+              {
+                "clip": "walk-right",
+                "kind": "exposed-shaft",
+                "part": "wader-near",
+                "coordinate": "pixel",
+                "pixel": [
+                  11,
+                  24
+                ]
+              }
+            ],
+            "walk-right-2": [
+              {
+                "clip": "walk-right",
+                "kind": "exposed-shaft",
+                "part": "wader-near",
+                "coordinate": "pixel",
+                "pixel": [
+                  11,
+                  23
+                ]
+              }
+            ],
+            "walk-right-8": [
+              {
+                "clip": "walk-right",
+                "kind": "exposed-shaft",
+                "part": "wader-near",
+                "coordinate": "pixel",
+                "pixel": [
+                  11,
+                  24
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "F2",
+          "kind": "joint",
+          "phases": 6,
+          "localized": 6,
+          "samples": {
+            "walk-right-1": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  16,
+                  23
+                ]
+              }
+            ],
+            "walk-right-2": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  16,
+                  23
+                ]
+              }
+            ],
+            "walk-right-4": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  20,
+                  21
+                ]
+              }
+            ],
+            "walk-right-5": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  20,
+                  19
+                ]
+              }
+            ],
+            "walk-right-6": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  20,
+                  22
+                ]
+              }
+            ],
+            "walk-right-8": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  16,
+                  22
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "loft": {
+    "clean": {
+      "findingGroups": {
+        "new-opening": 5
+      },
+      "defects": []
+    },
+    "damaged": {
+      "findingGroups": {
+        "underpaint-gap": 1,
+        "new-opening": 6
+      },
+      "defects": [
+        {
+          "id": "feathers",
+          "kind": "joint",
+          "phases": 3,
+          "localized": 3,
+          "samples": {
+            "walk-right-1": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  18,
+                  22
+                ]
+              }
+            ],
+            "walk-right-2": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  19,
+                  23
+                ]
+              }
+            ],
+            "walk-right-8": [
+              {
+                "clip": "walk-right",
+                "kind": "underpaint-gap",
+                "part": "coat",
+                "coordinate": "pixel",
+                "pixel": [
+                  19,
+                  22
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "binding",
+          "kind": "equipment",
+          "phases": 8,
+          "localized": 0,
+          "samples": {
+            "walk-right-1": [],
+            "walk-right-2": [],
+            "walk-right-3": [],
+            "walk-right-4": [],
+            "walk-right-5": [],
+            "walk-right-6": [],
+            "walk-right-7": [],
+            "walk-right-8": []
+          }
+        }
+      ]
+    }
+  },
+  "marsh": {
+    "clean": {
+      "findingGroups": {
+        "new-opening": 2
+      },
+      "defects": []
+    },
+    "damaged": {
+      "findingGroups": {
+        "new-opening": 2
+      },
+      "defects": [
+        {
+          "id": "creel-rand",
+          "kind": "equipment",
+          "phases": 8,
+          "localized": 0,
+          "samples": {
+            "walk-right-1": [],
+            "walk-right-2": [],
+            "walk-right-3": [],
+            "walk-right-4": [],
+            "walk-right-5": [],
+            "walk-right-6": [],
+            "walk-right-7": [],
+            "walk-right-8": []
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,12 +1,12 @@
 // Browser-compatible, deterministic rasterizer. No I/O and no dependencies.
-import { patternProblem, ditherThreshold, traceLine, pixelId, colorOf, idsOf, cleanupIds, ruleVariants, rewriteIds } from './craft.js';
-import { AUTOTILE_MODES, tilePieces, templatePiece, expandTilemap, isoLayout } from './autotile.js';
+import { patternProblem, ditherThreshold, traceLine, pixelId, colorOf, idsOf, cleanupIds, ruleVariants, rewriteIds, ease } from './craft.js';
+import { AUTOTILE_MODES, tilePieces, templatePiece, expandTilemap, isoLayout, autotileFrames } from './autotile.js';
 import { layoutText, FONT_HEIGHT, FONT_CHARACTERS } from './font.js';
 export class PixelError extends Error {
   constructor(path, message) { super(`${path}: ${message}`); this.name = 'PixelError'; this.path = path; }
 }
 // Largest JSON request accepted by the MCP server and the studio export endpoint. It exceeds the largest single
-// frame the format allows (a 256x256 frame of explicit pixel corrections serializes to about 2.5 MB).
+// animation frame the format allows (a 512x512 frame of explicit pixel corrections serializes to about 10 MB).
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const fail = (path, message) => { throw new PixelError(path, message); };
 // Several errors as one: the first, naming the others in its message and listing every one in `errors`. `stopped`
@@ -45,7 +45,7 @@ const oneEdit = (a, b) => {
   return a.slice(i + (a.length >= b.length ? 1 : 0)) === b.slice(i + (b.length >= a.length ? 1 : 0));
 };
 // The name in `names` that `key` most likely meant: a known alias, the same name in other case, or a one-letter typo.
-function meant(key, names, aliases) {
+export function meant(key, names, aliases = {}) {
   if (own(aliases, key) && names.includes(aliases[key])) return aliases[key];
   const lower = key.toLowerCase();
   return names.find(n => n.toLowerCase() === lower) ?? (key.length > 3 ? names.find(n => n.length > 3 && oneEdit(lower, n.toLowerCase())) : undefined);
@@ -80,9 +80,20 @@ function name(value, path) {
   if (/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(value)) fail(path, 'reserved filename; choose a portable name');
   return value;
 }
+export { name as portableName };
 function point(value, path) {
   if (!Array.isArray(value) || value.length !== 2) fail(path, 'expected [x, y]');
   return [integer(value[0], `${path}[0]`), integer(value[1], `${path}[1]`)];
+}
+// Layers in a frame group take its translation on top of their own. The compositor, canvas
+// resize and canvas-space patch advice all need the same effective offset.
+export function layerOffset(layer, groups, path = 'layer') {
+  const x = integer(layer.x ?? 0, `${path}.x`), y = integer(layer.y ?? 0, `${path}.y`);
+  if (layer.group === undefined) return [x, y];
+  const group = name(layer.group, `${path}.group`);
+  if (!groups || !own(groups, group)) fail(`${path}.group`, `unknown layer group "${group}"; declare it in this frame's groups`);
+  const [dx, dy] = groups[group];
+  return [x + dx, y + dy];
 }
 // A frame's facts as a tile, for engine tile sets: the terrain an autotile frame belongs to (frames of one set share
 // it), its weight against the other frames that could fill the same cell, and collision polygons around its solid
@@ -131,6 +142,17 @@ function collisionPolygon(polygon, where, width, height) {
   if (!points.reduce((sum, [x, y], i) => sum + x * points[(i + 1) % n][1] - points[(i + 1) % n][0] * y, 0)) fail(where, 'the points enclose no area');
   return points;
 }
+// A palette override (a frame's, a layer's, a pose's): keys of `palette` to colours or palette names, read as exact
+// hex colours. `rule` is said at a key the palette doesn't declare.
+export function paletteOverride(value, palette, path, rule) {
+  object(value, path);
+  const overrides = {};
+  for (const [key, colour] of Object.entries(value)) {
+    if (!own(palette, key)) fail(`${path}.${key}`, rule);
+    overrides[key] = toHex(parseColor(colour, palette, `${path}.${key}`));
+  }
+  return overrides;
+}
 export function parseColor(value, palette = {}, path = 'color') {
   if (typeof value !== 'string') fail(path, 'expected a palette name or hex color');
   if (own(palette, value)) value = palette[value];
@@ -156,7 +178,7 @@ export function rampShifter(palette, ramps) {
   };
 }
 
-function blend(data, i, color, opacity = 1) {
+export function blend(data, i, color, opacity = 1) {
   const a = color[3] / 255 * opacity;
   if (a === 0) return;
   if (a === 1) { data.set(color, i); return; }
@@ -164,19 +186,39 @@ function blend(data, i, color, opacity = 1) {
   for (let c = 0; c < 3; c++) data[i + c] = Math.round((color[c] * a + data[i + c] * old * (1 - a)) / out);
   data[i + 3] = Math.round(out * 255);
 }
+// Final-pixel provenance for palette inspection. Allocate a byte per pixel only after the
+// first mix. Exact writes clear it, even when they write the very same RGBA as a previous mix.
+class BlendOrigins {
+  constructor(size, mask) { this.size = size; this.mask = mask?.slice(); }
+  set(at, mixed) {
+    if (mixed) (this.mask ??= new Uint8Array(this.size))[at] = 1;
+    else if (this.mask) this.mask[at] = 0;
+  }
+  paint(data, i, color, opacity = 1, inherited = false) {
+    if (!color[3] || !opacity) return;
+    this.set(i / 4, inherited || opacity < 1 || (color[3] < 255 && data[i + 3] > 0));
+    blend(data, i, color, opacity);
+  }
+}
+// Exact colours a rendered frame declares beyond the project palette, including copied pixels.
+const frameColours = frame => [...Object.values(frame.palette ?? {}),
+  ...(frame.layerPalettes ?? []).flatMap(entry => Object.values(entry.palette)), ...(frame.inherited ?? [])];
 // Text rows are all as wide as the first: every miscounted row at once, with its own width, so a hand-typed grid is
 // fixed in one pass. What a recipe's grid, a source format's symbol and a patch's rows are checked with.
 export function sameWidth(rows, path) {
   const width = rows[0].length, uneven = rows.flatMap((row, y) => row.length === width ? [] : [y]);
   if (uneven.length) fail(`${path}[${uneven[0]}]`, `all rows must be ${width} characters wide, as row 0 is: ${uneven.slice(0, 8).map(y => `row ${y} has ${rows[y].length}`).join(', ')}${uneven.length > 8 ? ` and ${uneven.length - 8} more rows differ` : ''}`);
 }
-export function readRows(rows, path, palette) {
-  list(rows, path, 256);
+// A grid covers an animation frame: up to CANVAS_SIDE rows of CANVAS_SIDE characters and FRAME_PIXELS cells. A source
+// that keeps a smaller canvas reads its rows with its own `side`.
+export function readRows(rows, path, palette, side = CANVAS_SIDE) {
+  list(rows, path, side);
   if (!rows.length) fail(path, 'grid must contain at least one row');
-  if (typeof rows[0] !== 'string' || rows[0].length < 1 || rows[0].length > 256) fail(`${path}[0]`, 'row must contain 1–256 characters');
+  if (typeof rows[0] !== 'string' || rows[0].length < 1 || rows[0].length > side) fail(`${path}[0]`, `row must contain 1–${side} characters`);
   const width = rows[0].length;
   rows.forEach((row, y) => { if (typeof row !== 'string') fail(`${path}[${y}]`, `all rows must be ${width} characters wide`); });
   sameWidth(rows, path);
+  if (width * rows.length > ROW_CELLS) fail(path, `a ${width}×${rows.length} grid is ${grouped(width * rows.length)} cells; a grid holds at most ${grouped(ROW_CELLS)}, as an animation frame does, so split it into several grids`);
   const unknown = new Map();
   rows.forEach((row, y) => {
     for (const char of row) if (char !== '.' && char !== ' ') {
@@ -193,32 +235,75 @@ export function readRows(rows, path, palette) {
 }
 const round6 = value => Math.round(value * 1e6) / 1e6;
 
-// Canvas sides. A recipe with several frames is at most 256 pixels a side. A recipe with a single frame (a still: a
-// backdrop, mural or wallpaper drawn at one pixel per screen pixel) may be up to 4096 a side, within the same
-// 4,194,304 pixels that bound every recipe's frames.
-export const CANVAS_SIDE = 256, STILL_SIDE = 4096, FRAME_AREA = 4194304;
+// Canvas sizes. A recipe with several frames (an animation) is at most CANVAS_SIDE pixels a side and FRAME_PIXELS a
+// frame (320×180, 480×270, 640×360, 512×512 and 1024×256 fit), the same as a scene's view. A recipe with a single
+// frame (a still: a backdrop, mural or wallpaper drawn at one pixel per screen pixel) may be up to 4096 a side. Every
+// recipe's frames share FRAME_AREA pixels in all, which keeps a still and the studio, the playground, the MCP server
+// and the atlas within bounds: 16 frames of 512×512, 72 of 320×180.
+export const CANVAS_SIDE = 1024, FRAME_PIXELS = 262144, STILL_SIDE = 4096, FRAME_AREA = 4194304;
+// Pose sources (describeStampRecipe, authoring.js) keep 256 a side: a rig's per-frame cost is not budgeted.
+export const POSE_SIDE = 256;
+// The most cells one grid or symbol holds: a whole animation frame.
+const ROW_CELLS = FRAME_PIXELS;
+const grouped = value => String(value).replace(/\B(?=(\d{3})+$)/g, ',');
+// Whether width × height is an animation frame: at most CANVAS_SIDE a side and FRAME_PIXELS in all. A compiled effect,
+// an imported frame, a resized canvas and a scene asset are held to it too, and say so with frameAreaProblem.
+export const frameFits = (width, height) => width <= CANVAS_SIDE && height <= CANVAS_SIDE && width * height <= FRAME_PIXELS;
+// The per-frame limit in words, without examples (check.js leads its size fixes with it).
+export const FRAME_LIMIT = `an animation frame is at most ${CANVAS_SIDE} pixels a side and ${grouped(FRAME_PIXELS)} in all`;
+// Screen sizes named as examples, those the limit holds.
+const FRAME_EXAMPLES = [[320, 180], [480, 270], [640, 360], [512, 512]].filter(([w, h]) => frameFits(w, h)).map(([w, h]) => `${w}×${h}`);
+// What the per-frame limit says of a width × height frame past it (its area, or else a side), with sizes that fit; null
+// when it fits. One wording for every recipe, source and asset held to an animation frame.
+export function frameAreaProblem(width, height) {
+  if (frameFits(width, height)) return null;
+  const past = width * height > FRAME_PIXELS ? `is ${grouped(width * height)} pixels` : `is past ${CANVAS_SIDE} pixels a side`;
+  return `a ${width}×${height} frame ${past}; ${FRAME_LIMIT} (${FRAME_EXAMPLES.slice(0, -1).join(', ')} and ${FRAME_EXAMPLES.at(-1)} fit)`;
+}
+// What the total says when `count` frames of width × height pass FRAME_AREA, with how many of that size fit; null
+// when they fit. One wording for every recipe and source that makes frames.
+export function frameTotalProblem(count, width, height) {
+  if (width * height * count <= FRAME_AREA) return null;
+  const fit = Math.floor(FRAME_AREA / (width * height));
+  return `${count} frames of ${width}×${height} are ${grouped(width * height * count)} pixels; a recipe's frames hold at most ${grouped(FRAME_AREA)} in all, so ${fit ? `${fit} frame${fit === 1 ? '' : 's'} of ${width}×${height} fit` : `not one frame of ${width}×${height} fits`}: use fewer frames or a smaller canvas`;
+}
+// The sheet's columns when the recipe gives none: up to 8, and as many frames as keep the sheet within 4096 pixels
+// wide at scale 1 (one column at least).
+export const sheetColumns = (frames, width) => Math.min(frames, 8, Math.max(1, Math.floor(4096 / width)));
+// The largest image one PNG holds (png.js), so each scaled frame of an export fits it.
+const PNG_PIXELS = 16777216;
+// The largest whole scale below `scale` at which `pixels` (their count at scale 1) stay within `limit`, or 0 when not
+// even scale 1 does: what a budget refusal names.
+export function largestScale(pixels, limit, scale) {
+  let k = scale - 1;
+  while (k >= 1 && pixels * k * k > limit) k--;
+  return k;
+}
 // What may stand in a layer with sort "ground", and what works on an area instead.
-const STANDING = new Set(['pixel', 'rect', 'ellipse', 'line', 'grid', 'stamp', 'text', 'copy', 'autotile', 'box']);
+const STANDING = new Set(['pixel', 'rect', 'ellipse', 'line', 'polygon', 'grid', 'stamp', 'text', 'copy', 'autotile', 'box']);
 const AREA = new Set(['clear', 'fill', 'replace', 'tilemap', 'outline', 'dither', 'shade', 'rewrite']);
 
-// `stills: false` keeps a document to the animation limit even with one frame (pose sources compile to animations).
-function readProject(spec, { stills = true } = {}) {
-  object(spec, 'project', ['$schema', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'background', 'symbols', 'frames', 'animations', 'sheet', 'anchor']);
+// `stills: false` keeps a document to the animation limit even with one frame, and `side` gives a source that keeps a
+// smaller canvas its own (pose sources compile to animations at most POSE_SIDE a side).
+function readProject(spec, { stills = true, side: most = CANVAS_SIDE } = {}) {
+  object(spec, 'project', ['$schema', 'version', 'name', 'width', 'height', 'palette', 'ramps', 'background', 'symbols', 'parts', 'scaleTracks', 'frames', 'animations', 'sheet', 'anchor', 'headings']);
   if (spec.version !== 1) fail('project.version', 'expected 1');
   const projectName = name(spec.name, 'project.name');
   const frameCount = Array.isArray(spec.frames) ? spec.frames.length : 0, still = stills && frameCount === 1;
   const side = (value, path) => {
-    if (stills && frameCount > 1 && Number.isInteger(value) && value > CANVAS_SIDE && value <= STILL_SIDE) fail(path, `expected an integer from 1 to ${CANVAS_SIDE}; only a single-frame still may be larger (up to ${STILL_SIDE}), and this recipe has ${frameCount} frames`);
-    return integer(value, path, 1, still ? STILL_SIDE : CANVAS_SIDE);
+    if (stills && frameCount > 1 && Number.isInteger(value) && value > most && value <= STILL_SIDE) fail(path, `expected an integer from 1 to ${most}; only a single-frame still may be larger (up to ${STILL_SIDE}), and this recipe has ${frameCount} frames`);
+    return integer(value, path, 1, still ? STILL_SIDE : most);
   };
   const width = side(spec.width, 'project.width'), height = side(spec.height, 'project.height');
-  if (still && width * height > FRAME_AREA) fail('project', `a ${width}×${height} still is ${String(width * height).replace(/\B(?=(\d{3})+$)/g, ',')} pixels; a still holds at most 4,194,304 (1920×1080, 2560×1440 and 2048×2048 fit), so draw it smaller or enlarge a smaller canvas with sheet.scale`);
+  if (still && width * height > FRAME_AREA) fail('project', `a ${width}×${height} still is ${grouped(width * height)} pixels; a still holds at most 4,194,304 (1920×1080, 2560×1440 and 2048×2048 fit), so draw it smaller or enlarge a smaller canvas with sheet.scale`);
+  if ((frameCount > 1 || !stills) && width * height > FRAME_PIXELS) fail('project', `${frameAreaProblem(width, height)}, so draw it smaller or enlarge a smaller canvas with sheet.scale${stills ? '; only a single-frame still may be larger' : ''}`);
   const palette = spec.palette ?? {};
   object(palette, 'project.palette');
   if (own(palette, '$ref')) fail('project.palette.$ref', 'palette files are resolved by the CLI, MCP or resolveRecipe(); inline the palette to render here');
   if (Object.keys(palette).length > 256) fail('project.palette', 'at most 256 colors are allowed');
   for (const [key, value] of Object.entries(palette)) {
-    if (!key || key.length > 64 || key === '.' || key === ' ' || key === 'transparent') fail(`project.palette.${key}`, 'invalid or reserved palette name');
+    if (key === '.' || key === ' ') fail(`project.palette.${key}`, '"." and space are reserved: in grid rows they leave the pixel alone and need no palette entry (a transparent colour is "transparent" under another key)');
+    if (!key || key.length > 64 || key === 'transparent') fail(`project.palette.${key}`, 'invalid or reserved palette name');
     parseColor(value, {}, `project.palette.${key}`);
   }
   // Ramps list palette keys from dark to light. `shade` and scene ramp lighting move a colour along its ramp instead of
@@ -239,11 +324,12 @@ function readProject(spec, { stills = true } = {}) {
   object(spec.symbols ?? {}, 'project.symbols');
   for (const [key, rows] of Object.entries(spec.symbols ?? {})) {
     name(key, `project.symbols.${key}`);
-    symbols[key] = readRows(rows, `project.symbols.${key}`, palette);
+    symbols[key] = readRows(rows, `project.symbols.${key}`, palette, most);
   }
   list(spec.frames, 'project.frames', 256);
   if (!spec.frames.length) fail('project.frames', 'at least one frame is required');
-  if (width * height * spec.frames.length > 4194304) fail('project.frames', 'total frame area exceeds 4,194,304 pixels');
+  const total = frameTotalProblem(spec.frames.length, width, height);
+  if (total) fail('project.frames', total);
   object(spec.animations ?? {}, 'project.animations');
   const animationCount = spec.animations === undefined ? 1 : Object.keys(spec.animations).length;
   // Support files: sheet, atlas, SpriteFrames, recipe, CSS, player, preview and README, and a Godot TileSet and a Tiled
@@ -266,6 +352,127 @@ export function inlineSharedPalette(document, { palette, ramps = null }) {
   return { ...document, palette: { ...palette, ...local }, ...(inherit && { ramps }) };
 }
 
+// Emit disjoint inclusive spans, so translucent edges and shared vertices paint each pixel once.
+// Vertices and the traced boundary sit on pixel centres, so the interior must be sampled on the
+// same grid: crossings are taken on the row itself (each side counts from its upper end up to,
+// not including, its lower end) and pair up even-odd, and an interior span holds the centres
+// strictly between a pair. Sampled anywhere else, the fill shifts against the outline: half a row
+// lower left a pinhole inside every right edge sloping down-left and a stray pixel outside every
+// left edge sloping that way. Every boundary pixel lies within half a pixel of its crossing, so
+// the boundary and interior meet with no gap. Trace each boundary from its upper endpoint so a
+// Bresenham tie selects the same pixel when the vertex order is reversed.
+function polygonSpans(points, filled, spend, visit) {
+  const ys = points.map(([, y]) => y), top = Math.min(...ys), bottom = Math.max(...ys);
+  const sides = points.map(([x, y], i) => {
+    let [endX, endY] = points[(i + 1) % points.length];
+    if (y > endY || (y === endY && x > endX)) { [x, endX] = [endX, x]; [y, endY] = [endY, y]; }
+    return { x, y, endX, endY, dx: Math.abs(endX - x), dy: endY - y, step: Math.sign(endX - x) };
+  });
+  spend((bottom - top + 1) * sides.length);
+  for (let row = top; row <= bottom; row++) {
+    const edges = [], crossings = [];
+    for (const { x, y, endX, endY, dx, dy, step } of sides) {
+      if (row < y || row > endY) continue;
+      if (!dy) { edges.push([x, endX]); continue; }
+      const k = row - y;
+      if (filled && row < endY) crossings.push(x + step * dx * k / dy);
+      // A steep line visits one column on this row. For a shallow line, collect all
+      // major-axis steps whose rounded minor-axis coordinate is k (the line op's ties).
+      if (dy >= dx) {
+        const px = x + step * Math.round(k * dx / dy);
+        edges.push([px, px]);
+      } else {
+        const a = x + step * Math.max(0, Math.ceil((k - .5) * dx / dy));
+        const b = x + step * Math.min(dx, Math.ceil((k + .5) * dx / dy) - 1);
+        edges.push([Math.min(a, b), Math.max(a, b)]);
+      }
+    }
+    crossings.sort((a, b) => a - b);
+    for (let i = 0; i < crossings.length; i += 2) {
+      const left = Math.floor(crossings[i]) + 1, right = Math.ceil(crossings[i + 1]) - 1;
+      if (left <= right) edges.push([left, right]);
+    }
+    edges.sort((a, b) => a[0] - b[0]);
+    let [left, right] = edges[0];
+    for (let i = 1; i < edges.length; i++) {
+      const [lo, hi] = edges[i];
+      if (lo > right + 1) { visit(row, left, right); left = lo; }
+      right = Math.max(right, hi);
+    }
+    visit(row, left, right);
+  }
+}
+
+// A part keeps its original vertices, including negative coordinates. Its instance scales around
+// the local pivot, rasterizes on an unbounded integer grid, then reflects spans into canvas space.
+const partFields = { pixel: [], line: ['x2', 'y2'], polygon: ['points', 'filled'] };
+const trackEases = ['linear', 'hold', 'in', 'out', 'inOut'];
+const trackLimit = 256 * 60000;
+function scalePair(value, path) {
+  if (!Array.isArray(value)) { const s = number(value, path, 0, 16); return [s, s]; }
+  if (value.length !== 2) fail(path, 'expected a scale or [scaleX, scaleY]');
+  return value.map((s, i) => number(s, `${path}[${i}]`, 0, 16));
+}
+function readPart(part, path, palette) {
+  object(part, path, ['pivot', 'ops']);
+  const pivot = point(part.pivot ?? [0, 0], `${path}.pivot`);
+  const shapes = list(part.ops, `${path}.ops`).map((op, i) => {
+    const p = `${path}.ops[${i}]`;
+    object(op, p);
+    if (typeof op.op !== 'string' || !own(partFields, op.op)) fail(`${p}.op`, 'a polygon part takes polygon, line or pixel');
+    object(op, p, ['op', 'x', 'y', 'color', ...partFields[op.op]]);
+    parseColor(op.color, palette, `${p}.color`);
+    const x = integer(op.x ?? 0, `${p}.x`), y = integer(op.y ?? 0, `${p}.y`);
+    let points = [[x, y]], filled = true;
+    if (op.op === 'line') points.push([integer(op.x2, `${p}.x2`), integer(op.y2, `${p}.y2`)]);
+    if (op.op === 'polygon') {
+      points = polygonPoints(op, p).map(([px, py]) => [px + x, py + y]);
+      filled = boolean(op.filled ?? true, `${p}.filled`);
+    }
+    return { color: op.color, filled, points: points.map(([px, py]) => [px - pivot[0], py - pivot[1]]) };
+  });
+  return shapes;
+}
+function polygonPoints(op, path) {
+  if (!Array.isArray(op.points) || op.points.length < 3 || op.points.length > 256) fail(`${path}.points`, 'expected 3–256 vertices as [x, y] pairs');
+  return op.points.map((at, i) => point(at, `${path}.points[${i}]`));
+}
+function readTrack(track, path) {
+  object(track, path, ['keys', 'loop', 'ease']);
+  const loop = boolean(track.loop ?? false, `${path}.loop`), easing = track.ease ?? 'linear';
+  if (!trackEases.includes(easing)) fail(`${path}.ease`, `expected ${trackEases.join(', ')}`);
+  list(track.keys, `${path}.keys`, 256);
+  if (!track.keys.length || (loop && track.keys.length < 2)) fail(`${path}.keys`, 'expected at least one scale key, or two for a loop');
+  let previous = -1;
+  const keys = track.keys.map((key, i) => {
+    const p = `${path}.keys[${i}]`;
+    object(key, p, ['at', 'scale']);
+    const at = integer(key.at, `${p}.at`, 0, trackLimit);
+    if (at <= previous || (loop && i === 0 && at !== 0)) fail(`${p}.at`, 'key times must increase; a loop starts at 0 ms');
+    previous = at;
+    return { at, scale: scalePair(key.scale, `${p}.scale`) };
+  });
+  return { keys, loop, easing };
+}
+function definitions(value, path, read) {
+  const entries = Object.entries(object(value ?? {}, path));
+  if (entries.length > 64) fail(path, 'at most 64 definitions');
+  return new Map(entries.map(([key, definition]) => {
+    const p = `${path}.${key}`;
+    return [name(key, p), read(definition, p)];
+  }));
+}
+function sampleTrack({ keys, loop, easing }, time) {
+  const last = keys[keys.length - 1];
+  if (loop) time = ((time % last.at) + last.at) % last.at;
+  if (time <= keys[0].at) return keys[0].scale;
+  if (time >= last.at) return last.scale;
+  const i = keys.findIndex(key => key.at >= time), a = keys[i - 1], b = keys[i];
+  if (time === b.at) return b.scale;
+  const t = ease(easing, (time - a.at) / (b.at - a.at));
+  return a.scale.map((start, axis) => start + t * (b.scale[axis] - start));
+}
+
 export function renderProject(spec, options = {}) {
   object(options, 'render', ['layers', 'stats', 'owners']);
   if (options.stats !== undefined) boolean(options.stats, 'render.stats');
@@ -281,8 +488,10 @@ export function renderProject(spec, options = {}) {
     return renderProject(isolated, { ...(options.stats && { stats: true }), ...(options.owners && { owners: true }) });
   }
   const { projectName, width, height, palette, ramps, background, projectAnchor, symbols } = readProject(spec);
-  // Rectangles, ellipses and dither or shade regions may overhang the canvas: up to 512 pixels, or twice the side of a
-  // larger still.
+  const parts = definitions(spec.parts, 'project.parts', (value, path) => readPart(value, path, palette));
+  const tracks = definitions(spec.scaleTracks, 'project.scaleTracks', readTrack);
+  // Rectangles, ellipses and dither or shade regions may overhang the canvas: up to 512 pixels, or twice the canvas's
+  // side when that is over 256.
   const boxWidth = Math.max(512, 2 * width), boxHeight = Math.max(512, 2 * height);
   let activePalette = palette;
   const color = (value, path) => parseColor(value, activePalette, path);
@@ -308,15 +517,18 @@ export function renderProject(spec, options = {}) {
   // Clipping is counted per source location so an agent can find the operation that overhangs.
   const clipped = new Map();
   const clip = (path, pixels = 1) => clipped.set(path, (clipped.get(path) ?? 0) + pixels);
+  // Outlines that found nothing in their buffer to surround, by the operation's path.
+  const hollow = [];
+  // Frames that set a palette and draw nothing of their own, as [name, the frame continued or undefined]: a frame
+  // palette recolours the frame's own drawing, so there it changes nothing.
+  const idlePalettes = [];
   const rendered = new Map(), frameNames = new Set();
   // Colours a frame takes from an earlier frame as exact RGBA, which its own palettes need not name: what the frame it
   // continues (`from`) or copies from recoloured with a frame or layer palette, and what that frame took the same way.
   // Diagnostics count them as declared for the frame (`inherited`); drawing never reads them.
   let taken = null;
   const take = source => {
-    for (const value of Object.values(source.palette ?? {})) taken.add(value);
-    for (const entry of source.layerPalettes ?? []) for (const value of Object.values(entry.palette)) taken.add(value);
-    for (const value of source.inherited ?? []) taken.add(value);
+    for (const value of frameColours(source)) taken.add(value);
   };
   // The row an operation stands on, for a layer with sort "ground": its `ground`, or the lowest row it draws (a
   // stamp's or grid's bottom after scale and rotation, a line's lower end, a shape's bottom edge). Text needs `ground`,
@@ -335,6 +547,7 @@ export function renderProject(spec, options = {}) {
     const box = (w, h) => y + (turned ? w : h) * scale - 1;
     if (op.op === 'pixel') return y;
     if (op.op === 'line') return Math.max(y, whole(op.y2, y));
+    if (op.op === 'polygon') return y + (Array.isArray(op.points) && op.points.length && op.points.length <= 256 ? Math.max(...op.points.map(pt => whole(pt?.[1], 0))) : 0);
     if (op.op === 'rect' || op.op === 'ellipse') return y + whole(op.h, 1) - 1;
     if (op.op === 'grid') return Array.isArray(op.rows) && typeof op.rows[0] === 'string' ? box(op.rows[0].length, op.rows.length) : y;
     const grid = typeof op.symbol === 'string' && own(symbols, op.symbol) ? symbols[op.symbol] : null;
@@ -345,9 +558,19 @@ export function renderProject(spec, options = {}) {
     const [sourceWidth, sourceHeight] = grid ? [grid.width, grid.height] : [width, height];
     return box(whole(op.w, sourceWidth - whole(op.sx, 0)), whole(op.h, sourceHeight - whole(op.sy, 0)));
   };
-  // Operations draw in list order; in a layer with sort "ground" they draw far to near, by the row each stands on, and
-  // operations on the same row keep list order (as a game draws actors and props). Paths keep list positions.
-  function drawOps(data, ops, path, bounds = null, sorted = false) {
+  // Charge the full span to the work budget, then paint only the pixels that reach the destination.
+  function paintSpan(row, left, right, path, paint) {
+    const length = right - left + 1;
+    spend(length);
+    if (row < 0 || row >= height) { clip(path, length); return; }
+    const first = Math.max(0, left), last = Math.min(width - 1, right);
+    const lost = length - Math.max(0, last - first + 1);
+    if (lost) clip(path, lost);
+    for (let px = first; px <= last; px++) paint(px, row);
+  }
+  // Operations draw in list order; ground-sorted layers draw far to near and ties keep list order.
+  // A part layer paints its transformed geometry first, then any canvas-space operations.
+  function drawOps(data, ops, path, origins, bounds = null, sorted = false, instance = null) {
     // Conservative dirty bounds, including writes later erased. Global operations still see the complete buffer.
     const touch = (x, y) => {
       if (!bounds) return;
@@ -356,6 +579,22 @@ export function renderProject(spec, options = {}) {
       if (x > bounds[2]) bounds[2] = x;
       if (y > bounds[3]) bounds[3] = y;
     };
+    if (instance) {
+      const { shapes, scale, dx, dy, signX, signY } = instance;
+      for (const shape of shapes) {
+        if (++operationCount > 20000) fail(instance.path, 'project exceeds 20,000 drawing operations');
+        const c = color(shape.color, instance.path);
+        const points = shape.points.map(([x, y]) => [Math.round(x * scale[0]), Math.round(y * scale[1])]);
+        const paint = (x, y) => {
+          if (c[3]) touch(x, y);
+          origins.paint(data, (y * width + x) * 4, c);
+        };
+        const span = (row, left, right) => paintSpan(dy + signY * row, dx + (signX > 0 ? left : -right), dx + (signX > 0 ? right : -left), instance.path, paint);
+        if (points.length === 1) span(points[0][1], points[0][0], points[0][0]);
+        else if (points.length === 2) traceLine(...points[0], ...points[1], (x, y) => span(y, x, x));
+        else polygonSpans(points, shape.filled, spend, span);
+      }
+    }
     list(ops, path);
     const order = ops.map((_, index) => index), refused = new Set();
     if (sorted) {
@@ -380,6 +619,7 @@ export function renderProject(spec, options = {}) {
       const fields = {
         pixel: ['x', 'y', 'color', 'ground'], rect: ['x', 'y', 'w', 'h', 'color', 'filled', 'ground'],
         ellipse: ['x', 'y', 'w', 'h', 'color', 'filled', 'ground'], line: ['x', 'y', 'x2', 'y2', 'color', 'ground'],
+        polygon: ['x', 'y', 'points', 'color', 'filled', 'ground'],
         clear: ['x', 'y', 'w', 'h'], fill: ['x', 'y', 'color'],
         grid: ['x', 'y', 'rows', ...transform, 'remap', 'ground'],
         stamp: ['x', 'y', 'symbol', ...transform, 'remap', 'ground'], replace: ['from', 'to'],
@@ -397,11 +637,12 @@ export function renderProject(spec, options = {}) {
       object(op, p, ['op', ...fields[op.op]]);
       if (op.ground !== undefined && !sorted) fail(`${p}.ground`, 'ground orders a layer with sort "ground"; set sort on this layer, or remove ground');
       const x = integer(op.x ?? 0, `${p}.x`), y = integer(op.y ?? 0, `${p}.y`);
-      const put = (px, py, c, erase = false) => {
+      const put = (px, py, c, erase = false, mixed = false) => {
         if (px < 0 || py < 0 || px >= width || py >= height) { clip(p); return; }
         const at = (py * width + px) * 4;
         if (!erase && c[3]) touch(px, py);
-        if (erase) data.fill(0, at, at + 4); else blend(data, at, c);
+        if (erase) { data.fill(0, at, at + 4); origins.set(at / 4, false); }
+        else origins.paint(data, at, c, 1, mixed);
       };
       // Palette characters, optionally remapped to other palette keys or colors for this operation only.
       const paletteSampler = () => {
@@ -422,7 +663,7 @@ export function renderProject(spec, options = {}) {
       // Draws a w x h source through flip, rotation and integer scale; flips happen before rotation. `shift` moves
       // the drawing by [dx, dy], given the scale, rotation and vertical flip (text alignment, and accents above the
       // first line).
-      const drawCells = (w, h, sample, shift = () => [0, 0]) => {
+      const drawCells = (w, h, sample, shift = () => [0, 0], mixedAt) => {
         const scale = integer(op.scale ?? 1, `${p}.scale`, 1, 16);
         const flipX = boolean(op.flipX ?? false, `${p}.flipX`), flipY = boolean(op.flipY ?? false, `${p}.flipY`);
         const rotate = integer(op.rotate ?? 0, `${p}.rotate`, 0, 270);
@@ -436,7 +677,8 @@ export function renderProject(spec, options = {}) {
           if (rotate === 90) [px, py] = [h - 1 - py, px];
           else if (rotate === 180) [px, py] = [w - 1 - px, h - 1 - py];
           else if (rotate === 270) [px, py] = [py, w - 1 - px];
-          for (let sy = 0; sy < scale; sy++) for (let sx = 0; sx < scale; sx++) put(left + px * scale + sx, top + py * scale + sy, c);
+          const mixed = mixedAt?.(gx, gy);
+          for (let sy = 0; sy < scale; sy++) for (let sx = 0; sx < scale; sx++) put(left + px * scale + sx, top + py * scale + sy, c, false, mixed);
         }
       };
       // The canvas-anchored threshold field shared by dither and shade: a region from x/y (to the canvas edge unless w/h
@@ -504,6 +746,11 @@ export function renderProject(spec, options = {}) {
         const x2 = integer(op.x2, `${p}.x2`), y2 = integer(op.y2, `${p}.y2`), c = color(op.color, `${p}.color`);
         spend(Math.max(Math.abs(x2 - x), Math.abs(y2 - y)) + 1);
         traceLine(x, y, x2, y2, (px, py) => put(px, py, c));
+      } else if (op.op === 'polygon') {
+        const points = polygonPoints(op, p);
+        const c = color(op.color, `${p}.color`), filled = boolean(op.filled ?? true, `${p}.filled`);
+        const paint = (px, py) => put(px, py, c);
+        polygonSpans(points, filled, spend, (row, left, right) => paintSpan(row + y, left + x, right + x, p, paint));
       } else if (op.op === 'grid' || op.op === 'stamp') {
         if (op.op === 'stamp' && typeof op.symbol !== 'string') fail(`${p}.symbol`, 'expected a string naming a symbol');
         const grid = op.op === 'grid' ? readRows(op.rows, `${p}.rows`, palette) : symbols[op.symbol];
@@ -532,7 +779,7 @@ export function renderProject(spec, options = {}) {
       } else if (op.op === 'copy') {
         // Copies a rectangle of a symbol (palette characters) or of an earlier frame (exact RGBA).
         if ((op.from === undefined) === (op.symbol === undefined)) fail(p, 'copy needs exactly one of from (an earlier frame) or symbol');
-        let sourceWidth, sourceHeight, read;
+        let sourceWidth, sourceHeight, read, mixedAt;
         if (op.symbol !== undefined) {
           if (typeof op.symbol !== 'string') fail(`${p}.symbol`, 'expected a string naming a symbol');
           const grid = symbols[op.symbol];
@@ -542,8 +789,8 @@ export function renderProject(spec, options = {}) {
         } else {
           if (typeof op.from !== 'string' || !rendered.has(op.from)) fail(`${p}.from`, 'must name an earlier frame');
           // A frame copy keeps exact RGBA; remap swaps exact colours, named by project palette key or hex, for others.
-          const source = rendered.get(op.from).data, swaps = new Map();
-          take(rendered.get(op.from));
+          const previous = rendered.get(op.from), source = previous.data, swaps = new Map();
+          take(previous);
           if (op.remap !== undefined) {
             object(op.remap, `${p}.remap`);
             if (Object.keys(op.remap).length > 256) fail(`${p}.remap`, 'at most 256 colours');
@@ -555,10 +802,14 @@ export function renderProject(spec, options = {}) {
             }
           }
           [sourceWidth, sourceHeight, read] = [width, height, (sx, sy) => { const at = (sy * width + sx) * 4; return source[at + 3] ? swaps.get(pixelId(source, at)) ?? source.subarray(at, at + 4) : null; }];
+          if (previous.blendMask) mixedAt = (sx, sy) => {
+            const at = sy * width + sx;
+            return previous.blendMask[at] && !swaps.has(pixelId(source, at * 4));
+          };
         }
         const sx = integer(op.sx ?? 0, `${p}.sx`, 0, sourceWidth - 1), sy = integer(op.sy ?? 0, `${p}.sy`, 0, sourceHeight - 1);
         const w = integer(op.w ?? sourceWidth - sx, `${p}.w`, 1, sourceWidth - sx), h = integer(op.h ?? sourceHeight - sy, `${p}.h`, 1, sourceHeight - sy);
-        drawCells(w, h, (gx, gy) => read(sx + gx, sy + gy));
+        drawCells(w, h, (gx, gy) => read(sx + gx, sy + gy), undefined, mixedAt && ((gx, gy) => mixedAt(sx + gx, sy + gy)));
       } else if (op.op === 'autotile') {
         // One tile of an autotile set. The autotile compiler emits one per frame, so editing the template redraws every tile.
         if (typeof op.symbol !== 'string') fail(`${p}.symbol`, 'expected a string naming a template symbol');
@@ -599,7 +850,7 @@ export function renderProject(spec, options = {}) {
         // floor colours, rewrite rules at its corners, an outline around it.
         if (op.tile === undefined) fail(`${p}.tile`, 'expected [width, height]: the distance between cells in pixels');
         const tile = point(op.tile, `${p}.tile`);
-        if (tile.some(n => n < 1 || n > 256)) fail(`${p}.tile`, 'cells are 1–256 pixels wide and tall');
+        if (tile.some(n => n < 1 || n > CANVAS_SIDE)) fail(`${p}.tile`, `cells are 1–${CANVAS_SIDE} pixels wide and tall, as a scene tilemap's are`);
         // An iso map lays cells on a 2:1 diamond grid, back to front; each symbol stands on its diamond, bottoms aligned
         // and centred across, so a block taller than the tile rises above its cell.
         if (op.layout !== undefined && op.layout !== 'square' && op.layout !== 'iso') fail(`${p}.layout`, 'expected square or iso');
@@ -642,6 +893,7 @@ export function renderProject(spec, options = {}) {
         spend(width * height * size);
         const solid = new Uint8Array(width * height), paint = new Uint8Array(width * height);
         for (let i = 0; i < solid.length; i++) solid[i] = data[i * 4 + 3] ? 1 : 0;
+        if (!solid.includes(1)) hollow.push(p);
         const within = (px, py) => px >= 0 && py >= 0 && px < width && py < height;
         const outer = position === 'inside' ? 0 : position === 'outside' ? size : Math.ceil(size / 2);
         const inner = position === 'outside' ? 0 : position === 'inside' ? size : Math.floor(size / 2);
@@ -663,7 +915,7 @@ export function renderProject(spec, options = {}) {
         }
         for (let i = 0; i < paint.length; i++) if (paint[i]) {
           if (c[3]) touch(i % width, Math.floor(i / width));
-          blend(data, i * 4, c);
+          origins.paint(data, i * 4, c);
         }
       } else if (op.op === 'dither') {
         // Ordered dither: draws `color` (or erases) where the canvas-anchored pattern's threshold is below the density.
@@ -686,7 +938,7 @@ export function renderProject(spec, options = {}) {
           const at = (py * width + px) * 4, id = pixelId(data, at);
           if (!id || (over && !over.has(id))) return;
           const next = shift(id, steps);
-          if (next) data.set(next, at);
+          if (next) { data.set(next, at); origins.set(at / 4, false); }
         });
       } else if (op.op === 'rewrite') {
         // Markov-style rules: small palette grids matched against exact RGBA and replaced in place (see craft.js).
@@ -718,11 +970,12 @@ export function renderProject(spec, options = {}) {
           return ruleVariants({ w: match.w, h: match.h, match: match.cells, replace: replace.cells }, turns);
         });
         const steps = integer(op.steps ?? 1, `${p}.steps`, 1, 64), seed = integer(op.seed ?? 0, `${p}.seed`, 0, 2147483647);
-        const chance = op.chance === undefined ? 1 : number(op.chance, `${p}.chance`, 0, 1), limit = op.limit === undefined ? Infinity : integer(op.limit, `${p}.limit`, 1, 65536);
+        const chance = op.chance === undefined ? 1 : number(op.chance, `${p}.chance`, 0, 1), limit = op.limit === undefined ? Infinity : integer(op.limit, `${p}.limit`, 1, FRAME_PIXELS);
         const ids = idsOf(data);
         for (const index of rewriteIds(ids, width, height, rules, { x: rx, y: ry, w: rw, h: rh, steps, chance, limit, seed, spend })) {
           touch(index % width, Math.floor(index / width));
           data.set(colorOf(ids[index]), index * 4);
+          origins.set(index, false);
         }
       } else if (op.op === 'replace') {
         const from = color(op.from, `${p}.from`), to = color(op.to, `${p}.to`);
@@ -730,6 +983,7 @@ export function renderProject(spec, options = {}) {
         for (let i = 0; i < data.length; i += 4) if (from.every((c, j) => data[i + j] === c)) {
           touch(i / 4 % width, Math.floor(i / 4 / width));
           data.set(to, i);
+          origins.set(i / 4, false);
         }
       } else if (op.op === 'fill') {
         if (x < 0 || y < 0 || x >= width || y >= height) fail(p, 'fill seed must be inside the canvas');
@@ -742,6 +996,7 @@ export function renderProject(spec, options = {}) {
           visited[at] = 1;
           if (!target.every((v, j) => data[at * 4 + j] === v)) continue;
           data.set(c, at * 4);
+          origins.set(at, false);
           const px = at % width, py = Math.floor(at / width);
           touch(px, py);
           if (px > 0) stack.push(at - 1); if (px + 1 < width) stack.push(at + 1);
@@ -750,26 +1005,32 @@ export function renderProject(spec, options = {}) {
       }
     }
   }
+  let elapsed = 0;
   const frames = checked(() => spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
     // A field a frame doesn't have is noted like a broken operation and the frame is read without it, so the same
     // reply still names what else is wrong: another frame's operations, an animation that lists a missing frame.
-    try { object(frame, p, ['name', 'duration', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'tile', 'ops', 'layers', 'pixels']); }
+    try { object(frame, p, ['name', 'duration', 'time', 'from', 'translate', 'wrap', 'flipX', 'flipY', 'palette', 'anchor', 'points', 'groups', 'tile', 'ops', 'layers', 'pixels']); }
     catch (error) { if (!isObject(frame) || !error.message.includes('unknown field')) throw error; note(error, p); }
     const frameName = name(frame.name, `${p}.name`);
     if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
     frameNames.add(frameName.toLowerCase());
     const duration = integer(frame.duration ?? 100, `${p}.duration`, 1, 60000);
-    let overrides = null;
-    if (frame.palette !== undefined) {
-      object(frame.palette, `${p}.palette`);
-      overrides = {};
-      for (const [key, value] of Object.entries(frame.palette)) {
-        if (!own(palette, key)) fail(`${p}.palette.${key}`, 'frame palettes recolor keys declared in the project palette');
-        overrides[key] = toHex(parseColor(value, palette, `${p}.palette.${key}`));
+    const time = integer(frame.time ?? elapsed, `${p}.time`, 0, trackLimit);
+    elapsed += duration;
+    if (frame.groups !== undefined) {
+      object(frame.groups, `${p}.groups`);
+      if (Object.keys(frame.groups).length > 64) fail(`${p}.groups`, 'at most 64 layer groups per frame');
+      for (const [key, offset] of Object.entries(frame.groups)) {
+        name(key, `${p}.groups.${key}`); point(offset, `${p}.groups.${key}`);
       }
     }
+    let overrides = null;
+    if (frame.palette !== undefined) {
+      overrides = paletteOverride(frame.palette, palette, `${p}.palette`, 'frame palettes recolor keys declared in the project palette');
+    }
     activePalette = overrides ? { ...palette, ...overrides } : palette;
+    if (overrides && Object.keys(overrides).length && ![frame.ops, frame.layers, frame.pixels].some(list => Array.isArray(list) && list.length)) idlePalettes.push([frameName, typeof frame.from === 'string' ? frame.from : undefined]);
     const frameAnchor = frame.anchor === undefined ? projectAnchor : point(frame.anchor, `${p}.anchor`);
     let points = null;
     if (frame.points !== undefined) {
@@ -779,11 +1040,13 @@ export function renderProject(spec, options = {}) {
     }
     const tile = frame.tile === undefined ? null : tileFacts(frame.tile, `${p}.tile`, width, height);
     let data = new Uint8ClampedArray(width * height * 4), owner = ownerNames && new Uint16Array(width * height);
+    let origins = new BlendOrigins(width * height);
     taken = new Set();
     if (frame.from !== undefined) {
       if (typeof frame.from !== 'string' || !rendered.has(frame.from)) fail(`${p}.from`, 'must name an earlier frame');
       take(rendered.get(frame.from));
       data.set(rendered.get(frame.from).data);
+      origins = new BlendOrigins(width * height, rendered.get(frame.from).blendMask);
       owner?.set(rendered.get(frame.from).owners);
     } else if (background.some(Boolean)) {
       for (let i = 0; i < data.length; i += 4) data.set(background, i);
@@ -797,19 +1060,21 @@ export function renderProject(spec, options = {}) {
     const wrap = boolean(frame.wrap ?? false, `${p}.wrap`);
     if (dx || dy || flipX || flipY) {
       const transformed = new Uint8ClampedArray(data.length), moved = owner && new Uint16Array(owner.length);
+      const movedOrigins = new BlendOrigins(width * height);
       for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
         let px = (flipX ? width - 1 - x : x) + dx, py = (flipY ? height - 1 - y : y) + dy;
         if (wrap) { px = ((px % width) + width) % width; py = ((py % height) + height) % height; }
         if (px >= 0 && py >= 0 && px < width && py < height) {
           transformed.set(data.subarray((y * width + x) * 4, (y * width + x) * 4 + 4), (py * width + px) * 4);
           if (moved) moved[py * width + px] = owner[y * width + x];
+          if (origins.mask?.[y * width + x]) movedOrigins.set(py * width + px, true);
         } else if (data[(y * width + x) * 4 + 3]) clip(`${p}.translate`);
       }
-      data = transformed; owner = moved;
+      data = transformed; owner = moved; origins = movedOrigins;
     }
     // Frame operations may draw anywhere and erase: what they changed is theirs.
     const unchanged = owner && frame.ops?.length ? data.slice() : null;
-    drawOps(data, frame.ops ?? [], `${p}.ops`);
+    drawOps(data, frame.ops ?? [], `${p}.ops`, origins);
     if (unchanged) {
       const id = ownerId('frame.ops');
       for (let at = 0; at < owner.length; at++) {
@@ -821,29 +1086,45 @@ export function renderProject(spec, options = {}) {
     const framePalette = activePalette, layerPalettes = [];
     // Reuse a layer scratch buffer; clear only dirty rows after compositing. Empty layers allocate nothing extra.
     const pixels = (frame.layers ?? []).length ? new Uint8ClampedArray(data.length) : null;
+    const layerOrigins = new BlendOrigins(width * height);
     for (const [li, layer] of (frame.layers ?? []).entries()) {
       const lp = `${p}.layers[${li}]`;
-      object(layer, lp, ['name', 'visible', 'opacity', 'x', 'y', 'palette', 'sort', 'ops']);
+      object(layer, lp, ['name', 'visible', 'opacity', 'x', 'y', 'group', 'palette', 'sort', 'ops', 'part', 'flipX', 'flipY', 'scale', 'delay']);
       if (layer.sort !== undefined && layer.sort !== 'ground') fail(`${lp}.sort`, 'expected "ground": draw this layer\'s operations far to near by the row each stands on');
       if (layer.name !== undefined) name(layer.name, `${lp}.name`);
       // A layer palette recolors keys for this layer's drawing only, on top of the frame's palette, so one layer can
       // flash or cycle while other drawing that shares the key keeps its colour.
       let layerOverrides = null;
       if (layer.palette !== undefined) {
-        object(layer.palette, `${lp}.palette`);
-        layerOverrides = {};
-        for (const [key, value] of Object.entries(layer.palette)) {
-          if (!own(palette, key)) fail(`${lp}.palette.${key}`, 'layer palettes recolor keys declared in the project palette');
-          layerOverrides[key] = toHex(parseColor(value, palette, `${lp}.palette.${key}`));
-        }
+        layerOverrides = paletteOverride(layer.palette, palette, `${lp}.palette`, 'layer palettes recolor keys declared in the project palette');
         layerPalettes.push({ layer: layer.name ?? li, palette: layerOverrides });
       }
       activePalette = layerOverrides ? { ...framePalette, ...layerOverrides } : framePalette;
       const visible = boolean(layer.visible ?? true, `${lp}.visible`), opacity = layer.opacity ?? 1;
       if (typeof opacity !== 'number' || !Number.isFinite(opacity) || opacity < 0 || opacity > 1) fail(`${lp}.opacity`, 'expected a number from 0 to 1');
-      const lx = integer(layer.x ?? 0, `${lp}.x`), ly = integer(layer.y ?? 0, `${lp}.y`);
+      let [lx, ly] = layerOffset(layer, frame.groups, lp), instance = null;
+      if (layer.part !== undefined) {
+        const shapes = parts.get(name(layer.part, `${lp}.part`));
+        if (!shapes) fail(`${lp}.part`, `unknown polygon part "${layer.part}"`);
+        if (layer.sort !== undefined) fail(`${lp}.sort`, 'a polygon part draws in definition order');
+        const signX = boolean(layer.flipX ?? false, `${lp}.flipX`) ? -1 : 1;
+        const signY = boolean(layer.flipY ?? false, `${lp}.flipY`) ? -1 : 1;
+        let scale;
+        if (typeof layer.scale === 'string') {
+          const track = tracks.get(layer.scale);
+          if (!track) fail(`${lp}.scale`, `unknown scale track "${layer.scale}"`);
+          scale = sampleTrack(track, time - integer(layer.delay ?? 0, `${lp}.delay`, -trackLimit, trackLimit));
+        } else {
+          if (layer.delay !== undefined) fail(`${lp}.delay`, 'delay needs a named scale track');
+          scale = scalePair(layer.scale ?? 1, `${lp}.scale`);
+        }
+        instance = { shapes, scale, dx: lx, dy: ly, signX, signY, path: `${lp}.part` };
+        lx = 0; ly = 0;
+      } else for (const key of ['flipX', 'flipY', 'scale', 'delay']) {
+        if (layer[key] !== undefined) fail(`${lp}.${key}`, `${key} needs a polygon part on this layer`);
+      }
       const bounds = [width, height, -1, -1];
-      drawOps(pixels, layer.ops ?? [], `${lp}.ops`, bounds, layer.sort === 'ground');
+      drawOps(pixels, layer.ops ?? [], `${lp}.ops`, layerOrigins, bounds, layer.sort === 'ground', instance);
       activePalette = framePalette;
       if (visible && opacity > 0 && bounds[2] >= 0) {
         const area = (bounds[2] - bounds[0] + 1) * (bounds[3] - bounds[1] + 1);
@@ -855,7 +1136,8 @@ export function renderProject(spec, options = {}) {
             const to = (ty * width + tx) * 4;
             if (pixels[i + 3] === 255 && opacity === 1) {
               data[to] = pixels[i]; data[to + 1] = pixels[i + 1]; data[to + 2] = pixels[i + 2]; data[to + 3] = 255;
-            } else blend(data, to, pixels.subarray(i, i + 4), opacity);
+              origins.set(to / 4, layerOrigins.mask?.[i / 4]);
+            } else origins.paint(data, to, pixels.subarray(i, i + 4), opacity, layerOrigins.mask?.[i / 4]);
           } else clip(lp);
         }
         if (owner) {
@@ -866,16 +1148,20 @@ export function renderProject(spec, options = {}) {
           }
         }
       }
-      for (let y = bounds[1]; y <= bounds[3]; y++) pixels.fill(0, (y * width + bounds[0]) * 4, (y * width + bounds[2] + 1) * 4);
+      for (let y = bounds[1]; y <= bounds[3]; y++) {
+        const start = y * width + bounds[0], end = y * width + bounds[2] + 1;
+        pixels.fill(0, start * 4, end * 4); layerOrigins.mask?.fill(0, start, end);
+      }
     }
     // Final canvas-space corrections replace RGBA, including transparency, after all layers.
-    list(frame.pixels ?? [], `${p}.pixels`, 65536);
+    list(frame.pixels ?? [], `${p}.pixels`, FRAME_PIXELS);
     spend((frame.pixels ?? []).length);
     for (const [i, pixel] of (frame.pixels ?? []).entries()) {
       const pp = `${p}.pixels[${i}]`;
       object(pixel, pp, ['x', 'y', 'color']);
       const x = integer(pixel.x, `${pp}.x`, 0, width - 1), y = integer(pixel.y, `${pp}.y`, 0, height - 1);
       data.set(color(pixel.color, `${pp}.color`), (y * width + x) * 4);
+      origins.set(y * width + x, false);
       // A correction over drawn pixels recolours them (a pose's inner lines recolour its parts' outlines), so they
       // stay their owner's; one on empty canvas is its own.
       if (owner) owner[y * width + x] = !data[(y * width + x) * 4 + 3] ? 0 : owner[y * width + x] || ownerId('frame.pixels');
@@ -883,15 +1169,31 @@ export function renderProject(spec, options = {}) {
     activePalette = palette;
     const result = { name: frameName, duration, data, ...(owner && { owners: owner }), ...(frameAnchor && { anchor: frameAnchor }), ...(points && { points }), ...(tile && { tile }), ...(overrides && { palette: overrides }), ...(layerPalettes.length && { layerPalettes }), ...(taken.size && { inherited: [...taken] }) };
     rendered.set(frameName, result);
+    if (origins.mask?.includes(1)) result.blendMask = origins.mask;
     return result;
   }));
   const animations = checked(() => readAnimations(spec, frames));
+  const headings = checked(() => readHeadings(spec, frames, animations));
   const sheet = checked(() => readSheet(spec, frames, width, height));
   if (noted.length) throw together();
   const warnings = [], clipping = [...clipped].map(([path, pixels]) => ({ path, pixels }));
+  // An outline surrounds what its own buffer holds: a frame's ops and each of its layers are buffers apart, so an
+  // outline among the ops of a frame drawn in layers has nothing to surround. In a frame that draws nothing at all
+  // (an effect's empty frame) it is no mistake.
+  const idle = hollow.filter(path => frames[Number(/frames\[(\d+)\]/.exec(path)?.[1])]?.data.some((value, i) => i % 4 === 3 && value));
+  if (idle.length) warnings.push(`An outline drew nothing: ${idle[0]}${idle.length > 1 ? ` and ${idle.length - 1} more` : ''} surrounds what its own buffer holds, and a frame's ops and each of its layers are buffers apart. Put the outline at the end of the layer it should surround.`);
+  // A frame continued with `from` keeps that frame's pixels as exact colours, and a frame palette recolours only what
+  // the frame itself draws: with nothing drawn, the frame is the same picture again. (A lit fuse and a relic's glint
+  // were written so and never showed.)
+  if (idlePalettes.length) {
+    const [frameName, from] = idlePalettes[0], more = idlePalettes.length > 1 ? ` (and ${idlePalettes.length - 1} more frame${idlePalettes.length > 2 ? 's' : ''})` : '';
+    warnings.push(`Frame "${frameName}"${more} sets a palette but draws nothing of its own, so the palette changes nothing${from ? `: it continues "${from}" in that frame's exact colours` : ''}. A frame palette recolours the frame's own drawing: stamp the symbol again in this frame${from ? `, or copy from "${from}" with remap` : ''}.`);
+  }
   if (clipping.length) warnings.push(`Some drawing falls outside the canvas and is clipped: ${clipping[0].path} (${clipping[0].pixels} px)${clipping.length > 1 ? ` and ${clipping.length - 1} more location${clipping.length > 2 ? 's' : ''}` : ''}.`);
   return {
     name: projectName, width, height, frames, animations, palette, ramps,
+    ...(headings && { headings }),
+    ...(isStills(spec) && { stills: true }),
     ...(options.stats && { work: { pixels: work, layerPixels, operations: operationCount } }),
     ...(ownerNames && { ownerNames }),
     sheet,
@@ -901,29 +1203,38 @@ export function renderProject(spec, options = {}) {
 
 // Compiler-only validation/timing for the stamp subset emitted by compilePoses. It shares header, animation and
 // atlas validation with the renderer, but never allocates or composites a canvas. A stamp cannot erase, so visible
-// symbol bounds suffice to compute the trimmed atlas, including flips and canvas clipping. Frames drawn the same way
-// share a cell here; the renderer compares pixels, so it also shares frames that only come out the same.
+// symbol bounds suffice to compute the trimmed atlas, including flips and canvas clipping. Frames drawn the same way,
+// recolouring the same drawn keys, share a cell here; the renderer compares pixels, so it also shares frames that only
+// come out the same: this sheet is an upper bound on the renderer's, not a copy of it.
 export function describeStampRecipe(spec) {
-  const { width, height, palette, symbols } = readProject(spec, { stills: false });
+  const { width, height, palette, symbols } = readProject(spec, { stills: false, side: POSE_SIDE });
   if (spec.background !== undefined) fail('project.background', 'compiler stamp recipes omit the background');
-  const frameNames = new Set(), boundsBySymbol = new Map(), boxes = [];
+  const frameNames = new Set(), boundsBySymbol = new Map(), keysBySymbol = new Map(), boxes = [];
   let work = 0, operations = 0;
   const spend = amount => { work += amount; if (work > 67108864) fail('project', 'drawing work exceeds the 67-million-pixel budget; simplify repeated operations'); };
-  const alpha = new Map(Object.keys(palette).map(key => [key, parseColor(key, palette)[3]]));
-  const symbolBounds = symbol => {
-    if (!boundsBySymbol.has(symbol)) {
+  const base = new Map(Object.keys(palette).map(key => [key, parseColor(key, palette)[3]]));
+  // A frame palette (a posed figure's hit flash) may make a key transparent or opaque; bounds are cached for the
+  // project palette's alphas only.
+  const symbolBounds = (symbol, alpha) => {
+    if (alpha !== base || !boundsBySymbol.has(symbol)) {
       const grid = symbols[symbol], bounds = [grid.width, grid.height, -1, -1];
       for (let y = 0; y < grid.height; y++) for (let x = 0; x < grid.width; x++) if (alpha.get(grid.rows[y][x])) {
         bounds[0] = Math.min(bounds[0], x); bounds[1] = Math.min(bounds[1], y);
         bounds[2] = Math.max(bounds[2], x); bounds[3] = Math.max(bounds[3], y);
       }
+      if (alpha !== base) return bounds;
       boundsBySymbol.set(symbol, bounds);
     }
     return boundsBySymbol.get(symbol);
   };
+  // The palette keys a symbol's rows use: a frame palette changes a frame's picture only where it recolours one.
+  const symbolKeys = symbol => {
+    if (!keysBySymbol.has(symbol)) keysBySymbol.set(symbol, new Set(symbols[symbol].rows.join('')));
+    return keysBySymbol.get(symbol);
+  };
   const frames = spec.frames.map((frame, index) => {
     const p = `project.frames[${index}]`;
-    object(frame, p, ['name', 'duration', 'anchor', 'points', 'layers', 'pixels']);
+    object(frame, p, ['name', 'duration', 'palette', 'anchor', 'points', 'layers', 'pixels']);
     const frameName = name(frame.name, `${p}.name`);
     if (frameNames.has(frameName.toLowerCase())) fail(`${p}.name`, `duplicate frame ${frameName}; names must also be unique ignoring case`);
     frameNames.add(frameName.toLowerCase());
@@ -934,7 +1245,10 @@ export function describeStampRecipe(spec) {
       if (Object.keys(frame.points).length > 64) fail(`${p}.points`, 'at most 64 named points per frame');
       for (const [key, value] of Object.entries(frame.points)) { name(key, `${p}.points.${key}`); point(value, `${p}.points.${key}`); }
     }
+    const overrides = frame.palette === undefined ? null : paletteOverride(frame.palette, palette, `${p}.palette`, 'frame palettes recolor keys declared in the project palette');
+    const alpha = overrides && Object.entries(overrides).some(([key, hex]) => parseColor(hex)[3] !== base.get(key)) ? new Map([...base, ...Object.entries(overrides).map(([key, hex]) => [key, parseColor(hex)[3]])]) : base;
     let left = width, top = height, right = -1, bottom = -1;
+    const drawn = new Set();
     list(frame.layers ?? [], `${p}.layers`, 64);
     for (const [li, layer] of (frame.layers ?? []).entries()) {
       const lp = `${p}.layers[${li}]`;
@@ -946,8 +1260,9 @@ export function describeStampRecipe(spec) {
       object(op, at, ['op', 'symbol', 'x', 'y', 'flipX']);
       if (op.op !== 'stamp' || typeof op.symbol !== 'string' || !own(symbols, op.symbol)) fail(`${at}.symbol`, 'expected a known compiler stamp');
       const x = integer(op.x ?? 0, `${at}.x`), y = integer(op.y ?? 0, `${at}.y`);
-      const flip = boolean(op.flipX ?? false, `${at}.flipX`), grid = symbols[op.symbol], box = symbolBounds(op.symbol);
+      const flip = boolean(op.flipX ?? false, `${at}.flipX`), grid = symbols[op.symbol], box = symbolBounds(op.symbol, alpha);
       spend(grid.width * grid.height);
+      for (const key of symbolKeys(op.symbol)) drawn.add(key);
       if (box[2] < 0) continue;
       let x0 = x + (flip ? grid.width - 1 - box[2] : box[0]), x1 = x + (flip ? grid.width - 1 - box[0] : box[2]);
       let y0 = y + box[1], y1 = y + box[3];
@@ -968,31 +1283,71 @@ export function describeStampRecipe(spec) {
       top = Math.min(top, y0); bottom = Math.max(bottom, y1);
     }
     // Final pixels in palette keys, such as a posed figure's inner lines.
-    list(frame.pixels ?? [], `${p}.pixels`, 65536);
+    list(frame.pixels ?? [], `${p}.pixels`, FRAME_PIXELS);
     spend((frame.pixels ?? []).length);
     for (const [i, pixel] of (frame.pixels ?? []).entries()) {
       const pp = `${p}.pixels[${i}]`;
       object(pixel, pp, ['x', 'y', 'color']);
       const x = integer(pixel.x, `${pp}.x`, 0, width - 1), y = integer(pixel.y, `${pp}.y`, 0, height - 1);
       if (typeof pixel.color !== 'string' || !alpha.has(pixel.color)) fail(`${pp}.color`, 'expected a palette key');
+      drawn.add(pixel.color);
       if (!alpha.get(pixel.color)) continue;
       left = Math.min(left, x); right = Math.max(right, x);
       top = Math.min(top, y); bottom = Math.max(bottom, y);
     }
-    // Frames drawn by the same stamps and corrections are one picture, and share a cell as the renderer's do.
+    // Frames drawn by the same stamps and corrections, recolouring the same drawn keys the same way, are one picture
+    // and share a cell, as the renderer's do. A palette entry that keeps its key's colour, or recolours a key the frame
+    // never stamps, changes nothing drawn.
+    const recoloured = overrides && Object.entries(overrides).filter(([key, hex]) => drawn.has(key) && toHex(parseColor(key, palette)) !== hex).sort(([a], [b]) => a < b ? -1 : 1);
     boxes.push(right < 0 ? { index, sx: 0, sy: 0, w: 1, h: 1, empty: true, key: 'empty' }
-      : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1, key: JSON.stringify([frame.layers ?? [], frame.pixels ?? []]) });
+      : { index, sx: left, sy: top, w: right - left + 1, h: bottom - top + 1, key: JSON.stringify([frame.layers ?? [], frame.pixels ?? [], recoloured?.length ? recoloured : null]) });
     return { name: frameName, duration };
   });
   const animations = readAnimations(spec, frames);
+  readHeadings(spec, frames, animations);
   const sheet = readSheet(spec, frames, width, height, boxes);
   return { frames, animations, sheet };
+}
+
+// Whether a recipe's frames are stills (its "animations" is an empty map), and whether it names animations of its own
+// (neither stills nor the field left out, which plays every frame in order).
+export const isStills = spec => isObject(spec?.animations) && !Object.keys(spec.animations).length;
+export const namesAnimations = spec => isObject(spec?.animations) && Object.keys(spec.animations).length > 0;
+// What a GIF, video frames or a check say of stills: there is no animation to play, and how to make one.
+export const stillsHaveNoAnimation = what => `the frames are stills ("animations": {} in the recipe), so there is no animation to ${what}: list the frames to play under "animations", such as { "loop": { "frames": ["a", "b"] } }, or remove the field to play every frame in order`;
+// A tile set whose recipe names no animations (it leaves the field out, or its tiles are stills), as createBundle finds
+// it (it gets a Godot TileSet: tiles, no sheet.trim and no terrain that mixes mask modes): its one animation, the
+// implicit flipbook of every tile, is no animation, so it has no SpriteFrames, CSS or timing.
+export function stillTileSet(spec, project) {
+  if (namesAnimations(spec) || project.sheet.trim) return false;
+  const tiles = autotileFrames(spec), modes = new Map();
+  if (new Set(tiles.map(tile => tile.mask)).size < 2 && !project.frames.some(frame => frame.tile)) return false;
+  for (const tile of tiles) {
+    const terrain = tile.terrain ?? project.name;
+    if ((modes.get(terrain) ?? tile.mode) !== tile.mode) return false;
+    modes.set(terrain, tile.mode);
+  }
+  return true;
+}
+// Whether an export of the recipe plays nothing: stills, or a still tile set. Either has only the flipbook of every
+// frame, which no export animates.
+export const exportsStill = (spec, project) => project.stills === true || stillTileSet(spec, project);
+// The atlas metadata an export writes: for one that plays nothing (exportsStill), the frames alone, with no
+// `animations` or `meta.frameTags`. Every exported atlas goes through here (createBundle's, the playground's), so a
+// still atlas is the same wherever it is downloaded.
+export function exportAtlas(spec, project, metadata) {
+  if (!exportsStill(spec, project)) return metadata;
+  const { animations, meta: { frameTags, ...meta }, ...rest } = metadata;
+  return { ...rest, meta };
 }
 
 function readAnimations(spec, frames) {
   const animations = Object.create(null), animationNames = new Set();
   object(spec.animations ?? {}, 'project.animations');
-  for (const [key, animation] of Object.entries(spec.animations ?? { default: { frames: frames.map(f => f.name) } })) {
+  // No animations field plays every frame in order. An empty map says the frames are stills (icons, UI states, tiles):
+  // they keep that flipbook, so a viewer can still step through them, and renderProject marks the project `stills`,
+  // which no export, reply or GIF animates.
+  for (const [key, animation] of Object.entries(namesAnimations(spec) ? spec.animations : { default: { frames: frames.map(f => f.name) } })) {
     const p = `project.animations.${key}`;
     name(key, p);
     if (animationNames.has(key.toLowerCase())) fail(p, 'animation names must also be unique ignoring case');
@@ -1008,20 +1363,92 @@ function readAnimations(spec, frames) {
     const loop = boolean(animation.loop ?? true, `${p}.loop`);
     animations[key] = { frames: indices, loop, duration: indices.reduce((sum, i) => sum + frames[i].duration, 0) };
   }
-  if (!Object.keys(animations).length) fail('project.animations', 'at least one animation is required; omit this field for a default animation');
   return animations;
+}
+
+// A recipe may say which frames and animations show its subject at which heading, in whole degrees: a sprite stack's
+// turn, or a character drawn facing eight ways. `frames` maps a heading to the frame that stands at it, `animations` an
+// animation's name to the animation that plays it at each heading, and `toward` a heading to the direction on screen
+// the subject faces there ([x, y], y down). An atlas carries it as meta.headings, where a game picks the nearest
+// heading (runtime.js). Returns the map as written, or undefined.
+function readHeadings(spec, frames, animations) {
+  if (spec.headings === undefined) return undefined;
+  const path = 'project.headings', headings = object(spec.headings, path, ['frames', 'animations', 'toward']);
+  if (headings.frames === undefined && headings.animations === undefined) fail(path, 'expected frames, animations or both: which frame or animation stands at each heading');
+  const degrees = (key, at) => { if (!/^(0|[1-9]\d{0,2})$/.test(key) || Number(key) > 359) fail(at, 'a heading is a whole number of degrees from 0 to 359, written without leading zeros'); };
+  const byHeading = (value, at, known, what) => {
+    const entries = Object.entries(object(value, at));
+    if (!entries.length) fail(at, 'expected at least one heading');
+    for (const [key, ref] of entries) {
+      degrees(key, `${at}.${key}`);
+      if (typeof ref !== 'string' || !known(ref)) fail(`${at}.${key}`, `unknown ${what} ${JSON.stringify(ref)}`);
+    }
+  };
+  if (headings.frames !== undefined) byHeading(headings.frames, `${path}.frames`, ref => frames.some(frame => frame.name === ref), 'frame');
+  if (headings.animations !== undefined) {
+    const named = Object.entries(object(headings.animations, `${path}.animations`));
+    if (!named.length || named.length > 64) fail(`${path}.animations`, 'expected 1–64 named animations, each with the animation that plays it at each heading');
+    if (spec.animations === undefined) fail(`${path}.animations`, 'the recipe names no animations');
+    for (const [key, value] of named) { name(key, `${path}.animations.${key}`); byHeading(value, `${path}.animations.${key}`, ref => own(animations, ref), 'animation'); }
+  }
+  if (headings.toward !== undefined) {
+    for (const [key, value] of Object.entries(object(headings.toward, `${path}.toward`))) {
+      const at = `${path}.toward.${key}`;
+      degrees(key, at);
+      if (!Array.isArray(value) || value.length !== 2) fail(at, 'expected [x, y], the direction on screen the subject faces at this heading (y down)');
+      const [x, y] = value.map((part, i) => number(part, `${at}[${i}]`, -1, 1));
+      if (!x && !y) fail(at, 'a direction is not [0, 0]');
+    }
+  }
+  return headings;
 }
 
 function readSheet(spec, frames, width, height, boxes = null) {
   const sheet = object(spec.sheet ?? {}, 'project.sheet', ['columns', 'padding', 'scale', 'trim']);
-  const columns = integer(sheet.columns ?? Math.min(frames.length, 8), 'project.sheet.columns', 1, 256);
+  const columns = integer(sheet.columns ?? sheetColumns(frames.length, width), 'project.sheet.columns', 1, 256);
   const padding = integer(sheet.padding ?? 0, 'project.sheet.padding', 0, 16);
   const scale = integer(sheet.scale ?? 1, 'project.sheet.scale', 1, 16);
   const trim = boolean(sheet.trim ?? false, 'project.sheet.trim');
   const layout = trim ? (boxes ? packBoxes(boxes, padding, scale) : packTrimmed(frames, width, height, padding, scale)) : null;
   const sheetWidth = layout ? layout.width : columns * (width + padding * 2) * scale, sheetHeight = layout ? layout.height : Math.ceil(frames.length / columns) * (height + padding * 2) * scale;
-  if (sheetWidth * sheetHeight > 16777216) fail('project.sheet', 'atlas exceeds 16,777,216 pixels; reduce scale or columns');
+  // A trimmed atlas is packed again at each smaller scale only when it does not fit, to name the largest that does.
+  const trimmedAt = k => (boxes ? packBoxes(boxes, padding, k) : packTrimmed(frames, width, height, padding, k));
+  sheetFits({ count: frames.length, width, height, columns, padding, scale, trim }, [sheetWidth, sheetHeight], trim ? trimmedAt : null);
   return { columns, padding, scale, width: sheetWidth, height: sheetHeight, ...(layout && { trim: true, layout: layout.cells }) };
+}
+
+// The atlas and each frame (every frame is also exported on its own) must each fit one PNG at the sheet's scale. When
+// they do not, the refusal is at project.sheet.scale and names the largest scale at which both fit; fewer columns only
+// where the last row leaves empty cells and a narrower grid fits, and what to change when even scale 1 does not fit.
+// `size` is the atlas at the sheet's scale; `trimmedAt(k)` packs a trimmed atlas at scale k (a grid needs no packing).
+function sheetFits({ count, width, height, columns, padding, scale, trim }, size, trimmedAt = null) {
+  const frameFits = k => width * height * k * k <= PNG_PIXELS;
+  const cells = c => c * Math.ceil(count / c) * (width + padding * 2) * (height + padding * 2);
+  const atlasFits = (k, c = columns) => { const packed = trimmedAt?.(k); return (packed ? packed.width * packed.height : cells(c) * k * k) <= PNG_PIXELS; };
+  const frameFirst = !frameFits(scale);
+  if (!frameFirst && size[0] * size[1] <= PNG_PIXELS) return;
+  let fits = scale - 1;
+  while (fits >= 1 && !(frameFits(fits) && atlasFits(fits))) fits--;
+  // The widest grid with fewer cells (and no more columns than frames) that fits at scale k, named at the largest scale
+  // where one fits when that is above `fits`.
+  const narrower = k => { if (trimmedAt || !frameFits(k)) return 0; for (let c = Math.min(columns - 1, count); c >= 1; c--) if (cells(c) < cells(columns) && atlasFits(k, c)) return c; return 0; };
+  let at = scale, columnsFit = 0;
+  while (at > fits && !(columnsFit = narrower(at))) at--;
+  const what = frameFirst
+    ? `a ${width}×${height} frame at scale ${scale} is ${width * scale}×${height * scale}`
+    : `at scale ${scale} ${count === 1 ? 'one' : `the ${count}`}${trim ? ' trimmed' : ''} frame${count === 1 ? '' : 's'} of ${width}×${height} make${count === 1 ? 's' : ''} an atlas of ${size[0]}×${size[1]}`;
+  const columnsAdvice = columnsFit ? `sheet.columns ${columnsFit} at scale ${at}` : '';
+  const advice = fits
+    ? `scale ${fits} is the largest that fits${columnsAdvice ? `, or ${columnsAdvice}` : ''}`
+    : columnsAdvice ? `${columnsAdvice} fits`
+      : `it does not fit even at scale 1: use fewer frames${padding ? ', less padding' : ''} or a smaller size`;
+  fail('project.sheet.scale', `${what}, past the 16,777,216 pixels one PNG holds; ${advice}`);
+}
+// sheetFits' refusal for a render whose call set the columns (CLI --columns, MCP columns), which take the place of the
+// recipe's sheet.columns: its columns advice names that option, since a patch of sheet.columns would change nothing.
+export function columnsOfCall(error, option) {
+  if (error?.path !== 'project.sheet.scale' || !error.message.includes(' sheet.columns ')) return error;
+  return new PixelError(error.path, error.message.slice(error.path.length + 2).replace(' sheet.columns ', ` ${option} `));
 }
 
 // Deterministic shelf packing of each frame's visible bounds (tallest first, then recipe order).
@@ -1170,7 +1597,8 @@ export function buildAtlas(project, { trim } = {}) {
   const trimmed = Boolean(sheet.trim) && trim !== false;
   const gridWidth = sheet.columns * (width + sheet.padding * 2) * s, gridHeight = Math.ceil(frames.length / sheet.columns) * (height + sheet.padding * 2) * s;
   const atlasWidth = trimmed ? sheet.width : gridWidth, atlasHeight = trimmed ? sheet.height : gridHeight;
-  if (atlasWidth * atlasHeight > 16777216) fail('project.sheet', 'atlas exceeds 16,777,216 pixels; reduce scale or columns');
+  // Only a grid asked of a trimmed recipe (trim: false) can pass what readSheet allowed.
+  if (atlasWidth * atlasHeight > PNG_PIXELS) sheetFits({ count: frames.length, width, height, columns: sheet.columns, padding: sheet.padding, scale: s, trim: false }, [atlasWidth, atlasHeight]);
   const data = new Uint8ClampedArray(atlasWidth * atlasHeight * 4);
   const entries = Object.create(null);
   const extras = frame => ({
@@ -1197,7 +1625,7 @@ export function buildAtlas(project, { trim } = {}) {
   });
   const animations = Object.fromEntries(Object.entries(project.animations).map(([key, a]) => [key, { ...a, frames: a.frames.map(i => frames[i].name) }]));
   const frameTags = Object.entries(project.animations).map(([key, a]) => frameTag(key, a.frames)).filter(Boolean);
-  const meta = { app: 'Pixelbolt', version: '1', image: `${project.name}.png`, format: 'RGBA8888', size: { w: atlasWidth, h: atlasHeight }, scale: String(s), frameTags };
+  const meta = { app: 'Pixelbolt', version: '1', image: `${project.name}.png`, format: 'RGBA8888', size: { w: atlasWidth, h: atlasHeight }, scale: String(s), frameTags, ...(project.headings && { headings: project.headings }) };
   return { data, width: atlasWidth, height: atlasHeight, metadata: { frames: entries, animations, meta } };
 }
 
@@ -1262,9 +1690,37 @@ const readRegion = (data, width, region, namer) => Array.from({ length: region.h
 // Cells run left to right, top to bottom. The largest scale that keeps cells within 256px and the sheet within 1024px
 // wins, then fewer rows, then less area. Checker squares span whole source pixels so transparency never reads as dithering.
 // A sheet holds at most 4096 pixels of cells a side; their 2-pixel gutters may take it past that, so a still 4096
-// pixels wide shows whole. Wider gutters (above scale 2) count against the limit.
-const SHEET_SIDE = 4096;
-function drawSheet(sources, width, region, { scale, background = null, columns, where = 'inspect' } = {}) {
+// pixels wide shows whole. Wider gutters (above scale 2) count against the limit. In all it is one PNG, at most
+// 16,777,216 pixels (png.js), which 64 cells of 512x512 with their gutters would pass. `room` is what the image adds
+// round the cells, which the same PNG must hold: a parts legend to the right (`legend`, its size beside a layout), a
+// label band over each sheet stacked beside others (`height`), the pixels (`pixels`), the height (`maxHeight`, band
+// included) and the width (`maxWidth`, legend included) one sheet may take, and for a sheet stacked with others
+// (`sheets` of them) how tall the stack may be (`stack`, said in a refusal as `why`) and the least each other sheet
+// takes (`others`), so stackViews can keep the image within STACK_SIDE.
+const SHEET_SIDE = 4096, NO_ROOM = { pixels: PNG_PIXELS, height: 0, maxHeight: Infinity, maxWidth: Infinity, legend: null };
+// The tallest image the views stacked beside one another make: about the longest side a model reads an image at
+// (8,000 pixels), so the agent comparing them sees every one. The tallest label band stackViews writes over a sheet.
+const STACK_SIDE = 8000, STACK_BAND = 2 * (FONT_HEIGHT + 4);
+const withinSheet = (layout, room = NO_ROOM) => {
+  if (layout.width > SHEET_SIDE + 2 * (layout.columns + 1) || layout.height > SHEET_SIDE + 2 * (layout.rows + 1)) return false;
+  const legend = room.legend ? room.legend(layout) : { width: 0, height: 0 }, tall = Math.max(layout.height, legend.height) + room.height;
+  return tall <= room.maxHeight && layout.width + legend.width <= room.maxWidth && (layout.width + legend.width) * tall <= room.pixels;
+};
+// The most of `count` cells of w×h one sheet holds at `scale` in some number of columns (fewer cells always fit).
+function cellsThatFit(count, w, h, scale, room = NO_ROOM) {
+  const gap = Math.max(2, scale), fits = n => {
+    for (let c = 1; c <= n; c++) {
+      const rows = Math.ceil(n / c);
+      if (withinSheet({ columns: c, rows, scale, width: c * w * scale + (c + 1) * gap, height: rows * h * scale + (rows + 1) * gap }, room)) return true;
+    }
+    return false;
+  };
+  let low = 0, high = count;
+  while (low < high) { const mid = Math.ceil((low + high) / 2); if (fits(mid)) low = mid; else high = mid - 1; }
+  return low;
+}
+// `layoutOnly`: the layout with no pixels (data null), for stackEvery's search.
+function drawSheet(sources, width, region, { scale, background = null, columns, where = 'inspect', room = NO_ROOM, layoutOnly = false }) {
   const measure = (c, s) => {
     const rows = Math.ceil(sources.length / c), gap = Math.max(2, s);
     return { columns: c, rows, scale: s, gap, width: c * region.w * s + (c + 1) * gap, height: rows * region.h * s + (rows + 1) * gap };
@@ -1274,14 +1730,37 @@ function drawSheet(sources, width, region, { scale, background = null, columns, 
   for (let s = scale ?? Math.min(16, Math.max(1, Math.floor(256 / Math.max(region.w, region.h)))); s >= (scale ?? 1) && !layout; s--) {
     for (const c of choices) {
       const m = measure(c, s);
-      if (m.width <= 1024 && m.height <= 1024 && (!layout || m.rows < layout.rows || (m.rows === layout.rows && m.width * m.height < layout.width * layout.height))) layout = m;
+      if (m.width <= 1024 && m.height <= 1024 && withinSheet(m, room) && (!layout || m.rows < layout.rows || (m.rows === layout.rows && m.width * m.height < layout.width * layout.height))) layout = m;
     }
   }
+  // Otherwise the squarest layout within the limit, if any is.
   if (!layout) for (const c of choices) {
-    const m = measure(c, scale ?? 1);
-    if (!layout || Math.max(m.width, m.height) < Math.max(layout.width, layout.height)) layout = m;
+    const m = measure(c, scale ?? 1), better = !layout || (withinSheet(m, room) === withinSheet(layout, room) ? Math.max(m.width, m.height) < Math.max(layout.width, layout.height) : withinSheet(m, room));
+    if (better) layout = m;
   }
-  if (layout.width > SHEET_SIDE + 2 * (layout.columns + 1) || layout.height > SHEET_SIDE + 2 * (layout.rows + 1)) fail(where, `the contact sheet would be ${layout.width}×${layout.height} pixels, above the 4096-pixel limit (4096 pixels of frames and 2-pixel gutters); select fewer frames, a smaller region or a lower scale`);
+  // A sheet that one PNG would hold alone but not as one of `sheets` stacked passes the height left to it in the
+  // stack: said with how many recipes the one image holds. Cells are fitted first, so this is one row of one cell.
+  // The others are counted by the least each can take (`room.others`, from stackViews), the shortest first, so a
+  // taller neighbour is not counted as fitting; without them, as if each were as tall as this one.
+  const alone = { ...room, pixels: PNG_PIXELS, maxHeight: Infinity, maxWidth: Infinity };
+  if (room.sheets > 1 && !withinSheet(layout, room) && withinSheet(layout, alone)) {
+    const legend = room.legend ? room.legend(layout) : { width: 0, height: 0 }, tall = Math.max(layout.height, legend.height) + room.height;
+    let fit = Math.floor(room.stack / tall) - 1;
+    if (room.others) {
+      let left = room.stack - tall; fit = 0;
+      for (const low of [...room.others].sort((a, b) => a - b)) { if (low > left) break; left -= low; fit++; }
+    }
+    const others = fit > 0 ? `at most ${fit} other recipe${fit === 1 ? '' : 's'}` : 'one recipe at a time';
+    fail('beside', `one row of ${region.w}×${region.h} cells is ${tall} pixels tall with its gutters and label, past the ${room.maxHeight} left to it in an image of ${room.sheets} sheets stacked (${room.why}); compare ${others}, or show a smaller region`);
+  }
+  // Each side holds 4096 pixels of cells and 2 pixels a gutter; the gutters are as wide as the scale, so above scale 2
+  // the rest of each counts against the 4096.
+  if (!withinSheet(layout, room)) {
+    const { width: w, height: h, columns, rows, gap } = layout, sides = w <= SHEET_SIDE + 2 * (columns + 1) && h <= SHEET_SIDE + 2 * (rows + 1);
+    fail(where, `the contact sheet would be ${w}×${h} pixels, ${sides ? `past the ${grouped(PNG_PIXELS)} one PNG holds${room.legend ? ' with the parts legend' : ''}`
+      : `above the 4096-pixel limit (4096 pixels of frames and 2-pixel gutters${gap > 2 ? `; the ${gap}-pixel gutters at scale ${layout.scale} count their other ${gap - 2} pixel${gap === 3 ? '' : 's'} against the 4096` : ''})`}; select fewer frames, a smaller region or a lower scale`);
+  }
+  if (layoutOnly) return { ...layout, data: null };
   const data = new Uint8ClampedArray(layout.width * layout.height * 4), square = Math.max(2, Math.ceil(8 / layout.scale)), composed = new Map();
   // The gutter colour is written once and doubled with copyWithin; each cell pixel's source colour is read into one
   // reused buffer for blend, rather than a new view of the frame a pixel.
@@ -1389,14 +1868,29 @@ export function partColors(project, indices, region = { x: 0, y: 0, w: project.w
   return { legend, pixels };
 }
 // A legend to the right of a contact sheet: a swatch and the part's name in the built-in font, in columns of at most
-// as many rows as the sheet is tall (twelve at least). The cells keep their places.
+// as many rows as the sheet is tall (twelve at least). The cells keep their places. Its text is drawn at `t` times,
+// twice on a sheet of scale 4 or more.
+const legendScale = scale => Math.max(1, Math.min(2, Math.floor(scale / 2)));
+const legendPerColumn = (count, height, t) => Math.max(1, Math.min(count, Math.max(12, Math.floor((height - 6 * t) / ((FONT_HEIGHT + 4) * t)))));
+// The width each column takes and the legend's size, for names `widths` font pixels wide in columns of perColumn.
+function legendSize(widths, t, perColumn) {
+  const columns = [];
+  for (let i = 0; i < widths.length; i += perColumn) columns.push(Math.max(...widths.slice(i, i + perColumn)) * t + 13 * t);
+  return { columns, width: 3 * t + columns.reduce((sum, w) => sum + w, 0), height: perColumn * (FONT_HEIGHT + 4) * t + 6 * t };
+}
+// What a legend of any of these parts adds beside a layout (its height and scale), reserved when the cells are fitted:
+// every name (a real legend has no more), in the columns drawPartLegend uses beside a sheet that tall.
+function legendRoom(names) {
+  const widths = names.map(name => layoutText(name).width);
+  return layout => { const t = legendScale(layout.scale ?? 1); return legendSize(widths, t, legendPerColumn(widths.length, layout.height, t)); };
+}
 function drawPartLegend(sheet, legend) {
-  const t = Math.max(1, Math.min(2, Math.floor(sheet.scale / 2))), pad = 3 * t, row = (FONT_HEIGHT + 4) * t, swatch = 7 * t;
-  const perColumn = Math.max(1, Math.min(legend.length, Math.max(12, Math.floor((sheet.height - 2 * pad) / row))));
-  const texts = legend.map(entry => layoutText(entry.name)), columns = [];
-  for (let i = 0; i < legend.length; i += perColumn) columns.push(Math.max(...texts.slice(i, i + perColumn).map(text => text.width)) * t + swatch + 3 * t + pad);
-  const width = sheet.width + pad + columns.reduce((sum, w) => sum + w, 0), height = Math.max(sheet.height, perColumn * row + 2 * pad);
-  if (width > SHEET_SIDE * 2 || height > SHEET_SIDE * 2) fail('inspect.view', `the parts legend would make the sheet ${width}×${height} pixels; select fewer frames or a smaller region`);
+  const t = legendScale(sheet.scale), pad = 3 * t, row = (FONT_HEIGHT + 4) * t, swatch = 7 * t;
+  const texts = legend.map(entry => layoutText(entry.name)), perColumn = legendPerColumn(legend.length, sheet.height, t);
+  const { columns, width: added, height: tall } = legendSize(texts.map(text => text.width), t, perColumn);
+  const width = sheet.width + added, height = Math.max(sheet.height, tall);
+  if (width > SHEET_SIDE * 2 || height > SHEET_SIDE * 2 || width * height > PNG_PIXELS) fail('inspect.view', `the parts legend would make the sheet ${width}×${height} pixels, past the ${grouped(PNG_PIXELS)} one PNG holds; select fewer frames, a smaller region or a lower scale`);
+  if (!sheet.data) return { ...sheet, width, height };
   const data = new Uint8ClampedArray(width * height * 4);
   data.set(gutterColor, 0);
   for (let filled = 4; filled < data.length; filled *= 2) data.copyWithin(filled, 0, Math.min(filled, data.length - filled));
@@ -1422,10 +1916,10 @@ function drawPartLegend(sheet, legend) {
 // `rows` are [{ label, cells: [{ rows, anchor, points } | null] }].
 const ANCHOR_MARK = [255, 64, 224, 255], POINT_MARK = [64, 224, 255, 255], LABEL_INK = [230, 234, 238, 255];
 const FONT_GLYPHS = new Set(FONT_CHARACTERS), inFont = text => [...String(text).normalize('NFC')].map(c => FONT_GLYPHS.has(c) ? c : '?').join('');
-export function pictureSheet({ palette = {}, headings = [], rows: lines, scale = 6 }) {
+export function pictureSheet({ palette = {}, headings = [], rows: lines, scale = 6, background = null, exactScale = false }) {
   // How far a picture reaches from its anchor pixel, in its own pixels: left and up before it, right and down from it.
   const reach = c => {
-    const marks = Object.values(c.points ?? {}), xs = [0, c.rows[0].length - 1, ...marks.map(p => p[0])], ys = [0, c.rows.length - 1, ...marks.map(p => p[1])];
+    const marks = Object.values(c.points ?? {}), xs = [0, (c.width ?? c.rows[0].length) - 1, ...marks.map(p => p[0])], ys = [0, (c.height ?? c.rows.length) - 1, ...marks.map(p => p[1])];
     return { left: c.anchor[0] - Math.min(...xs), right: Math.max(...xs) + 1 - c.anchor[0], up: c.anchor[1] - Math.min(...ys), down: Math.max(...ys) + 1 - c.anchor[1] };
   };
   const cells = lines.flatMap(line => line.cells.filter(Boolean).map(reach));
@@ -1434,7 +1928,8 @@ export function pictureSheet({ palette = {}, headings = [], rows: lines, scale =
     const shown = line.cells.filter(Boolean).map(reach);
     return { up: Math.max(0, ...shown.map(c => c.up)) + 1, down: Math.max(1, ...shown.map(c => c.down)) + 1 };
   });
-  const s = Math.max(1, Math.min(integer(scale, 'scale', 1, 16), Math.floor(256 / Math.max(across, ...heights.map(h => h.up + h.down))))), t = Math.max(1, Math.min(2, Math.floor(s / 3)));
+  const requested = integer(scale, 'scale', 1, 16);
+  const s = exactScale ? requested : Math.max(1, Math.min(requested, Math.floor(256 / Math.max(across, ...heights.map(h => h.up + h.down))))), t = Math.max(1, Math.min(2, Math.floor(s / 3)));
   const pad = 3 * t, gap = Math.max(2, s), labels = lines.map(line => layoutText(inFont(line.label))), heads = headings.map(text => layoutText(inFont(text)));
   const labelWidth = Math.max(0, ...labels.map(text => text.width)) * t + 2 * pad, headHeight = heads.length ? (FONT_HEIGHT + 2) * t + 2 * pad : gap;
   const columns = Math.max(heads.length, ...lines.map(line => line.cells.length)), cellWidth = Math.max(across * s, Math.max(0, ...heads.map(text => text.width)) * t + 2 * pad);
@@ -1456,15 +1951,17 @@ export function pictureSheet({ palette = {}, headings = [], rows: lines, scale =
     line.cells.forEach((cell, c) => {
       const x0 = labelWidth + gap + c * (cellWidth + gap), square = Math.max(2, Math.ceil(8 / s)) * s;
       if (!cell) return;
-      for (let y = 0; y < rowHeight; y++) for (let x = 0; x < cellWidth; x++) data.set(checkerColors[(Math.floor(x / square) + Math.floor(y / square)) % 2], ((top + y) * width + x0 + x) * 4);
+      for (let y = 0; y < rowHeight; y++) for (let x = 0; x < cellWidth; x++) data.set(background ?? checkerColors[(Math.floor(x / square) + Math.floor(y / square)) % 2], ((top + y) * width + x0 + x) * 4);
       // The anchor's top-left corner in the cell, in sheet pixels.
       const ax = x0 + Math.floor((cellWidth - across * s) / 2) + (left + 1) * s, ay = top + Math.floor((rowHeight - (heights[r].up + heights[r].down) * s) / 2) + up * s;
-      cell.rows.forEach((row, y) => { for (let x = 0; x < row.length; x++) {
-        const key = row[x];
-        if (key === '.' || key === ' ') continue;
-        const color = colourOf(key), px = ax + (x - cell.anchor[0]) * s, py = ay + (y - cell.anchor[1]) * s;
+      const cellWidthPx = cell.width ?? cell.rows[0].length, cellHeightPx = cell.height ?? cell.rows.length;
+      for (let y = 0; y < cellHeightPx; y++) for (let x = 0; x < cellWidthPx; x++) {
+        const at = (y * cellWidthPx + x) * 4, key = cell.rows?.[y][x];
+        if (cell.data ? cell.data[at+3] === 0 : key === '.' || key === ' ') continue;
+        const color = cell.data ? cell.data.subarray(at, at+4) : colourOf(key), px = ax + (x - cell.anchor[0]) * s, py = ay + (y - cell.anchor[1]) * s;
         if (color[3]) for (let yy = py; yy < py + s; yy++) for (let xx = px; xx < px + s; xx++) if (xx >= 0 && yy >= 0 && xx < width && yy < height) blend(data, (yy * width + xx) * 4, color);
-      } });
+      }
+      if (cell.data) return;
       for (const p of Object.values(cell.points ?? {})) ring(ax + (p[0] - cell.anchor[0]) * s, ay + (p[1] - cell.anchor[1]) * s, POINT_MARK);
       ring(ax, ay, ANCHOR_MARK);
     });
@@ -1482,11 +1979,11 @@ export function pictureSheet({ palette = {}, headings = [], rows: lines, scale =
 export function paletteUse(project) {
   if (!project.ownerNames) fail('inspect.palette', 'palette needs the project rendered with { owners: true }, which records the layer that drew each pixel');
   const pack = (r, g, b, a) => ((r * 256 + g) * 256 + b) * 256 + a, keyOf = new Map(), use = new Map();
-  const same = [];
+  const same = [], twins = new Set();
   for (const [key, value] of Object.entries(project.palette)) {
     const color = parseColor(value), id = pack(...color);
     if (!color[3]) continue;
-    if (keyOf.has(id)) same.push(`${key} is the colour of ${keyOf.get(id)}, and counted there`); else keyOf.set(id, key);
+    if (keyOf.has(id)) { twins.add(key); same.push(`${key} is the colour of ${keyOf.get(id)}, and counted there`); } else keyOf.set(id, key);
   }
   let blended = 0;
   for (const { data, owners } of project.frames) for (let i = 0; i < owners.length; i++) {
@@ -1502,19 +1999,152 @@ export function paletteUse(project) {
     return `${key} ${project.palette[key]}: ${pixels} px${parts.length ? ` on ${parts.slice(0, 4).join(', ')}${parts.length > 4 ? ` and ${parts.length - 4} more` : ''}` : ''}`;
   };
   const ramps = (project.ramps ?? []).map(ramp => ramp.filter(key => use.has(key))).filter(ramp => ramp.length), ramped = new Set(ramps.flat());
-  const others = [...use.keys()].filter(key => !ramped.has(key)).sort((a, b) => use.get(b).pixels - use.get(a).pixels), twins = new Set(same.map(text => text.split(' ')[0])), unused = Object.keys(project.palette).filter(key => !use.has(key) && !twins.has(key));
+  const others = [...use.keys()].filter(key => !ramped.has(key)).sort((a, b) => use.get(b).pixels - use.get(a).pixels), unused = Object.keys(project.palette).filter(key => !use.has(key) && !twins.has(key));
   return { ...(ramps.length && { ramps: ramps.map(ramp => ramp.map(line)) }), ...(others.length && { [ramps.length ? 'others' : 'keys']: others.map(line) }), ...(same.length && { same }), ...(unused.length && { unused }), ...(blended && { blended }), layers: project.ownerNames.join(', '), counted: `every pixel of ${project.frames.length === 1 ? 'the one frame' : `all ${project.frames.length} frames`}, whatever the view shows` };
 }
 
 // The same view of several recipes as one image, each sheet under the one before and left-aligned, with its name
 // written above it: a hero in three team colours, or a sprite before and after, compared with one look. `views` are
 // inspectProject results with a `name` each. Returns the first view with the taller sheet and `stack`: where each
-// recipe's sheet starts, under its label.
-export function stackViews(views) {
+// recipe's sheet starts, under its label. Views inspected with `sheets` (the number stacked) and the automatic scale
+// are measured as one stack: while it passes STACK_SIDE in height, or the one PNG, the tallest sheets are refitted
+// to a common cap (a lower scale, then fewer cells), and a stack within both is left exactly as drawn. A refitted
+// stack is kept to the width at which STACK_SIDE tall is one PNG, or to the narrowest its widest sheet can be (one
+// cell). A scale asked for is drawn as asked, so only the one PNG bounds the stack.
+const REFIT = Symbol('refit');
+const measureStack = views => {
   const sheets = views.map(view => view.sheet), t = Math.max(1, Math.min(2, Math.floor(sheets[0].scale / 2))), pad = 3 * t, band = (FONT_HEIGHT + 4) * t;
-  const labels = views.map(view => layoutText(String(view.name).replace(/[^\x20-\x7e]/g, '?'))), width = Math.max(...sheets.map(sheet => sheet.width), ...labels.map(text => text.width * t + 2 * pad));
-  const height = sheets.reduce((sum, sheet) => sum + band + sheet.height, 0), data = new Uint8ClampedArray(width * height * 4), stack = [];
-  for (let i = 0; i < data.length; i += 4) data.set(gutterColor, i);
+  const labels = views.map(view => layoutText(String(view.name).replace(/[^\x20-\x7e]/g, '?'))), labelWidth = Math.max(...labels.map(text => text.width * t + 2 * pad));
+  return { sheets, t, pad, band, labels, labelWidth, width: Math.max(labelWidth, ...sheets.map(sheet => sheet.width)), height: sheets.reduce((sum, sheet) => sum + band + sheet.height, 0) };
+};
+const stackFits = ({ width, height }) => height <= Math.min(STACK_SIDE, Math.floor(PNG_PIXELS / width));
+// The views refitted within `wide` pixels: the tallest cut to a common cap until the stack fits (a refitted sheet may
+// grow taller as it narrows, so it takes a few passes). Each refit is told the least the other sheets take (one cell at
+// scale 1 and a label band). Every sheet that cannot hold the cells `every` makes is tried before the one refusal,
+// which is the sheet needing the largest every.
+const bySheet = (error, name) => {
+  if (error instanceof PixelError && error.sheet !== name) Object.assign(error, { message: `${error.path}: ${name}: ${error.message.slice(error.path.length + 2)}`, sheet: name });
+  return error;
+};
+function refitStack(views, wide) {
+  const most = Math.min(STACK_SIDE, Math.floor(PNG_PIXELS / wide));
+  const why = most < STACK_SIDE ? `${grouped(most)} pixels tall at most at ${wide} wide, ${grouped(PNG_PIXELS)} in all` : `${grouped(STACK_SIDE)} pixels tall at most`;
+  for (let pass = 0; pass < 4 && !stackFits(measureStack(views)); pass++) {
+    const { sheets, band } = measureStack(views), room = most - views.length * band, heights = sheets.map(sheet => sheet.height).sort((a, b) => b - a);
+    const lows = views.map(view => view[REFIT].low + band);
+    let cap = 1, short = null;
+    for (let k = 1; k <= heights.length; k++) {
+      const even = Math.floor((room - heights.slice(k).reduce((sum, h) => sum + h, 0)) / k);
+      if (k === heights.length || even >= heights[k]) { cap = Math.max(1, even); break; }
+    }
+    // A sheet whose one cell is taller than the cap cannot be cut to it. It keeps the least it can take, and the cap
+    // comes down until the others leave room for that, so a stack whose least heights fit is never refused: a
+    // 100×4096 still beside four sheets of 16 cells was, told to "compare at most 4 other recipes". Where even the
+    // least heights pass the image, the cap stands and the tall sheet's refusal says how many recipes it holds.
+    const least = views.map(view => Math.min(view.sheet.height, view[REFIT].low));
+    const taken = at => views.reduce((sum, view, i) => sum + Math.max(least[i], Math.min(view.sheet.height, at)), 0);
+    const held = taken(1) <= room;
+    if (held && taken(cap) > room) {
+      let low = 1, high = cap;
+      while (low < high) { const mid = Math.ceil((low + high) / 2); if (taken(mid) <= room) low = mid; else high = mid - 1; }
+      cap = low;
+    }
+    views = views.map((view, i) => {
+      const to = held ? Math.max(cap, least[i]) : cap;
+      if (view.sheet.height <= to && view.sheet.width <= wide) return view;
+      try { return { ...view[REFIT]({ maxHeight: to + STACK_BAND, maxWidth: wide, stack: most, why, others: lows.filter((_, j) => j !== i) }), name: view.name }; }
+      catch (error) {
+        if (error.every === undefined) throw bySheet(error, view.name);
+        if (!short || error.every > short.every) short = bySheet(error, view.name);
+        return view;
+      }
+    });
+    if (short) throw short;
+  }
+  return views;
+}
+// A stack within STACK_SIDE and the one PNG is kept as drawn. Otherwise it is refitted at four widths, from its own
+// (the height the PNG leaves at that width) to the width where STACK_SIDE tall is one PNG (narrower sheets, more
+// height), and the one that shows the most cells wins, the wider on a tie. Where no width holds the cells `every`
+// makes, the refusal is the width's needing the least every.
+function refitted(views) {
+  const measured = measureStack(views);
+  if (stackFits(measured)) return views;
+  const narrow = Math.max(Math.floor(PNG_PIXELS / STACK_SIDE), measured.labelWidth, ...views.map(view => view[REFIT].narrow));
+  const widths = measured.width > narrow ? [...new Set([3, 2, 1, 0].map(k => narrow + Math.floor((measured.width - narrow) * k / 3)))] : [narrow];
+  const tries = widths.map(wide => { try { return { views: refitStack(views, wide) }; } catch (error) { return { error }; } });
+  const shown = ({ views }) => views.reduce((sum, view) => sum + view.cells.length, 0), fitted = tries.filter(entry => entry.views && stackFits(measureStack(entry.views)));
+  if (!fitted.length) {
+    if (tries.some(entry => entry.views)) return tries.find(entry => entry.views).views;
+    const short = tries.filter(entry => entry.error.every !== undefined).sort((a, b) => a.error.every - b.error.every);
+    throw (short[0] ?? tries.at(-1)).error;
+  }
+  return fitted.reduce((best, entry) => shown(entry) > shown(best) ? entry : best).views;
+}
+// The sheets alone that cannot hold the cells `every` makes (inspectProject leaves their refusal to the stack), as
+// the one asking the largest every.
+const shortest = views => views.filter(view => view[REFIT].short).map(view => bySheet(view[REFIT].short, view.name)).reduce((most, next) => (!most || next.every > most.every ? next : most), null);
+// An `every` that a sheet, alone or refitted into the stack, cannot hold is refused once for the whole stack, naming
+// the smallest every above it that holds every cell of every sheet. Each try inspects the views again (laid out, not
+// drawn) at one every and refits the stack. Only a sheet's own bound (`alone`: 256 cells, or one 4096-pixel sheet)
+// holds at every every past it, so only it is a lower bound: the stack is not monotone, since fewer cells can let a
+// small sheet keep a larger scale and crowd the rest. So the search climbs from the every after the one asked (or the
+// alone bound) by 1, 2, 4 … past it, and halves only the last gap. The refusal names the sheet refused at the every
+// asked and what it holds there: in the stack, beside the other sheets' cells at that every; alone, its own bound,
+// with the advice said as the stack's when it is past that bound. It says no "or more".
+function stackEvery(views, first) {
+  const asked = views[0].sampling.every;
+  const check = every => {
+    const again = views.map(view => ({ ...view[REFIT].every(every), name: view.name }));
+    try {
+      const short = shortest(again);
+      if (short) throw short;
+      return { every, views: refitted(again) };
+    } catch (error) {
+      if (error.every === undefined) throw error;
+      return { every: error.alone ? Math.max(every, error.every - 1) : every, error };
+    }
+  };
+  let low = { every: first.alone ? Math.max(asked, first.every - 1) : asked }, base = low.every + 1, rise = 0, high = null;
+  while (!high) {
+    const next = Math.min(60000, base + rise);
+    if (next <= low.every) return first;
+    const tried = check(next);
+    if (tried.views) high = tried;
+    // A sheet's own bound past the try starts the climb again from it.
+    else if (tried.every > next) { low = tried; base = tried.every + 1; rise = 0; }
+    else { low = tried; rise = Math.max(1, rise * 2); }
+  }
+  while (high.every - low.every > 1) {
+    const tried = check(Math.floor((low.every + high.every) / 2));
+    if (tried.views) high = tried; else low = tried;
+  }
+  // A sheet's own bound the stack does not move is said as it is; one past it is the stack's.
+  const { sheet, duration, held, why, alone } = first, stacked = alone ? (high.every > first.every ? 'stacked with the others, ' : '') : null;
+  return new PixelError('inspect.every', `${sheet}: ${duration} ms at one cell per ${asked} ms is ${Math.ceil(duration / asked)} cells, and ${why} ${held}${alone ? '' : " beside the other sheets' cells at that every"}; ${stacked ?? ''}choose every ${high.every}`);
+}
+function fitStack(views) {
+  if (!views.every(view => view[REFIT])) {
+    const short = views.find(view => view[REFIT]?.short);
+    if (short) throw bySheet(short[REFIT].short, short.name);
+    return views;
+  }
+  try {
+    const short = shortest(views);
+    if (short) throw short;
+    return refitted(views);
+  } catch (error) {
+    throw error.every === undefined ? error : stackEvery(views, error);
+  }
+}
+export function stackViews(views) {
+  views = fitStack(views);
+  const { sheets, t, pad, band, labels, width, height } = measureStack(views), stack = [];
+  if (width * height > PNG_PIXELS) fail('beside', `the ${views.length} sheets stacked would be ${width}×${height} pixels, past the ${grouped(PNG_PIXELS)} one PNG holds; compare fewer recipes, or show fewer cells (maxCells), a smaller region or a lower scale`);
+  const data = new Uint8ClampedArray(width * height * 4);
+  // The gutter colour is written once and doubled with copyWithin, as drawSheet does, not set pixel by pixel.
+  data.set(gutterColor, 0);
+  for (let filled = 4; filled < data.length; filled *= 2) data.copyWithin(filled, 0, Math.min(filled, data.length - filled));
   let y = 0;
   sheets.forEach((sheet, index) => {
     const text = labels[index], top = y + 2 * t + text.top * t;
@@ -1528,12 +2158,65 @@ export function stackViews(views) {
   return { ...first, sheet: { ...sheets[0], data, width, height }, stack };
 }
 
-export function inspectProject(project, options = {}) {
-  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'every', 'guides']);
-  const { width, height, frames } = project;
-  if (options.frames !== undefined && options.animation !== undefined) fail('inspect', 'choose frames or animation, not both');
+// One picture laid over another, pixel for pixel (`top` over `bottom`, both RGBA of one size): what a game draws when
+// it stacks frames.
+function laidOver(bottom, top, origins, topMask) {
+  const out = new Uint8ClampedArray(bottom);
+  for (let i = 0; i < top.length; i += 4) {
+    const a = top[i + 3];
+    if (a && origins) origins.set(i / 4, topMask?.[i / 4] || (a < 255 && out[i + 3] > 0));
+    if (a === 255 || !out[i + 3]) { if (a) out.set(top.subarray(i, i + 4), i); continue; }
+    if (!a) continue;
+    const under = out[i + 3] * (255 - a) / 255, all = a + under;
+    for (let c = 0; c < 3; c++) out[i + c] = Math.round((top[i + c] * a + out[i + c] * under) / all);
+    out[i + 3] = Math.round(all);
+  }
+  return out;
+}
+// `stack` and `under` are for art that is only judged laid over other art. stack: a list of cells, each a list of
+// frame names drawn in order, the first at the bottom (a body, then the plate and the fin a game draws over it): the
+// sheet has one cell a group, named "body+plate+fin", and everything else (region, scale, view, grid) reads those
+// cells as frames. under: { width, height, data } (RGBA), a picture from elsewhere (a ground tile of another recipe)
+// repeated from the top left under every cell, so a sprite is seen on what it will lie on.
+// The third argument is never a caller's option (MCP and the CLI pass the user's options as the second): `sheets` is
+// beside's, how many sheets it draws in one image (1 to 9; stackViews refits the tallest when they pass it). `share`
+// is stackViews' own: the room a sheet stacked beside others is refitted to ({ maxHeight, maxWidth, stack, why }, and
+// `others`, the least each other sheet takes). `measure` is stackEvery's: the sheet laid out with no pixels drawn.
+export function inspectProject(project, options = {}, { sheets = 1, share, measure = false } = {}) {
+  object(options, 'inspect', ['frames', 'animation', 'region', 'grid', 'scale', 'background', 'view', 'native', 'diagnostics', 'maxCells', 'step', 'offset', 'every', 'guides', 'stack', 'under']);
+  // The project as given: stack and under replace `project` with their composites, and a refit starts again from this.
+  const source = project, { width, height } = project;
+  if (options.stack !== undefined) {
+    if (options.frames !== undefined || options.animation !== undefined) fail('inspect.stack', 'stack names the frames of each cell itself; omit frames and animation');
+    if (options.view === 'parts') fail('inspect.view', 'parts colours one frame by its layers; a stack is several frames, so omit view or stack');
+    list(options.stack, 'inspect.stack', 256);
+    if (!options.stack.length) fail('inspect.stack', 'list at least one cell: [["body", "plate"]]');
+    const stacked = options.stack.map((group, g) => {
+      const p = `inspect.stack[${g}]`;
+      list(group, p, 16);
+      if (!group.length) fail(p, 'a cell lists one to sixteen frame names, the bottom one first');
+      const layers = group.map((ref, n) => project.frames.find(f => f.name === ref) ?? fail(`${p}[${n}]`, `unknown frame ${JSON.stringify(ref)}`));
+      const origins = options.diagnostics && new BlendOrigins(width * height, layers[0].blendMask);
+      const data = layers.slice(1).reduce((bottom, frame) => laidOver(bottom, frame.data, origins, frame.blendMask), layers[0].data);
+      return { name: group.join('+'), duration: layers[0].duration, data, ...(origins && { blendMask: origins.mask, inherited: layers.flatMap(frameColours) }) };
+    });
+    project = { ...project, frames: stacked, animations: {}, ownerNames: undefined };
+  }
+  if (options.under !== undefined) {
+    const under = object(options.under, 'inspect.under', ['width', 'height', 'data']), uw = integer(under.width, 'inspect.under.width', 1, 4096), uh = integer(under.height, 'inspect.under.height', 1, 4096);
+    if (!(under.data instanceof Uint8ClampedArray || under.data instanceof Uint8Array) || under.data.length !== uw * uh * 4) fail('inspect.under.data', `expected the ${uw}×${uh} picture as RGBA bytes`);
+    if (options.grid || options.diagnostics) fail('inspect.under', 'grid and diagnostics read the recipe\'s own pixels; omit under for them');
+    if (options.view !== undefined && options.view !== 'color') fail('inspect.under', 'under shows a frame on another picture, in colour; omit view');
+    const ground = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) ground.set(under.data.subarray(((y % uh) * uw + x % uw) * 4, ((y % uh) * uw + x % uw) * 4 + 4), (y * width + x) * 4);
+    project = { ...project, frames: project.frames.map(frame => ({ ...frame, data: laidOver(ground, frame.data) })), ownerNames: undefined };
+  }
+  const { frames } = project;
+  if (options.frames !== undefined && options.animation !== undefined) fail('inspect', 'choose frames or animation, not both: frames picks the named frames in the order named, animation one animation\'s frames in play order');
   let cells = frames.map((_, i) => i);
   if (options.animation !== undefined) {
+    // Stills keep their flipbook to step through, but it is no animation to choose.
+    if (project.stills) fail('inspect.animation', stillsHaveNoAnimation('choose'));
     if (typeof options.animation !== 'string' || !own(project.animations, options.animation)) fail('inspect.animation', `unknown animation ${JSON.stringify(options.animation)}`);
     cells = project.animations[options.animation].frames;
   } else if (options.frames !== undefined) {
@@ -1558,6 +2241,9 @@ export function inspectProject(project, options = {}) {
   if (mode === 'onion' && options.animation === undefined) fail('inspect.view', 'onion requires an animation so neighbors have an unambiguous playback position');
   if (mode === 'tile' && options.region !== undefined) fail('inspect.region', 'tile view repeats whole frames; omit region');
   if (mode === 'tile' && options.guides !== undefined) fail('inspect.guides', 'guides draw over one canvas; tile view repeats it, so omit guides');
+  // A frame whose 3×3 repeat no sheet holds even as one cell at scale 1 (a side over 1365) is past any sheet, whatever
+  // the frames, scale or region: said as that, not with what to lower.
+  if (mode === 'tile' && !withinSheet({ columns: 1, rows: 1, width: width * 3 + 4, height: height * 3 + 4 })) fail('inspect.view', `a ${width}×${height} frame repeated 3×3 makes a sheet of ${width * 3 + 4}×${height * 3 + 4} pixels with its gutters at scale 1, more than one holds (4096 pixels of frames a side, ${grouped(PNG_PIXELS)} pixels in all), so tile view cannot show it`);
   const guides = options.guides === undefined ? null : readGuides(options.guides, 'inspect.guides');
   let region = { x: 0, y: 0, w: width, h: height };
   if (options.region !== undefined) {
@@ -1579,12 +2265,18 @@ export function inspectProject(project, options = {}) {
   // A cell per `every` milliseconds of playback: a frame fills as many cells as it is held, so the sheet reads as
   // the animation plays, holds and fast steps included.
   const every = options.every === undefined ? undefined : integer(options.every, 'inspect.every', 10, 60000);
+  // A sheet stacked beside others that cannot hold the cells `every` makes (past 256, or past what one sheet holds) is
+  // refused by stackViews, which knows the whole stack: the every this sheet alone needs could be refused again by
+  // another sheet or when the stack is refitted. Such a sheet is drawn with one cell, only to be measured.
+  let short;
+  const defer = error => { if (sheets === 1 || share || options.scale !== undefined) throw error; short = error; };
   if (every !== undefined) {
     if (options.animation === undefined) fail('inspect.every', 'every samples playback, so it needs an animation');
     if (options.step !== undefined || options.offset !== undefined) fail('inspect.every', 'every picks positions by time; omit step and offset');
-    const a = project.animations[options.animation], count = Math.ceil(a.duration / every);
-    if (count > 256) fail('inspect.every', `${a.duration} ms at one cell per ${every} ms is ${count} cells; at most 256, so choose every ${Math.ceil(a.duration / 256)} or more`);
-    positions = Array.from({ length: count }, (_, n) => animationPosition(project, a, n * every));
+    const a = project.animations[options.animation], count = Math.ceil(a.duration / every), most = Math.ceil(a.duration / 256);
+    if (count > 256) defer(Object.assign(new PixelError('inspect.every', `${a.duration} ms at one cell per ${every} ms is ${count} cells; at most 256, so choose every ${most} or more`),
+      { every: most, cells: count, held: 256, duration: a.duration, why: 'a sheet holds at most', alone: true }));
+    positions = Array.from({ length: short ? 1 : count }, (_, n) => animationPosition(project, a, n * every));
     methods.push(`one cell per ${every} ms of playback`);
   }
   if (step > 1 || offset > 0) {
@@ -1592,44 +2284,93 @@ export function inspectProject(project, options = {}) {
     const suffix = step % 100 >= 11 && step % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][step % 10] ?? 'th';
     methods.push(step === 1 ? `every position from ${offset}` : `every ${step}${suffix} position from ${offset}`);
   }
+  const spread = (chosen, count) => Array.from({ length: count }, (_, i) => chosen[count === 1 ? 0 : Math.floor(i * (chosen.length - 1) / (count - 1))]);
+  // Cells by time read as playback only while every one is shown: where a sheet of big frames (over 256 a side) or a
+  // share of a beside image cannot hold the cells `every` makes, it is refused with the `every` that fits, as more
+  // than 256 is. A maxCells the caller gives thins them evenly instead, as it thins frames. The refusal carries what
+  // stackEvery reads: the every needed, the cells the sheet holds, the bound it met and whether that bound is the
+  // sheet's own (`alone`: no every below the one needed holds, whatever the stack does).
+  const thinEvery = (count, why) => {
+    const { duration } = project.animations[options.animation];
+    throw Object.assign(new PixelError('inspect.every', `${duration} ms at one cell per ${every} ms is ${positions.length} cells, and ${why} ${count}; choose every ${Math.ceil(duration / count)} or more`),
+      { every: Math.ceil(duration / count), cells: positions.length, held: count, duration, why, alone: !share });
+  };
+  const box = mode === 'tile' ? { w: width * 3, h: height * 3 } : region;
   if (options.maxCells !== undefined) {
     const requested = integer(options.maxCells, 'inspect.maxCells', 1, 256);
-    const side = mode === 'tile' ? Math.max(width, height) * 3 : Math.max(region.w, region.h);
-    const count = Math.min(positions.length, requested, Math.max(1, Math.floor(4094 / (side + 2)) ** 2));
-    if (count < positions.length) { const chosen = positions; positions = Array.from({ length: count }, (_, i) => chosen[count === 1 ? 0 : Math.floor(i * (chosen.length - 1) / (count - 1))]); methods.push('evenly spaced, including endpoints'); }
+    // What one sheet holds is measured as the sheet itself measures it (a rougher bound here said 45 cells of 1024×256
+    // where the same sheet without maxCells showed 60).
+    const count = Math.min(positions.length, requested, Math.max(1, cellsThatFit(positions.length, box.w, box.h, 1)));
+    if (count < positions.length && every !== undefined && count < requested && (width > 256 || height > 256)) thinEvery(count, `one 4096-pixel sheet of ${box.w}×${box.h} cells holds`);
+    if (count < positions.length) { positions = spread(positions, count); methods.push('evenly spaced, including endpoints'); }
+  }
+  // Big frames (an animation's are up to 1024 a side) or a long play order may not fit one sheet at scale 1; with no
+  // scale asked for, the sheet shows as many evenly spaced cells as it holds rather than refusing. A scale asked for
+  // that does not fit is still refused, with what to lower. The room is what the image adds round the cells: the parts
+  // legend, and for a sheet stacked beside others a label band and the stack's height: each sheet is first drawn as
+  // it would be alone, and stackViews refits the tallest (`share`) only when the stack would pass STACK_SIDE.
+  let room = NO_ROOM;
+  if (options.scale === undefined && (mode === 'parts' || sheets > 1)) {
+    room = { pixels: PNG_PIXELS, height: sheets > 1 ? STACK_BAND : 0, maxHeight: sheets > 1 ? STACK_SIDE : Infinity, maxWidth: Infinity, sheets, stack: STACK_SIDE, why: `${grouped(STACK_SIDE)} pixels tall at most`,
+      legend: mode === 'parts' ? legendRoom(project.ownerNames) : null, ...(sheets > 1 && share) };
+  }
+  const inStack = `the height left to it in an image of ${sheets} sheets stacked (${room.why}) holds`;
+  if (options.scale === undefined) {
+    const count = Math.max(1, cellsThatFit(positions.length, box.w, box.h, 1, room));
+    if (count < positions.length && every !== undefined) {
+      try { thinEvery(count, share ? inStack : `one 4096-pixel sheet${sheets > 1 ? ` (one of ${sheets} in the image)` : ''} of ${box.w}×${box.h} cells holds`); } catch (error) { defer(error); }
+    }
+    // A sheet stackViews will refuse is only measured again, so it is drawn with one cell.
+    if (short) positions = spread(positions, 1);
+    else if (count < positions.length) { positions = spread(positions, count); methods.push(`evenly spaced to fit ${share ? 'the height left to it in the stacked image' : 'the 4096-pixel sheet'}, including endpoints`); }
   }
   cells = positions.map(i => cells[i]);
   const unique = [...new Set(cells)];
   if (grid && unique.length * region.w * region.h > 16384) fail('inspect.grid', `grids are limited to 16,384 pixels, not ${unique.length} × ${region.w}×${region.h}; select fewer frames or a smaller region`);
   let view;
   if (mode === 'tile') {
-    const repeats = new Map(unique.map(i => [i, tileRepeat(frames[i].data, width, height)]));
+    const repeats = new Map(unique.map(i => [i, measure ? null : tileRepeat(frames[i].data, width, height)]));
     const tiled = { x: 0, y: 0, w: width * 3, h: height * 3 };
-    view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(cells.map(i => repeats.get(i)), width * 3, tiled, { scale, background }), mode };
-    view.tiles = unique.map(i => ({ frame: frames[i].name, ...tileReport(frames[i].data, width, height) }));
-    if (native) view.nativeSheet = drawSheet(cells.map(i => repeats.get(i)), width * 3, tiled, { scale: 1, background });
+    view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(cells.map(i => repeats.get(i)), width * 3, tiled, { scale, background, room, layoutOnly: measure }), mode };
+    if (!measure) view.tiles = unique.map(i => ({ frame: frames[i].name, ...tileReport(frames[i].data, width, height) }));
+    if (native && !measure && view.sheet.scale > 1) view.nativeSheet = drawSheet(cells.map(i => repeats.get(i)), width * 3, tiled, { scale: 1, background });
   } else {
     const parts = mode === 'parts' ? partColors(project, unique, region) : null;
-    const sources = cells.map((i, n) => mode === 'onion' ? onionPixels(project, project.animations[options.animation], positions[n]) : parts ? parts.pixels.get(i) : reviewPixels(frames[i].data, mode));
-    view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(sources, width, region, { scale, background }) };
-    if (guides) {
+    const sources = cells.map((i, n) => measure ? null : mode === 'onion' ? onionPixels(project, project.animations[options.animation], positions[n]) : parts ? parts.pixels.get(i) : reviewPixels(frames[i].data, mode));
+    view = { cells: cells.map(i => ({ frame: frames[i].name, duration: frames[i].duration })), region, sheet: drawSheet(sources, width, region, { scale, background, room, layoutOnly: measure }) };
+    if (guides && !measure) {
       // Over every cell of the enlarged sheet; the native sheet keeps its exact pixels.
       const { sheet } = view, w = region.w * sheet.scale, h = region.h * sheet.scale;
       cells.forEach((_, n) => drawGuides(sheet.data, sheet.width, { left: sheet.gap + (n % sheet.columns) * (w + sheet.gap), top: sheet.gap + Math.floor(n / sheet.columns) * (h + sheet.gap), w, h }, sheet.scale, region, guides));
       view.guides = guides;
     }
     if (mode !== 'color') view.mode = mode;
-    if (native) view.nativeSheet = drawSheet(sources, width, region, { scale: 1, background });
+    if (native && !measure && (view.sheet.scale > 1 || guides)) view.nativeSheet = drawSheet(sources, width, region, { scale: 1, background });
     if (parts) {
       view.parts = parts.legend.map(({ name, color, pixels }) => ({ name, color: toHex(color), pixels }));
       view.sheet = drawPartLegend(view.sheet, parts.legend);
-      if (native) view.nativeSheet = drawPartLegend(view.nativeSheet, parts.legend);
+      if (view.nativeSheet) view.nativeSheet = drawPartLegend(view.nativeSheet, parts.legend);
     }
+  }
+  // A sheet already at scale 1 is the native sheet: said once rather than drawn and sent twice.
+  if (native && !view.nativeSheet) view.native = 'same as sheet';
+  // How narrow and how short stackViews can make this sheet: one cell at scale 1, with its legend.
+  if (room.sheets > 1) {
+    const one = { columns: 1, rows: 1, scale: 1, width: box.w + 4, height: box.h + 4 }, legend = room.legend ? room.legend(one) : { width: 0, height: 0 };
+    // A refit redraws the sheet; what does not depend on it (diagnostics, timing) is kept rather than measured again.
+    const redraw = { ...options, diagnostics: undefined };
+    view[REFIT] = Object.assign(share => {
+      const again = inspectProject(source, redraw, { sheets, share, measure });
+      delete again.timing;
+      return Object.assign(again, view.diagnostics && { diagnostics: view.diagnostics }, view.timing && { timing: view.timing });
+    }, { narrow: one.width + legend.width, low: Math.max(one.height, legend.height), short,
+      // The sheet inspected afresh at another every, for stackEvery.
+      ...(every !== undefined && { every: next => inspectProject(source, { ...redraw, every: next }, { sheets, measure: true }) }) });
   }
   if (every !== undefined) view.sampling = { total, shown: cells.length, every, positions, method: `${methods.join(', then ')}; a frame fills a cell for each ${every} ms it is held` };
   else if (total !== cells.length) view.sampling = { total, shown: cells.length, omitted: total - cells.length, positions, ...((step > 1 || offset > 0) && { step, offset }), method: `${methods.join(', then ')}; durations are original, not playback timing` };
   if (diagnostics) view.diagnostics = analyzeProject(project);
-  if (options.animation !== undefined && (diagnostics || mode === 'onion' || every !== undefined)) {
+  if (options.animation !== undefined && !measure && (diagnostics || mode === 'onion' || every !== undefined)) {
     const a = project.animations[options.animation], fps = animationFps(project, options.animation); let start = 0;
     view.timing = { animation: options.animation, duration: a.duration, loop: a.loop, ...(fps !== undefined && { fps }), entries: a.frames.map((index, position) => {
       const entry = { position, frame: frames[index].name, start, duration: frames[index].duration, ...animationNeighbors(a, position) };
@@ -1712,10 +2453,10 @@ export function analyzeProject(project) {
   const { width, height, frames } = project, findings = [], hashes = new Map(), cleanup = new Map();
   const known = new Set(Object.values(project.palette).map(color => colorId(parseColor(color), 0)));
   const stats = frames.map(frame => {
-    const colors = new Set(), outside = new Set(), isolated = [], unlisted = [];
+    const colors = new Set(), outside = new Set(), blended = new Set(), isolated = [], unlisted = [], mixes = [];
     // Colors a frame or layer palette introduces are declared for that frame, and for the frames that continue it or
     // copy from it (`inherited`), whose pixels carry them.
-    const introduced = [...Object.values(frame.palette ?? {}), ...(frame.layerPalettes ?? []).flatMap(entry => Object.values(entry.palette)), ...(frame.inherited ?? [])];
+    const introduced = frameColours(frame);
     const declared = introduced.length ? new Set([...known, ...introduced.map(color => colorId(parseColor(color), 0))]) : known;
     let visible = 0, isolatedCount = 0, hash = 2166136261;
     for (let at = 0; at < frame.data.length; at += 4) {
@@ -1724,7 +2465,13 @@ export function analyzeProject(project) {
       if (!id) continue;
       visible++; colors.add(id);
       const x = at / 4 % width, y = Math.floor(at / 4 / width);
-      if (!declared.has(id) && !outside.has(id)) { outside.add(id); if (unlisted.length < 32) unlisted.push({ x, y, color: toHex(frame.data.subarray(at, at + 4)) }); }
+      if (!declared.has(id)) {
+        const mixed = frame.blendMask?.[at / 4], seen = mixed ? blended : outside, samples = mixed ? mixes : unlisted;
+        if (!seen.has(id)) {
+          seen.add(id);
+          if (samples.length < 32) samples.push({ x, y, color: toHex(frame.data.subarray(at, at + 4)) });
+        }
+      }
       let neighbor = false;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
         if ((dx || dy) && x + dx >= 0 && x + dx < width && y + dy >= 0 && y + dy < height && frame.data[((y + dy) * width + x + dx) * 4 + 3]) neighbor = true;
@@ -1737,7 +2484,8 @@ export function analyzeProject(project) {
     peers.push(frame); hashes.set(hash, peers);
     if (!visible) findings.push({ code: 'empty', frame: frame.name, note: 'An empty effect/transition frame may be intentional.' });
     if (isolatedCount) findings.push({ code: 'isolated', frame: frame.name, count: isolatedCount, coordinates: isolated, omitted: isolatedCount - isolated.length, note: 'No visible 8-connected neighbor. Exempt intentional sparks, stars and detached accents.' });
-    if (outside.size) findings.push({ code: 'palette', frame: frame.name, count: outside.size, coordinates: unlisted, omitted: outside.size - unlisted.length, note: 'Colors outside the declared palette; literal colors and alpha blends may be intentional.' });
+    if (outside.size) findings.push({ code: 'palette', frame: frame.name, count: outside.size, coordinates: unlisted, omitted: outside.size - unlisted.length, note: 'Directly drawn colors outside the declared palette.' });
+    if (blended.size) findings.push({ code: 'alpha-blend', frame: frame.name, count: blended.size, coordinates: mixes, omitted: blended.size - mixes.length, note: 'Colors outside the declared palette produced by alpha blending or layer opacity.' });
     // How many pixels a `cleanup` patch change would alter with corners or strays alone. Counts, not findings: in
     // finished art most L-steps and specks are deliberate (highlight strokes, small rounded corners, texture).
     if (!cleanup.has(same?.name)) {
@@ -1754,27 +2502,74 @@ export function analyzeProject(project) {
     }
     return { pixels, ...(pixels && { box: { x: left, y: top, w: right - left + 1, h: bottom - top + 1 } }) };
   };
-  const animations = Object.entries(project.animations).map(([name, a]) => {
+  // Stills are reviewed as frames: their flipbook is no animation, so it gets no row and no loop finding.
+  const animations = Object.entries(project.stills ? {} : project.animations).map(([name, a]) => {
     const deltas = a.frames.slice(1).map((index, i) => difference(frames[a.frames[i]].data, frames[index].data).pixels);
     const nonzero = deltas.filter(n => n).sort((a, b) => a - b), median = nonzero[Math.floor(nonzero.length / 2)] ?? 0;
     const boundary = difference(frames[a.frames.at(-1)].data, frames[a.frames[0]].data);
     if (a.loop && boundary.pixels > Math.max(4, median * 3)) findings.push({ code: 'loop-jump', animation: name, from: frames[a.frames.at(-1)].name, to: frames[a.frames[0]].name, ...boundary, note: 'Loop boundary changes over three times the median nonzero adjacent change. Intentional cuts are exempt.' });
-    return { animation: name, duration: a.duration, entries: a.frames.length, repeatedAdjacent: deltas.filter(n => !n).length, boundary };
+    // A one-shot never plays its last frame into its first, so it has no boundary to read as a seam.
+    return { animation: name, duration: a.duration, entries: a.frames.length, repeatedAdjacent: deltas.filter(n => !n).length, ...(a.loop && { boundary }) };
   });
-  return { advisory: true, frames: stats, animations, findings };
+  return { advisory: true, frames: stats, ...(!project.stills && { animations }), findings };
 }
 
 // Diagnostics as a reply carries them. Up to DIAGNOSTIC_ROWS frames keep a row each; past that the rows are added up
-// (`frameTotals`: ranges of visible pixels and colours, cleanup counts summed) and `frames` keeps only the three rows
-// with the most corners and strays, since thirty rows of near-equal counts tell a reader nothing a total does not.
-// Animations and findings are kept whole. `analyzeProject` still measures every frame.
+// (`frameTotals`: ranges of visible pixels and colours, cleanup counts summed) and `frames` keeps only three rows,
+// since thirty rows of near-equal counts tell a reader nothing a total does not: frames with findings first (then
+// those whose only finding is off-palette colours), then the most corners and strays. Findings follow the rows: those
+// of the frames kept are listed, those of the other frames added up by code (`findingTotals`: "isolated": "129 pixels
+// in 16 frames"), since a particle overlay has strays in every frame and a block of coordinates each would be most of
+// the reply; a code in eight frames or fewer names them ("8 pixels in resonate-5, resonate-25"). Off-palette colours
+// are added up by colour ("#123456 in 7 frames"), as one colour in many frames is one colour to fix, followed by the
+// frames when eight or fewer ("; in smoke-3 … smoke-5"). A finding with no coordinates (`empty`) costs a line,
+// so it stays listed, once for every frame it names. Animations and their findings are kept whole. `duplicate` is
+// left out: a pose a cycle passes twice, or a hold, is no finding to act on, and two cold runs read the list as noise
+// (`--full` keeps everything). `analyzeProject` still measures every frame.
 export const DIAGNOSTIC_ROWS = 8;
 export function briefDiagnostics(diagnostics) {
   const { frames, ...rest } = diagnostics;
-  if (frames.length <= DIAGNOSTIC_ROWS) return diagnostics;
+  rest.findings = rest.findings.filter(finding => finding.code !== 'duplicate');
+  if (frames.length <= DIAGNOSTIC_ROWS) return { advisory: rest.advisory, frames, ...(rest.animations && { animations: rest.animations }), findings: rest.findings };
   const range = key => [Math.min(...frames.map(row => row[key])), Math.max(...frames.map(row => row[key]))], sum = key => frames.reduce((total, row) => total + row[key], 0);
-  const most = frames.map((row, index) => ({ row, index, count: row.corners + row.strays })).filter(entry => entry.count).sort((a, b) => b.count - a.count || a.index - b.index).slice(0, 3).map(entry => entry.row);
-  return { advisory: rest.advisory, frameTotals: { frames: frames.length, visible: range('visible'), colors: range('colors'), corners: sum('corners'), strays: sum('strays') }, frames: most, omitted: frames.length - most.length, animations: rest.animations, findings: rest.findings };
+  // Place drawing findings first, then direct off-palette colours, then expected blends.
+  const flagged = new Map();
+  for (const finding of rest.findings) if (finding.coordinates) flagged.set(finding.frame, Math.max(flagged.get(finding.frame) ?? 0, finding.code === 'alpha-blend' ? 1 : finding.code === 'palette' ? 2 : 3));
+  const most = frames.map((row, index) => ({ row, index, flagged: flagged.get(row.frame) ?? 0, count: row.corners + row.strays })).filter(entry => entry.flagged || entry.count)
+    .sort((a, b) => b.flagged - a.flagged || b.count - a.count || a.index - b.index).slice(0, 3).map(entry => entry.row);
+  const kept = new Set(most.map(row => row.frame)), totals = new Map(), named = new Map(), paletteTotals = new Map(), plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const findings = rest.findings.filter(finding => {
+    if (finding.frame === undefined) return true;
+    if (!finding.coordinates) {
+      const names = named.get(finding.code);
+      if (names) { names.push(finding.frame); return false; }
+      named.set(finding.code, [finding.frame]); return true;
+    }
+    if (kept.has(finding.frame)) return true;
+    if (finding.code === 'palette' || finding.code === 'alpha-blend') {
+      const total = paletteTotals.get(finding.code) ?? { colours: new Map(), frames: [], unlisted: false };
+      for (const { color } of finding.coordinates) total.colours.set(color, (total.colours.get(color) ?? 0) + 1);
+      total.unlisted ||= finding.omitted > 0; total.frames.push(finding.frame); paletteTotals.set(finding.code, total);
+    } else {
+      const total = totals.get(finding.code) ?? { count: 0, frames: [] };
+      total.count += finding.count ?? 0; total.frames.push(finding.frame); totals.set(finding.code, total);
+    }
+    return false;
+  }).map(finding => {
+    const names = finding.coordinates ? null : named.get(finding.code);
+    if (!names || names.length === 1) return finding;
+    const { frame, ...same } = finding;
+    return { code: same.code, frames: nameRuns(names).join(', '), ...same };
+  });
+  const findingTotals = Object.fromEntries([...totals].map(([code, { count, frames }]) => [code, `${count ? `${code === 'isolated' ? plural(count, 'pixel') : count} in ` : ''}${frames.length <= DIAGNOSTIC_ROWS ? nameRuns(frames).join(', ') : plural(frames.length, 'frame')}`]));
+  for (const [code, { colours, frames: paletteFrames, unlisted }] of paletteTotals) {
+    // The colours in the most frames first; past eight, how many more.
+    const listed = [...colours].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)), shown = listed.slice(0, 8).map(([color, frames]) => `${color} in ${plural(frames, 'frame')}`), more = listed.length - shown.length;
+    // A frame lists its first 32 colours, so one with more may hold colours no frame names.
+    if (more || unlisted) shown.push(`${more ? `${more}${unlisted ? ' or more' : ''} ` : ''}other colour${more === 1 && !unlisted ? '' : 's'}`);
+    findingTotals[code] = `${shown.join(', ')}${paletteFrames.length <= DIAGNOSTIC_ROWS ? `; in ${nameRuns(paletteFrames).join(', ')}` : ''}`;
+  }
+  return { advisory: rest.advisory, frameTotals: { frames: frames.length, visible: range('visible'), colors: range('colors'), corners: sum('corners'), strays: sum('strays') }, frames: most, omitted: frames.length - most.length, ...(rest.animations && { animations: rest.animations }), findings, ...(Object.keys(findingTotals).length && { findingTotals }) };
 }
 
 // Cells (or frames) as a reply carries them: in order, a line per run that lasts the same, and a run of three or more
@@ -1807,11 +2602,16 @@ export function briefCells(cells) {
 // reply says how many changed and which, the pixels and the box over all of them, the commonest colour changes
 // summed, and the three frames that changed most; a long list of unchanged frames is their names in runs.
 const COMPARED = 8;
-export function briefComparison(report) {
+// Frames that became stills are said once, with how to get the flipbook back.
+const NOW_STILLS = 'the frames are now stills ("animations": {}): an export plays no animation and writes no SpriteFrames, animated PNGs, GIFs, CSS or player; remove the animations field to play every frame in order again, or name animations under it';
+export function briefComparison(full) {
+  const report = full.stills ? { ...full, stills: NOW_STILLS } : full;
   const { changed, unchanged, ...rest } = report.frames;
-  if (changed.length <= COMPARED && unchanged.length <= COMPARED * 2) return report;
+  // Frames that all changed alike (a recoloured key in every frame) are said once, as many frames are.
+  const alike = changed.length > 1 && changed.every(entry => entry.transitions && JSON.stringify(entry.transitions) === JSON.stringify(changed[0].transitions));
+  if (changed.length <= COMPARED && unchanged.length <= COMPARED * 2 && !alike) return report;
   const brief = list => (list.length <= COMPARED * 2 ? list : { count: list.length, frames: nameRuns(list).join(', ') });
-  if (changed.length <= COMPARED) return { ...report, frames: { changed, unchanged: brief(unchanged), ...rest } };
+  if (changed.length <= COMPARED && !alike) return { ...report, frames: { changed, unchanged: brief(unchanged), ...rest } };
   const measured = changed.filter(entry => entry.box), sums = new Map();
   // A frame with few changed pixels lists each one; a frame with many, its colour changes. Both are counted.
   const add = (from, to, pixels) => { const key = `${from}\n${to}`; sums.set(key, (sums.get(key) ?? 0) + pixels); };
@@ -1821,7 +2621,7 @@ export function briefComparison(report) {
   return { ...report, frames: {
     changed: { count: changed.length, frames: unchanged.length ? nameRuns(changed.map(entry => entry.frame)).join(', ') : 'every frame', pixels: changed.reduce((sum, entry) => sum + (entry.pixels ?? 0), 0),
       ...(box && { box: { x: box.x, y: box.y, w: box.x2 - box.x, h: box.y2 - box.y } }), ...(transitions.length && { transitions }),
-      most: [...measured].sort((a, b) => b.pixels - a.pixels).slice(0, 3).map(({ frame, pixels, box: b }) => ({ frame, pixels, box: b })) },
+      ...(!alike && { most: [...measured].sort((a, b) => b.pixels - a.pixels).slice(0, 3).map(({ frame, pixels, box: b }) => ({ frame, pixels, box: b })) }) },
     unchanged: brief(unchanged), ...rest } };
 }
 
@@ -1868,18 +2668,21 @@ export function compareProjects(before, after) {
     }
     if (!pixels) { unchanged.push(frame.name); continue; }
     const box = { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
-    // A few pixels are listed one by one. More, or four or more that all make the same change (a recoloured palette
-    // key, a filled patch), are summed up by what became what.
-    const detail = pixels <= 16 && !(pixels >= 4 && transitions.size === 1) ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: names.chars[Math.floor(pair / NAME_PAIRS)], to: names.chars[pair % NAME_PAIRS], pixels: count })) };
+    // A few pixels are listed one by one. More, or four or more where each colour became one colour and no two became
+    // the same one (recoloured palette keys, a filled patch), are summed up by what became what.
+    const pairs = [...transitions.keys()], recoloured = pixels >= 4 && new Set(pairs.map(pair => Math.floor(pair / NAME_PAIRS))).size === pairs.length && new Set(pairs.map(pair => pair % NAME_PAIRS)).size === pairs.length;
+    const detail = pixels <= 16 && !recoloured ? { changes } : { transitions: [...transitions].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([pair, count]) => ({ from: names.chars[Math.floor(pair / NAME_PAIRS)], to: names.chars[pair % NAME_PAIRS], pixels: count })) };
     changed.push({ frame: frame.name, pixels, box, ...detail });
     shown.push({ frame: frame.name, status: 'changed', before: old.data, after: frame.data, box });
   }
   const removed = before.frames.filter(frame => !kept.has(frame.name)).map(frame => frame.name);
   for (const name of removed) shown.push({ frame: name, status: 'removed', before: previous.get(name).data, after: null });
   const sequence = (project, key) => project.animations[key].frames.map(i => project.frames[i].name);
-  const animations = { changed: [], added: [], removed: Object.keys(before.animations).filter(key => !own(after.animations, key)) };
-  for (const key of Object.keys(after.animations)) {
-    if (!own(before.animations, key)) { animations.added.push(key); continue; }
+  // Stills have no animations: the flipbook they keep for viewing is never reported added or removed.
+  const played = project => (project.stills ? {} : project.animations), was = played(before), is = played(after);
+  const animations = { changed: [], added: [], removed: Object.keys(was).filter(key => !own(is, key)) };
+  for (const key of Object.keys(is)) {
+    if (!own(was, key)) { animations.added.push(key); continue; }
     const from = sequence(before, key), to = sequence(after, key), loop = [before.animations[key].loop, after.animations[key].loop];
     if (from.join() !== to.join() || loop[0] !== loop[1]) animations.changed.push({ animation: key, ...(from.join() !== to.join() && { frames: { from, to } }), ...(loop[0] !== loop[1] && { loop: { from: loop[0], to: loop[1] } }) });
   }
@@ -1887,7 +2690,9 @@ export function compareProjects(before, after) {
   const report = {
     ...(resized && { canvas: { from: { w: before.width, h: before.height }, to: { w: width, h: height } } }),
     frames: { changed, unchanged, ...filled({ added, removed, durations }) },
-    ...(Object.keys(filled(animations)).length && { animations: filled(animations) })
+    ...(Object.keys(filled(animations)).length && { animations: filled(animations) }),
+    // The frames became stills (a patch removed the last named animation, or set "animations" to {}).
+    ...(after.stills && !before.stills && { stills: true })
   };
   // Before and after share one row per frame, cropped to the changed area plus 2 pixels unless frames were added or removed.
   // When two frames side by side would pass the sheet limit (a still over 2048 wide), before goes above after; a

@@ -1,0 +1,14 @@
+{
+  "algorithm": "sha256",
+  "scope": "development packaging manifest, checked against prior source hashes and the first staging receipt",
+  "files": {
+    "brief.md": "c7f1203a094a2c4f822b14fe19a856066ae4120354e00aff90d1bf9febeea994",
+    "build.py": "a9ad9d7c3dd56c291389e10b33538c27c5a8094914f5234575f424b1f8e20380",
+    "clean.poses.json": "8abf6c91129ad4a0137679bc997643e7348ebdd31898861c082d96977c5681fa",
+    "damaged.poses.json": "55d5d906bee94e635f52616da3907b4668fc511a3813c8231e5c7342f36669e3",
+    "proofs/validation.json": "33e36032b825b3cc259d84f4d6f7355aa3b0151a87af9d79211d52e54304d1b7",
+    "stand-down.png": "ada090b8a6fc8ab5d08a889ee223cf9727e6ea122f74f838435ad48339980e55",
+    "stand-right.png": "3ab6e1c6cc862a36b62467c1ed5e430bb22c43d490288e0b916c3f1b032cec3c",
+    "witnesses.json": "bb353fc04f0be35b07906d99dd353393c9ae2b3d774609eb4292d0a1a1cf1ef9"
+  }
+}

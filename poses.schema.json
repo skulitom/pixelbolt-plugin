@@ -195,6 +195,87 @@
         ]
       }
     },
+    "walkCycles": {
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "rest": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "direction": {
+            "enum": [
+              "down",
+              "up",
+              "right",
+              "left"
+            ]
+          },
+          "feet": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "uniqueItems": true
+          },
+          "arms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "uniqueItems": true
+          },
+          "stride": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "lift": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          },
+          "bob": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 60000
+          },
+          "mirrorAs": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          }
+        },
+        "required": [
+          "rest",
+          "direction",
+          "feet"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Eight-frame cutout walks from drawn rest poses. Each pair names distinct root instances. A side walk can also emit its horizontal mirror."
+    },
     "motions": {
       "type": "object",
       "maxProperties": 16,
@@ -227,6 +308,15 @@
                 "minimum": 0,
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
               },
               "speed": {
                 "type": "number",
@@ -287,6 +377,15 @@
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
+              },
               "speed": {
                 "type": "number",
                 "minimum": -1024,
@@ -344,6 +443,15 @@
                 "minimum": 0,
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
               },
               "speed": {
                 "type": "number",
@@ -408,6 +516,15 @@
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
+              },
               "breath": {
                 "type": "number",
                 "minimum": 0,
@@ -444,6 +561,15 @@
                 "minimum": 0,
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
               },
               "crouch": {
                 "type": "number",
@@ -485,6 +611,15 @@
                 "minimum": 0,
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
+              },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
               },
               "arm": {
                 "type": "integer",
@@ -532,6 +667,15 @@
                 "maximum": 2,
                 "description": "How far rig.tail swings as it follows through the motion: 0 holds it as drawn, 1 by default, 2 twice as far. Needs rig.tail."
               },
+              "palette": {
+                "type": "object",
+                "maxProperties": 256,
+                "additionalProperties": {
+                  "type": "string",
+                  "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                },
+                "description": "Recolor palette keys in every pose this motion makes (a hurt flash). Without one they keep the rest pose's; {} gives them none."
+              },
               "recoil": {
                 "type": "integer",
                 "minimum": -90,
@@ -550,6 +694,62 @@
           }
         ]
       }
+    },
+    "walkReview": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "rest": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "direction": {
+            "enum": [
+              "up",
+              "down",
+              "left",
+              "right"
+            ]
+          },
+          "feet": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "uniqueItems": true
+          },
+          "speed": {
+            "type": "number",
+            "minimum": -16000,
+            "maximum": 16000
+          },
+          "mirroredFrom": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          }
+        },
+        "required": [
+          "rest",
+          "direction",
+          "feet",
+          "speed"
+        ],
+        "additionalProperties": false
+      },
+      "description": "Generated by walkCycles. Retain when editing expanded poses to review the foot contacts, separation and mirrored profiles."
     },
     "motionInfo": {
       "type": "object",
@@ -931,6 +1131,15 @@
             "type": "boolean",
             "description": "Mirror poses only: redraw structural parts with the source light unchanged; false/omitted preserves exact runtime-flipped pixels."
           },
+          "palette": {
+            "type": "object",
+            "maxProperties": 256,
+            "additionalProperties": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "description": "Recolor palette keys in this pose's frame (a hit flash), as a recipe frame palette. A mirror without one keeps its pose's; a tween keeps one only when both poses have the same. {} is none, clearing what a mirror or tween would keep."
+          },
           "tween": {
             "type": "object",
             "properties": {
@@ -1139,9 +1348,8 @@
     },
     "animations": {
       "type": "object",
-      "minProperties": 1,
       "maxProperties": 65524,
-      "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
+      "description": "Named animations; left out, one plays every frame in order. {} says the frames are stills (icons, UI states, tiles), exported with no animation. ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",

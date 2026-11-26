@@ -26,7 +26,11 @@ function compress(data, width, height) {
   if (data.length !== width * height * 4) throw new Error('RGBA buffer does not match PNG dimensions');
   const scanlines = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y++) scanlines.set(data.subarray(y * width * 4, (y + 1) * width * 4), y * (width * 4 + 1) + 1);
-  return deflateSync(scanlines, { level: 9 });
+  // zlib's level 6, its default. Level 9 searched 32 times as far back for each match and spent most of an export in
+  // deflate: over the shipped examples level 6 deflates 4.3 times faster for 8% more PNG bytes, and a full frame total
+  // of noise (16 frames of 1024 × 256) 5 times faster for 15% more. Levels 5 and below grow the examples' PNGs by a
+  // fifth or more. The level changes the bytes, never the pixels.
+  return deflateSync(scanlines, { level: 6 });
 }
 export function encodePNG(data, width, height) {
   return Buffer.concat([signature, header(width, height), chunk('IDAT', compress(data, width, height)), chunk('IEND')]);

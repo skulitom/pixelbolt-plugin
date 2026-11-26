@@ -1,0 +1,200 @@
+{
+  "format": "pixelforge-stack",
+  "version": 1,
+  "name": "iso-chest",
+  "projection": "iso",
+  "cell": 1,
+  "palette": {
+    "a": "#3d2420",
+    "b": "#5f372a",
+    "c": "#8a5236",
+    "d": "#b67646",
+    "e": "#dba262",
+    "f": "#f3d08f",
+    "i": "#232a36",
+    "j": "#3d4a5c",
+    "k": "#667a8e",
+    "l": "#a2b6c2",
+    "G": "#a8641e",
+    "H": "#e0a030",
+    "I": "#ffd76a",
+    "J": "#fff3b0"
+  },
+  "ramps": [
+    "abcdef",
+    "ijkl",
+    "GHIJ"
+  ],
+  "slices": [
+    [
+      "kkkkkkkkkkkk",
+      "kckcccccckck",
+      "kckcccccckck",
+      "kckcccccckck",
+      "kckcccccckck",
+      "kckcccccckck",
+      "kckcccccckck",
+      "kkkkkkkkkkkk"
+    ],
+    [
+      "kckcccccckck",
+      "cHHHIHHHIHHc",
+      "cIHHHIHHHIHc",
+      "cHIHHHIHHHIc",
+      "cHHIHHHIHHHc",
+      "cHHHIHHHIHHc",
+      "cIHHHIHHHIHc",
+      "kckcccccckck"
+    ],
+    [
+      "kbkbbbbbbkbk",
+      "bHHIHHHIHHHb",
+      "bHHHIHHHIHHb",
+      "bIHHHIHHHIHb",
+      "bHIHHHIHHHIb",
+      "bHHIHHHIHHHb",
+      "bHHHIHHHIHHb",
+      "kbkbbbbbbkbk"
+    ],
+    [
+      "kckcccccckck",
+      "cHIHHHIHHHIc",
+      "cHHIHHHIHHHc",
+      "cHHHIHHHIHHc",
+      "cIHHHIHHHIHc",
+      "cHIHHHIHHHIc",
+      "cHHIHHHIHHHc",
+      "kckcccccckck"
+    ],
+    [
+      "kckcccccckck",
+      "cI.I..I.I..c",
+      "c.I.I..I.I.c",
+      "c..I.I..I.Ic",
+      "cI..I.I..I.c",
+      "c.I..I.I..Ic",
+      "cI.I..I.I..c",
+      "kckcccccckck"
+    ],
+    [
+      "kbkbbbbbbkbk",
+      "b..........b",
+      "b..........b",
+      "b..........b",
+      "b..........b",
+      "b..........b",
+      "b..........b",
+      "kbkbbbbbbkbk"
+    ]
+  ],
+  "headings": [
+    0,
+    45,
+    90,
+    135,
+    180,
+    225,
+    270,
+    315
+  ],
+  "duration": 120,
+  "decals": {
+    "lock": [
+      "kk",
+      "kl"
+    ]
+  },
+  "sockets": {
+    "hinge": {
+      "at": [
+        0,
+        0,
+        6
+      ],
+      "axis": "x"
+    }
+  },
+  "parts": {
+    "lid": {
+      "socket": "hinge",
+      "at": [
+        0,
+        0,
+        0
+      ],
+      "slices": [
+        [
+          "kckcccccckck",
+          "b..........b",
+          "c..........c",
+          "c..........c",
+          "b..........b",
+          "c..........c",
+          "c..........c",
+          "kbkbbbbbbkbk"
+        ],
+        [
+          "kckcccccckck",
+          "b..........b",
+          "c..........c",
+          "c..........c",
+          "b..........b",
+          "c..........c",
+          "c..........c",
+          "kbkbbbbbbkbk"
+        ],
+        [
+          "..k......k..",
+          ".bkbbbbbbkb.",
+          ".ckcccccckc.",
+          ".ckcccccckc.",
+          ".bkbbbbbbkb.",
+          ".ckcccccckc.",
+          ".ckcccccckc.",
+          "..k......k.."
+        ]
+      ],
+      "paint": [
+        {
+          "face": "south",
+          "at": [
+            5,
+            1
+          ],
+          "decal": "lock"
+        }
+      ]
+    }
+  },
+  "animations": {
+    "open": {
+      "frames": 6,
+      "loop": false,
+      "durations": [
+        90,
+        70,
+        70,
+        70,
+        90,
+        300
+      ],
+      "sockets": {
+        "hinge": [
+          {
+            "frame": 0,
+            "angle": 0
+          },
+          {
+            "frame": 4,
+            "angle": 112,
+            "ease": "out"
+          },
+          {
+            "frame": 5,
+            "angle": 104
+          }
+        ]
+      }
+    }
+  }
+}

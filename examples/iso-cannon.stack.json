@@ -1,0 +1,312 @@
+{
+  "format": "pixelforge-stack",
+  "version": 1,
+  "name": "iso-cannon",
+  "projection": "iso",
+  "cell": 1,
+  "palette": {
+    "a": "#3d2420",
+    "b": "#5f372a",
+    "c": "#8a5236",
+    "d": "#b67646",
+    "e": "#dba262",
+    "f": "#f3d08f",
+    "i": "#232a36",
+    "j": "#3d4a5c",
+    "k": "#667a8e",
+    "l": "#a2b6c2",
+    "s": "#33333f",
+    "t": "#55566a",
+    "u": "#80829a",
+    "v": "#b3b6c6",
+    "x": "#e2e5ea",
+    "B": "#5a3a1c",
+    "C": "#9a6a2a",
+    "D": "#d0a040",
+    "E": "#f6dc84"
+  },
+  "ramps": [
+    "abcdef",
+    "ijkl",
+    "stuvx",
+    "BCDE"
+  ],
+  "slices": [
+    [
+      ".......tt.......",
+      "....tttttttt....",
+      "...tttttttttt...",
+      "..tttttttttttt..",
+      ".tttttttttttttt.",
+      ".tttttttttttttt.",
+      ".tttttttttttttt.",
+      "tttttttttttttttt",
+      "tttttttttttttttt",
+      ".tttttttttttttt.",
+      ".tttttttttttttt.",
+      ".tttttttttttttt.",
+      "..tttttttttttt..",
+      "...tttttttttt...",
+      "....tttttttt....",
+      ".......tt......."
+    ],
+    [
+      ".......uu.......",
+      "....uuutuuuu....",
+      "...uuuuuutuuu...",
+      "..uuuuuuuuutuu..",
+      ".utuuuuuuuuuutu.",
+      ".uuutuuuuuuuuuu.",
+      ".uuuuutuuuuuuuu.",
+      "uuuuuuuutuuuuuuu",
+      "uuuuuuuuuutuuuuu",
+      ".tuuuuuuuuuutuu.",
+      ".uutuuuuuuuuuut.",
+      ".uuuutuuuuuuuuu.",
+      "..uuuuutuuuuuu..",
+      "...uuuuuutuuu...",
+      "....uuuuuuut....",
+      ".......uu......."
+    ],
+    [
+      ".......uu.......",
+      "....uuuuuuuu....",
+      "...uucbcccbuu...",
+      "..uucbcccbccuu..",
+      ".uucbcccbcccbuu.",
+      ".ucbcccbcccbccu.",
+      ".ubcccbcccbcccu.",
+      "uucccbcccbcccbuu",
+      "uuccbcccbcccbcuu",
+      ".ucbcccbcccbccu.",
+      ".ubcccbcccbcccu.",
+      ".uuccbcccbcccuu.",
+      "..uubcccbcccuu..",
+      "...uuccbcccuu...",
+      "....uuuuuuuu....",
+      ".......uu......."
+    ],
+    [
+      ".......uu.......",
+      "....uuuuuuuu....",
+      "...uu......uu...",
+      "..uu........uu..",
+      ".uu..........uu.",
+      ".u............u.",
+      ".u............u.",
+      "uu............uu",
+      "uu............uu",
+      ".u............u.",
+      ".u............u.",
+      ".uu..........uu.",
+      "..uu........uu..",
+      "...uu......uu...",
+      "....uuuuuuuu....",
+      ".......uu......."
+    ]
+  ],
+  "headings": [
+    0,
+    45,
+    90,
+    135,
+    180,
+    225,
+    270,
+    315
+  ],
+  "duration": 120,
+  "sockets": {
+    "swivel": {
+      "at": [
+        8,
+        8,
+        3
+      ]
+    }
+  },
+  "parts": {
+    "gun": {
+      "socket": "swivel",
+      "at": [
+        -4,
+        -6,
+        0
+      ],
+      "slices": [
+        [
+          "........",
+          "........",
+          "..cbbc..",
+          "bbcbbcbb",
+          "bbcbbcbb",
+          "bbcbbcbb",
+          "bbcbbcbb",
+          "..cbbc..",
+          "..cbbc..",
+          "..cbbc..",
+          "........",
+          "........",
+          "........",
+          "........"
+        ],
+        [
+          "........",
+          "........",
+          "..c..c..",
+          "bbc..cbb",
+          "bbc..cbb",
+          "bbc..cbb",
+          "bbc..cbb",
+          "..c..c..",
+          "..c..c..",
+          "..c..c..",
+          "........",
+          "........",
+          "........",
+          "........"
+        ],
+        [
+          "........",
+          "...DD...",
+          "bbcDDcbb",
+          "bbc..cbb",
+          "kkc..ckk",
+          "kkc..ckk",
+          "bbc..cbb",
+          "bbc..cbb",
+          "..c..c..",
+          "..c..c..",
+          "........",
+          "........",
+          "...DD...",
+          "...DD..."
+        ],
+        [
+          "........",
+          "..DDDD..",
+          "..DDDD..",
+          "bbCCCCbb",
+          "bbDDDDbb",
+          "bbDDDDbb",
+          "bb.DD.bb",
+          "...DD...",
+          "...DD...",
+          "...DD...",
+          "...DD...",
+          "...CC...",
+          "..DDDD..",
+          "..DDDD.."
+        ],
+        [
+          "........",
+          "..DDDD..",
+          "..DDDD..",
+          "bbCCCCbb",
+          "bbDDDDbb",
+          "bbDDDDbb",
+          "bbDDDDbb",
+          "..DDDD..",
+          "..DDDD..",
+          "..DDDD..",
+          "..DDDD..",
+          "..CCCC..",
+          "..DDDD..",
+          "..DiiD.."
+        ],
+        [
+          "........",
+          "..DDDD..",
+          "..DDDD..",
+          "..CCCC..",
+          "..DDDD..",
+          "..DDDD..",
+          "...DD...",
+          "...DD...",
+          "...DD...",
+          "...DD...",
+          "...DD...",
+          "...CC...",
+          "..DDDD..",
+          "..DDDD.."
+        ],
+        [
+          "........",
+          "...DD...",
+          "...DD...",
+          "........",
+          "........",
+          "........",
+          "........",
+          "........",
+          "........",
+          "........",
+          "........",
+          "........",
+          "...DD...",
+          "...DD..."
+        ]
+      ]
+    }
+  },
+  "animations": {
+    "scan": {
+      "frames": 8,
+      "duration": 120,
+      "sockets": {
+        "swivel": [
+          {
+            "frame": 0,
+            "angle": 0
+          },
+          {
+            "frame": 2,
+            "angle": 40,
+            "ease": "out"
+          },
+          {
+            "frame": 6,
+            "angle": -40,
+            "ease": "inOut"
+          },
+          {
+            "frame": 8,
+            "angle": 0,
+            "ease": "in"
+          }
+        ]
+      }
+    },
+    "fire": {
+      "frames": 5,
+      "loop": false,
+      "durations": [
+        60,
+        60,
+        90,
+        120,
+        200
+      ],
+      "sockets": {
+        "swivel": [
+          {
+            "frame": 0
+          },
+          {
+            "frame": 1,
+            "offset": [
+              0,
+              -3,
+              0
+            ],
+            "ease": "out"
+          },
+          {
+            "frame": 4,
+            "ease": "inOut"
+          }
+        ]
+      }
+    }
+  }
+}

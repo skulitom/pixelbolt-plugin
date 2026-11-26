@@ -52,37 +52,37 @@
       "....G......G...."
     ],
     "glass": [
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "Qq......................qQ",
-      "QqQQQQQQQQQQQQQQQQQQQQQQqQ"
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "Qq..........................qQ",
+      "QqQQQQQQQQQQQQQQQQQQQQQQQQQQqQ"
     ],
     "table": ["tttttttttttttttttttttttttttttttttttttttt"]
   },
   "effects": {
     "glug": {
       "kind": "liquid",
-      "frames": 110,
+      "frames": 124,
       "duration": 60,
       "seed": 3,
       "walls": ["left", "right", "bottom"],
       "flip": 0.7,
-      "air": { "stiffness": 40, "bubbles": { "colors": ["w"], "rise": 0.6, "wobble": 0.3 } },
+      "air": { "stiffness": 40, "bubbles": { "colors": ["w"], "rise": 2.5, "wobble": 0.3 } },
       "obstacles": [
         { "symbol": "bottle", "x": 12, "y": 1 },
-        { "symbol": "glass", "x": 7, "y": 39 },
+        { "symbol": "glass", "x": 5, "y": 39 },
         { "symbol": "table", "x": 0, "y": 55 }
       ],
       "fill": [
@@ -96,7 +96,8 @@
       "emitters": [],
       "look": [
         { "field": "density", "colors": ["b"], "thresholds": [0.5], "dither": 0 },
-        { "field": "depth", "colors": ["c", "b"], "thresholds": [1, 2], "dither": 0 }
+        { "field": "depth", "colors": ["c", "b"], "thresholds": [1, 2], "dither": 0 },
+        { "field": "strand", "colors": ["b"], "thresholds": [0.5], "dither": 0 }
       ],
       "cleanup": { "strays": true }
     }

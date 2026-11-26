@@ -9,7 +9,7 @@
   "anchor": [20, 51],
   "effects": {
     "teleport": {
-      "frames": 14,
+      "frames": 18,
       "duration": 70,
       "seed": 3,
       "edges": ["top", "bottom"],
@@ -20,6 +20,7 @@
           "look": "light",
           "at": [20, 51],
           "to": [20, 0],
+          "frames": [0, 14],
           "width": [1, 11, 9, 0],
           "reveal": 0.2,
           "wobble": 0.12,

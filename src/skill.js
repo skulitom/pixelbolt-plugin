@@ -8,11 +8,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-const SKILL_SOURCE = 'skills/pixel-art/SKILL.md';
+const SKILL_SOURCE = 'skills/pixelbolt-pixel-art/SKILL.md';
 export const SKILL_NAME = 'pixelbolt-pixel-art';
 export const SKILL_MANIFEST = '.pixelbolt-skill.json';
 // The agent-facing guides the skill and the quick start cite; a test fails when the skill names one not listed here.
-const DOCS = ['docs/agent-quick-start.md', 'docs/agent-craft.md', 'docs/agent-guide.md', 'docs/art-workflow.md', 'docs/wave-effects.md', 'docs/game-integration.md'];
+const DOCS = ['docs/agent-quick-start.md', 'docs/agent-craft.md', 'docs/agent-guide.md', 'docs/art-workflow.md', 'docs/animate-your-sprite.md', 'docs/wave-effects.md', 'docs/game-integration.md'];
 const REPOSITORY = 'https://github.com/skulitom/Pixelbolt';
 const sha256 = data => createHash('sha256').update(data).digest('hex');
 

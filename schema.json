@@ -18,13 +18,13 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 4096,
-      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
+      "description": "1–1024 pixels, and at most 262,144 pixels a frame (320×180, 640×360 and 512×512 fit); a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all. All the frames of a recipe hold at most 4,194,304 pixels: 72 frames of 320×180, 16 of 512×512."
     },
     "height": {
       "type": "integer",
       "minimum": 1,
       "maximum": 4096,
-      "description": "1–256 pixels; a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all."
+      "description": "1–1024 pixels, and at most 262,144 pixels a frame (320×180, 640×360 and 512×512 fit); a still (a recipe with exactly one frame) may be up to 4096, within 4,194,304 pixels in all. All the frames of a recipe hold at most 4,194,304 pixels: 72 frames of 320×180, 16 of 512×512."
     },
     "palette": {
       "type": "object",
@@ -70,6 +70,252 @@
         "$ref": "#/$defs/rows"
       }
     },
+    "parts": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "pivot": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "Local pixel placed at the instance position. Defaults to [0, 0]."
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "const": "polygon"
+                    },
+                    "x": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "points": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "integer",
+                          "minimum": -4096,
+                          "maximum": 4096
+                        },
+                        "maxItems": 2,
+                        "minItems": 2,
+                        "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+                      },
+                      "maxItems": 256,
+                      "minItems": 3
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    },
+                    "filled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "points",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "const": "line"
+                    },
+                    "x": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "x2": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "y2": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "x2",
+                    "y2",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "const": "pixel"
+                    },
+                    "x": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "y": {
+                      "type": "integer",
+                      "minimum": -4096,
+                      "maximum": 4096
+                    },
+                    "color": {
+                      "type": "string",
+                      "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+                    }
+                  },
+                  "required": [
+                    "op",
+                    "color"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "maxItems": 2048
+          }
+        },
+        "required": [
+          "ops"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "scaleTracks": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+        "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "at": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 15360000
+                },
+                "scale": {
+                  "oneOf": [
+                    {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 16
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 16
+                      },
+                      "maxItems": 2,
+                      "minItems": 2
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "at",
+                "scale"
+              ],
+              "additionalProperties": false
+            },
+            "maxItems": 256,
+            "minItems": 1,
+            "description": "Ascending milliseconds. For a loop, start at 0 and end at its period."
+          },
+          "ease": {
+            "enum": [
+              "linear",
+              "hold",
+              "in",
+              "out",
+              "inOut"
+            ]
+          },
+          "loop": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "additionalProperties": false,
+        "if": {
+          "required": [
+            "loop"
+          ],
+          "properties": {
+            "loop": {
+              "const": true
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "keys": {
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "properties": {
+                    "at": {
+                      "const": 0
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "anchor": {
       "type": "array",
       "items": {
@@ -89,11 +335,75 @@
       "maxItems": 256,
       "minItems": 1
     },
+    "headings": {
+      "type": "object",
+      "properties": {
+        "frames": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+          },
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "The frame that stands at each heading: {\"0\": \"south\", \"90\": \"west\"}."
+        },
+        "animations": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 64,
+          "additionalProperties": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "description": "For a name, the animation that plays it at each heading: {\"walk\": {\"0\": \"walk-south\", \"90\": \"walk-west\"}}."
+        },
+        "toward": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^(0|[1-9][0-9]?|[12][0-9][0-9]|3[0-5][0-9])$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "description": "The direction on screen the subject faces at a heading, [x, y] with y down, so a game can pick a heading by the way something moves."
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "required": [
+            "frames"
+          ]
+        },
+        {
+          "required": [
+            "animations"
+          ]
+        }
+      ],
+      "description": "Which frames and animations show the subject at which heading, in whole degrees from 0 to 359. The atlas carries it as meta.headings and the Godot SpriteFrames as its \"headings\" metadata; a compiled sprite stack has it."
+    },
     "animations": {
       "type": "object",
-      "minProperties": 1,
       "maxProperties": 65524,
-      "description": "ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
+      "description": "Named animations; left out, one plays every frame in order. {} says the frames are stills (icons, UI states, tiles), exported with no animation. ZIP32 bundle budget: animation count + frame count + 10 support files must not exceed 65,535.",
       "propertyNames": {
         "type": "string",
         "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
@@ -177,10 +487,10 @@
   "then": {
     "properties": {
       "width": {
-        "maximum": 256
+        "maximum": 1024
       },
       "height": {
-        "maximum": 256
+        "maximum": 1024
       }
     }
   },
@@ -190,11 +500,11 @@
       "items": {
         "type": "string",
         "minLength": 1,
-        "maxLength": 256
+        "maxLength": 1024
       },
-      "maxItems": 256,
+      "maxItems": 1024,
       "minItems": 1,
-      "description": "Equal-width text rows. Every character is a palette key; dot and space skip a pixel."
+      "description": "Equal-width text rows, at most 262,144 characters in all. Every character is a palette key; dot and space skip a pixel."
     },
     "frame": {
       "type": "object",
@@ -209,6 +519,12 @@
           "minimum": 1,
           "maximum": 60000,
           "description": "Frame duration in milliseconds; default 100."
+        },
+        "time": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 15360000,
+          "description": "Scale track sample time in ms. Defaults to total duration of preceding source frames."
         },
         "from": {
           "type": "string",
@@ -352,6 +668,27 @@
           "additionalProperties": false,
           "description": "This frame as a tile in the Godot TileSet: its terrain, weight and collision. A frame with tile makes the export write a TileSet."
         },
+        "groups": {
+          "type": "object",
+          "maxProperties": 64,
+          "propertyNames": {
+            "type": "string",
+            "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+            "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+          },
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+          },
+          "description": "Shared [dx, dy] translations for layers in this frame. A layer refers to one by group."
+        },
         "ops": {
           "type": "array",
           "items": {
@@ -371,7 +708,7 @@
           "items": {
             "$ref": "#/$defs/pixel"
           },
-          "maxItems": 65536,
+          "maxItems": 262144,
           "description": "Final canvas-coordinate RGBA replacements after ops and layers. Coordinates must be inside this canvas. Later entries win; transparent erases."
         }
       },
@@ -413,6 +750,11 @@
           "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
           "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
         },
+        "group": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Name in this frame’s groups. Its translation adds to this layer’s x and y."
+        },
         "visible": {
           "type": "boolean"
         },
@@ -430,6 +772,47 @@
           "type": "integer",
           "minimum": -4096,
           "maximum": 4096
+        },
+        "part": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+          "description": "Polygon part whose pivot lands at x/y plus group. Optional ops follow it in canvas coordinates."
+        },
+        "flipX": {
+          "type": "boolean"
+        },
+        "flipY": {
+          "type": "boolean"
+        },
+        "scale": {
+          "oneOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 16
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 16
+              },
+              "maxItems": 2,
+              "minItems": 2
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+              "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+            }
+          ]
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": -15360000,
+          "maximum": 15360000,
+          "description": "Subtract this many ms from the scale track sample time."
         },
         "sort": {
           "enum": [
@@ -455,7 +838,54 @@
         }
       },
       "required": [],
-      "additionalProperties": false
+      "additionalProperties": false,
+      "dependentRequired": {
+        "flipX": [
+          "part"
+        ],
+        "flipY": [
+          "part"
+        ],
+        "scale": [
+          "part"
+        ],
+        "delay": [
+          "part",
+          "scale"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "part"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "sort"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "delay"
+            ]
+          },
+          "then": {
+            "properties": {
+              "scale": {
+                "type": "string",
+                "pattern": "^[a-zA-Z][a-zA-Z0-9_-]{0,63}$",
+                "description": "Portable name: do not use Windows device names (CON, PRN, AUX, NUL, COM1–9, LPT1–9). Frame/animation names must be unique ignoring case."
+              }
+            }
+          }
+        }
+      ]
     },
     "op": {
       "oneOf": [
@@ -518,13 +948,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -568,13 +998,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -641,6 +1071,60 @@
           "type": "object",
           "properties": {
             "op": {
+              "const": "polygon"
+            },
+            "x": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "y": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096
+            },
+            "ground": {
+              "type": "integer",
+              "minimum": -4096,
+              "maximum": 4096,
+              "description": "In a layer with sort \"ground\": the row this stands on, which orders the drawing far to near. Default: the lowest row it draws (a line's lower end). Text needs it."
+            },
+            "points": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -4096,
+                  "maximum": 4096
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "description": "[x, y] in unscaled canvas pixels; the top-left corner of that pixel."
+              },
+              "maxItems": 256,
+              "minItems": 3,
+              "description": "Ordered vertices relative to x/y. The closed edge includes its pixel endpoints. The interior uses even-odd fill."
+            },
+            "color": {
+              "type": "string",
+              "description": "Palette name, transparent, or #RGB/#RGBA/#RRGGBB/#RRGGBBAA."
+            },
+            "filled": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "points",
+            "color"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "op": {
               "const": "clear"
             },
             "x": {
@@ -657,13 +1141,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             }
           },
           "required": [
@@ -965,22 +1449,22 @@
             "sx": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "sy": {
               "type": "integer",
               "minimum": 0,
-              "maximum": 255
+              "maximum": 1023
             },
             "w": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "h": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 256
+              "maximum": 1024
             },
             "scale": {
               "type": "integer",
@@ -1244,13 +1728,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "color": {
               "type": "string",
@@ -1400,13 +1884,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas width on a still wider than 256."
+              "description": "At most 512, or twice the canvas width when that is over 256."
             },
             "h": {
               "type": "integer",
               "minimum": 1,
               "maximum": 8192,
-              "description": "At most 512, or twice the canvas height on a still taller than 256."
+              "description": "At most 512, or twice the canvas height when that is over 256."
             },
             "steps": {
               "type": "integer",
@@ -1550,7 +2034,7 @@
               "items": {
                 "type": "integer",
                 "minimum": 1,
-                "maximum": 256
+                "maximum": 1024
               },
               "maxItems": 2,
               "minItems": 2,
@@ -1886,7 +2370,7 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 65536,
+              "maximum": 262144,
               "description": "Most replacements per rule per step."
             },
             "seed": {

@@ -1,0 +1,140 @@
+{
+  "format": "pixelforge-fx",
+  "version": 1,
+  "name": "coin-sparkle",
+  "width": 64,
+  "height": 64,
+  "anchor": [32, 34],
+  "palette": { "W": "#ffffff", "y": "#fff3b0", "g": "#ffd23f", "o": "#f59b1c" },
+  "symbols": {
+    "tw-1": ["y"],
+    "tw-1d": ["o"],
+    "tw-3": [
+      ".g.",
+      "gWg",
+      ".g."
+    ],
+    "tw-5": [
+      "..g..",
+      "..y..",
+      "gyWyg",
+      "..y..",
+      "..g.."
+    ],
+    "tw-7": [
+      "...o...",
+      "...g...",
+      "..gyg..",
+      "ogyWygo",
+      "..gyg..",
+      "...g...",
+      "...o..."
+    ],
+    "tw-9": [
+      "....o....",
+      "....g....",
+      "....y....",
+      "...gWg...",
+      "ogyWWWygo",
+      "...gWg...",
+      "....y....",
+      "....g....",
+      "....o...."
+    ]
+  },
+  "effects": {
+    "coin-sparkle": {
+      "frames": 14,
+      "duration": { "from": 40, "to": 75, "ease": "in" },
+      "seed": 2,
+      "looks": { "flash": { "colors": ["o", "g", "y", "W"], "thresholds": [0.22, 0.4, 0.62, 0.86] } },
+      "cleanup": { "corners": true, "strays": true },
+      "layers": [
+        {
+          "kind": "star",
+          "look": "flash",
+          "at": [32, 34],
+          "frames": [0, 4],
+          "points": 8,
+          "ratio": 0.42,
+          "radius": [13, 24, 9],
+          "width": [5, 2],
+          "core": [4, 1],
+          "power": [1.7, 1.5, 0.6],
+          "cue": "grab"
+        },
+        {
+          "kind": "burst",
+          "look": "flash",
+          "at": [32, 34],
+          "frames": [0, 4],
+          "radius": [5, 8, 4],
+          "noise": 0.15,
+          "scale": 4,
+          "power": [1.6, 1.2, 0.4]
+        },
+        {
+          "kind": "ring",
+          "look": "flash",
+          "at": [32, 34],
+          "frames": [1, 8],
+          "radius": [5, 26],
+          "width": [3, 2],
+          "noise": [0.1, 0.95],
+          "scale": 4,
+          "power": [1.5, 0.35]
+        }
+      ],
+      "emitters": [
+        {
+          "name": "thrown",
+          "at": [32, 34],
+          "ring": { "radius": [4, 6], "even": true, "outward": true },
+          "burst": 8,
+          "start": 1,
+          "behind": true,
+          "angle": [-12, 12],
+          "speed": [3, 5],
+          "drag": 0.2,
+          "kick": [0, -0.5],
+          "life": [9, 12],
+          "play": "life",
+          "shapes": [
+            ["tw-3", "tw-7", "tw-9", "tw-7", "tw-9", "tw-7", "tw-5", "tw-3", "tw-1"],
+            ["tw-3", "tw-5", "tw-7", "tw-5", "tw-7", "tw-5", "tw-3", "tw-1", "tw-1d"]
+          ]
+        },
+        {
+          "name": "between",
+          "at": [32, 34],
+          "ring": { "radius": [3, 5], "even": true, "outward": true },
+          "burst": 7,
+          "start": 2,
+          "behind": true,
+          "angle": [10, 40],
+          "speed": [1.6, 3.4],
+          "drag": 0.2,
+          "kick": [0, -0.4],
+          "life": [7, 10],
+          "play": "life",
+          "shapes": [
+            ["tw-1", "tw-3", "tw-5", "tw-3", "tw-5", "tw-3", "tw-1", "tw-1d"],
+            ["tw-1", "tw-3", "tw-1", "tw-3", "tw-1", "tw-1d"]
+          ]
+        },
+        {
+          "name": "glitter",
+          "at": [32, 34],
+          "ring": { "radius": [8, 22], "fill": true },
+          "rate": [0, 1.2, 1, 0],
+          "start": 5,
+          "end": 9,
+          "speed": [0, 0.2],
+          "life": [3, 5],
+          "play": "life",
+          "shapes": [["tw-1", "tw-3", "tw-5", "tw-3", "tw-1"], ["tw-1", "tw-3", "tw-1"]]
+        }
+      ]
+    }
+  }
+}

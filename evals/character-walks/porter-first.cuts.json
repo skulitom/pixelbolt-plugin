@@ -1,0 +1,10 @@
+{
+  "pivot": [8, 28],
+  "margin": 0,
+  "views": {
+    "down": {"frame":"down", "feet":[[3,26,3,2],[9,26,3,2]], "stride":1, "lift":1, "bob":1, "duration":100},
+    "up": {"frame":"up", "feet":[[9,26,3,2],[3,26,3,2]], "stride":1, "lift":1, "bob":1, "duration":100},
+    "right": {"frame":"right", "feet":[[4,26,3,2],[9,26,3,2]], "stride":2, "lift":1, "bob":1, "duration":100},
+    "left": {"frame":"left", "feet":[[9,26,3,2],[4,26,3,2]], "stride":2, "lift":1, "bob":1, "duration":100}
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "frames": {
+    "down": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 28
+      },
+      "duration": 100
+    },
+    "up": {
+      "frame": {
+        "x": 16,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 28
+      },
+      "duration": 100
+    },
+    "right": {
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 28
+      },
+      "duration": 100
+    },
+    "left": {
+      "frame": {
+        "x": 48,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 28
+      },
+      "sourceSize": {
+        "w": 16,
+        "h": 28
+      },
+      "duration": 100
+    }
+  },
+  "animations": {
+    "default": {
+      "frames": [
+        "down",
+        "up",
+        "right",
+        "left"
+      ],
+      "loop": true,
+      "duration": 400
+    }
+  },
+  "meta": {
+    "app": "Pixelbolt",
+    "version": "1",
+    "image": "porter.png",
+    "format": "RGBA8888",
+    "size": {
+      "w": 64,
+      "h": 28
+    },
+    "scale": "1",
+    "frameTags": [
+      {
+        "name": "default",
+        "from": 0,
+        "to": 3,
+        "direction": "forward"
+      }
+    ]
+  }
+}

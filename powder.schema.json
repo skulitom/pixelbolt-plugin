@@ -29,13 +29,13 @@
       "type": "integer",
       "minimum": 8,
       "maximum": 1024,
-      "description": "At most 256 to compile; up to 1024 live."
+      "description": "At most 256 to compile; up to 1024 live or as video frames (pixelbolt sequence)."
     },
     "height": {
       "type": "integer",
       "minimum": 8,
       "maximum": 1024,
-      "description": "At most 256 to compile; up to 1024 live."
+      "description": "At most 256 to compile; up to 1024 live or as video frames (pixelbolt sequence)."
     },
     "seed": {
       "type": "integer",
@@ -354,6 +354,7 @@
             "additionalProperties": false
           },
           "above": {
+            "description": "A phase change above a temperature (melting, boiling).",
             "type": "object",
             "properties": {
               "temperature": {
@@ -386,6 +387,7 @@
             "additionalProperties": false
           },
           "below": {
+            "description": "A phase change below a temperature (freezing, condensing, crusting).",
             "type": "object",
             "properties": {
               "temperature": {
@@ -998,8 +1000,8 @@
           "frames": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 256,
-            "description": "Frames drawn. Default 60."
+            "maximum": 18000,
+            "description": "Frames drawn. Default 60. At most 256 in a recipe (and in all of a source's clips); a longer clip goes out as numbered video frames: pixelbolt sequence, or pixel_compile with sequence."
           },
           "every": {
             "type": "integer",
@@ -1017,7 +1019,7 @@
         "required": [],
         "additionalProperties": false
       },
-      "description": "One-shot animations sampled from the one run; default one clip named after the source. At most 256 frames and 4,194,304 pixels in all, and about 200 million cell steps, scripted inputs and tumbling pieces counted in."
+      "description": "One-shot animations sampled from the one run; default one clip named after the source. A recipe holds at most 256 frames and 4,194,304 pixels in all; a recipe or a clip written as video frames takes about 200 million cell steps, scripted inputs and tumbling pieces counted in."
     }
   },
   "required": [

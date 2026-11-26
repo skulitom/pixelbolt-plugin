@@ -67,7 +67,7 @@
           "shape": "circle",
           "radius": 4,
           "at": [6, 46],
-          "velocity": [5.5, -0.8],
+          "velocity": [5.5, -0.4],
           "density": 20,
           "bounce": 0.2,
           "friction": 0.6,

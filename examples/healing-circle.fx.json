@@ -24,7 +24,7 @@
   },
   "effects": {
     "healing-circle": {
-      "frames": 18,
+      "frames": 21,
       "duration": 70,
       "seed": 2,
       "looks": {
@@ -37,7 +37,7 @@
           "kind": "glyph",
           "look": "rune",
           "at": [48, 52],
-          "frames": [0, 18],
+          "frames": [0, 20],
           "radius": 36,
           "inner": 0.64,
           "squash": [1, 0.42],
@@ -45,11 +45,11 @@
           "double": true,
           "points": 4,
           "step": 1,
-          "spin": [0, 24],
-          "reveal": 0.35,
+          "spin": [0, 26.67],
+          "reveal": 0.315,
           "glow": 0,
-          "power": [1, 1, 0.9, 0],
-          "fill": [0, 0.06, 0.06, 0],
+          "power": [1, 1, 1, 0.957, 0.91, 0.557, 0.14, 0],
+          "fill": [0, 0.029, 0.057, 0.06, 0.06, 0.037, 0.009, 0],
           "ease": "linear"
         },
         {
@@ -86,7 +86,7 @@
           "area": [56, 7],
           "rate": 0.6,
           "start": 4,
-          "end": 16,
+          "end": 11,
           "angle": [265, 275],
           "speed": [0.8, 1.4],
           "life": [6, 10],
@@ -98,7 +98,7 @@
           "area": [56, 7],
           "rate": 0.6,
           "start": 4,
-          "end": 16,
+          "end": 11,
           "angle": [265, 275],
           "speed": [0.8, 1.4],
           "life": [6, 10],

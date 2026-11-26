@@ -1,0 +1,12 @@
+{
+  "algorithm": "SHA-256",
+  "files": {
+    "brief.txt": "648caf5c8f3ad89f5d595e8444f37642ac6b2232063753af8361d12eaca967cc",
+    "clean.poses.json": "3220acebc083400abd9aeffa440d1c2252d71901d2fd84628684658dfd575a67",
+    "damaged.poses.json": "0088b431f1daad16d888f658026b9400d775b43038bdee9cdb7a93fe76818035",
+    "generate.py": "2f76ae494d2df9dd54c34f124d750317fe185177f362950f1a0fa9d2bdfd3ac4",
+    "stand-down.png": "80bb28fe8e934832b64862a2526057698769fc45e7820ee3adb0244fce48faa2",
+    "stand-right.png": "6eab3f818decd294f390f81ccfcd4cc423aadf10a6fc5232f95c1c890eef473b",
+    "witnesses.json": "25402430e004a3d60910b509c1662b7184e4c6ecc68e873f746a67ac092e59b8"
+  }
+}

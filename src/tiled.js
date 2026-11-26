@@ -103,12 +103,18 @@ export function tiledTileset(source, { oneShots = true } = {}) {
       else animated.set(animation.frames[0], animation.frames);
     }
   } else for (const [key, animation] of Object.entries(atlas.animations ?? {})) {
+    // Frames an earlier animation passes through don't hold this one back: in either order, both play.
     const sequence = animation.frames, start = kind(sequence[0]);
-    if (sequence.length < 2 || start === null || sequence.some(frame => kind(frame) !== start) || animated.has(sequence[0]) || sequence.some(frame => covered.has(frame))) continue;
-    if (!animation.loop) { stopping.push(key); continue; }
-    animated.set(sequence[0], sequence);
-    for (const frame of sequence.slice(1)) if (frame !== sequence[0]) covered.add(frame);
+    if (sequence.length < 2 || start === null || sequence.some(frame => kind(frame) !== start)) continue;
+    if (!animation.loop) stopping.push(key);
+    else if (animated.has(sequence[0])) second.push(key);
+    else {
+      animated.set(sequence[0], sequence);
+      for (const frame of sequence.slice(1)) if (frame !== sequence[0]) covered.add(frame);
+    }
   }
+  // Here a frame that plays an animation is a tile of its own, weighed as one, whatever passes through it.
+  if (!brushed) for (const start of animated.keys()) covered.delete(start);
   const named = keys => `animation${keys.length === 1 ? '' : 's'} ${keys.slice(0, 8).join(', ')}${keys.length > 8 ? ', …' : ''} became still tiles of ${keys.length === 1 ? 'its' : 'their'} first frame`;
   if (stopping.length && oneShots) warnings.push(`${named(stopping)}: Tiled loops every tile animation`);
   if (second.length && oneShots) warnings.push(`${named(second)}: ${second.length === 1 ? 'its first frame already plays' : 'their first frames already play'} an earlier animation, and a Tiled tile plays one`);
@@ -200,7 +206,8 @@ export function tiledTileset(source, { oneShots = true } = {}) {
 //   places it: half a cell up and left for corner tiles, and down by however much its frames are taller than a cell,
 //   since Tiled hangs a tile from the bottom of its cell where Pixelbolt hangs it from the top.
 // - everything else becomes tile objects in an object layer drawn in list order: placements and each copy of a repeat,
-//   each at its frame at that time, sorted tilemaps (whose cells draw among the placements), iso and scaled maps.
+//   each at its frame at that time, sorted tilemaps (whose cells draw among the placements), iso and scaled maps. An
+//   object is a whole frame: give the draws of a placement drawn in pieces through wholeDraws (scene.js) first.
 //   Objects are the drawn size, so Tiled scales a sheet exported larger back down.
 // Each layer carries its plane's parallax as Tiled's parallaxx and parallaxy, which a game reads as Pixelbolt does:
 // the layer is drawn at its position less parallax × the camera's top-left. The map keeps Tiled's parallax origin,
@@ -212,6 +219,15 @@ export function tiledTileset(source, { oneShots = true } = {}) {
 // left out, with a warning. Lights and the camera's movement stay in the scene. `tilesets` maps each asset id to
 // { source, tiles, haze }: its .tsx relative to the map, its tile count, and its hazed copies, [{ amount, source }],
 // which have the same tiles. Returns { text, warnings }.
+//
+// When the first tilemap a tile layer can hold is a flat isometric one, or none can and the first tilemap drawn is
+// isometric, the map is isometric: its cells are that map's diamonds, every flat, unsorted isometric tilemap on those
+// diamonds is a tile layer whose cells keep their own columns and rows, and tile objects are placed in Tiled's
+// isometric coordinates, where an object stands on the middle of its bottom edge. Every layer is offset to where that
+// first map stands, so Tiled's grid, which it draws at the selected layer's offset, lies on the ground's diamonds and
+// an object snapped to it stands on a cell. Square tilemaps in such a map, and isometric ones in a square map, are tile
+// objects. An isometric tilemap with raised cells, or one sorted among the placements, is objects as well, in the
+// order drawn: a tile layer has one level and is drawn whole.
 export function tiledMap(scene, draws, { tilesets }) {
   const warnings = [], ids = Object.keys(scene.assets), first = {}, hazedFirst = {}, listed = [];
   let next = 1;
@@ -225,17 +241,45 @@ export function tiledMap(scene, draws, { tilesets }) {
   const label = i => scene.instances[i].name ?? scene.instances[i].asset;
   // A placement's plane: its own parallax, or its target's when it is attached.
   const parallaxOf = i => scene.instances[scene.instances[i].attach?.index ?? i].parallax;
-  // Tilemaps a tile layer can hold, on the grid of the first of them.
+  // Tilemaps a tile layer can hold, on the grid of the first of them: square ones, or flat isometric ones whose tiles
+  // are as wide as their diamonds (Tiled hangs a tile from its diamond's left, Pixelbolt centres it).
   const fits = i => {
     const instance = scene.instances[i], map = instance.tilemap;
-    return map && !map.iso && instance.sort !== 'ground' && instance.scale === 1 && project(instance.asset).sheet.scale === 1;
+    return map && instance.sort !== 'ground' && instance.scale === 1 && project(instance.asset).sheet.scale === 1 && (!map.iso || (!map.levels && project(instance.asset).width === map.tile[0]));
   };
-  const firstMap = draws.find(draw => draw.cell !== undefined && fits(draw.instance));
-  const grid = firstMap ? scene.instances[firstMap.instance].tilemap.tile : [16, 16];
+  const mapDraws = draws.filter(draw => draw.cell !== undefined);
+  // The map is on the grid of the first tilemap a tile layer can hold; of the first tilemap drawn, when that is an
+  // isometric ground a layer can't hold (a terraced one), so the map is of the ground's diamonds either way.
+  const diamonds = draw => { const instance = scene.instances[draw.instance]; return instance.tilemap.iso && instance.scale === 1 && project(instance.asset).sheet.scale === 1; };
+  const firstMap = (mapDraws.length && !fits(mapDraws[0].instance) && diamonds(mapDraws[0]) ? mapDraws[0] : null) ?? mapDraws.find(draw => fits(draw.instance)) ?? mapDraws.find(diamonds);
+  const lead = firstMap ? scene.instances[firstMap.instance] : null, grid = lead ? lead.tilemap.tile : [16, 16], iso = Boolean(lead?.tilemap.iso);
   const placed = new Map();
-  for (const i of new Set(draws.filter(draw => draw.cell !== undefined).map(draw => draw.instance))) {
+  // The rows of an isometric map (the deepest of its first map and its tile layers), and where the first map stands
+  // when the map has that many: every layer's offset.
+  let deep = 1, ground = [0, 0];
+  // An isometric map: each tilemap's cells at their own columns and rows, the map as many rows deep as the deepest of
+  // them, and each layer offset to where its tilemap stands (its diamonds start where Tiled's do when it has that many
+  // rows, and half a tile further left for each row fewer).
+  if (iso) {
+    const cellsOf = new Map();
+    for (const i of new Set(draws.filter(draw => draw.cell !== undefined).map(draw => draw.instance))) {
+      const instance = scene.instances[i], map = instance.tilemap;
+      if (!fits(i) || !map.iso || map.tile[0] !== grid[0] || map.tile[1] !== grid[1]) continue;
+      const tall = project(instance.asset).height, at = map.cells.map(cell => {
+        const across = cell.x / (grid[0] / 2) - (map.rows - 1), down = (cell.y - grid[1] + tall) / (grid[1] / 2);
+        return [(down + across) / 2, (down - across) / 2];
+      });
+      if (at.some(([c, r]) => !Number.isInteger(c) || !Number.isInteger(r) || c < 0 || r < 0) || new Set(at.map(p => p.join())).size !== at.length) continue;
+      cellsOf.set(i, at);
+    }
+    deep = Math.max(lead.tilemap.rows, ...[...cellsOf.keys()].map(i => scene.instances[i].tilemap.rows));
+    const standing = instance => [instance.at[0] - instance.anchor[0] + (instance.tilemap.rows - deep) * grid[0] / 2, instance.at[1] - instance.anchor[1]];
+    for (const [i, at] of cellsOf) placed.set(i, { at, offset: standing(scene.instances[i]) });
+    ground = standing(lead);
+  }
+  for (const i of iso ? [] : new Set(draws.filter(draw => draw.cell !== undefined).map(draw => draw.instance))) {
     const instance = scene.instances[i], map = instance.tilemap;
-    if (!fits(i) || map.tile[0] !== grid[0] || map.tile[1] !== grid[1]) continue;
+    if (!fits(i) || map.iso || map.tile[0] !== grid[0] || map.tile[1] !== grid[1]) continue;
     const corner = map.cells.some(cell => cell.x % grid[0] !== 0 || cell.y % grid[1] !== 0), half = corner ? [grid[0] / 2, grid[1] / 2] : [0, 0];
     const at = map.cells.map(cell => [(cell.x + half[0]) / grid[0], (cell.y + half[1]) / grid[1]]);
     if (at.some(([c, r]) => !Number.isInteger(c) || !Number.isInteger(r)) || new Set(at.map(p => p.join())).size !== at.length) continue;
@@ -271,7 +315,17 @@ export function tiledMap(scene, draws, { tilesets }) {
   // With a camera the scene is larger than its view, and tile objects reach as far right and down as they are drawn;
   // without one, what is drawn past the scene's edge is clipped, and the map is the scene.
   const reach = !scene.camera ? [] : layers.flatMap(layer => layer.objects ?? []).map(draw => { const { width, height } = project(draw.asset); return [draw.x + draw.shift[0] + width * draw.scale, draw.y + draw.shift[1] + height * draw.scale]; });
-  const size = [0, 1].map(axis => Math.max(1, Math.ceil([scene.width, scene.height][axis] / grid[axis]), ...[...placed.values()].flatMap(({ at }) => at.map(p => p[axis] + 1)), ...reach.map(r => Math.ceil(r[axis] / grid[axis]))));
+  // An isometric map is as many columns and rows as its tilemaps'; what stands outside its diamond is still drawn.
+  const size = iso ? [Math.max(lead.tilemap.columns, ...[...placed.values()].flatMap(({ at }) => at.map(p => p[0] + 1))), deep]
+    : [0, 1].map(axis => Math.max(1, Math.ceil([scene.width, scene.height][axis] / grid[axis]), ...[...placed.values()].flatMap(({ at }) => at.map(p => p[axis] + 1)), ...reach.map(r => Math.ceil(r[axis] / grid[axis]))));
+  // Where a tile object stands in an isometric map: Tiled counts both axes in tile heights along the diamonds' edges
+  // from the top corner of cell [0, 0], which is half a tile across for each row of the map, and stands the object
+  // on the middle of its bottom edge. Its layer is offset to the ground, so it is placed from there.
+  const stands = (x, y, w, h) => {
+    if (!iso) return [x, y + h];
+    const across = (x - ground[0] + w / 2 - deep * grid[0] / 2) / (grid[0] / 2), down = (y - ground[1] + h) / (grid[1] / 2);
+    return [(down + across) / 2 * grid[1], (down - across) / 2 * grid[1]];
+  };
   const [r, g, b, a] = scene.background, colour = `#${(a === 255 ? [r, g, b] : [a, r, g, b]).map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
   // Tiled writes each factor that isn't 1.
   const parallax = ([x, y]) => `${x !== 1 ? ` parallaxx="${number(x)}"` : ''}${y !== 1 ? ` parallaxy="${number(y)}"` : ''}`;
@@ -286,16 +340,16 @@ export function tiledMap(scene, draws, { tilesets }) {
       return;
     }
     const names = [...new Set(layer.objects.map(draw => label(draw.instance)))];
-    body.push(` <objectgroup draworder="index" id="${k + 1}" name="${xml(names.length > 4 ? `${names.slice(0, 4).join(', ')}, …` : names.join(', '))}"${parallax(layer.parallax)}>`);
+    body.push(` <objectgroup draworder="index" id="${k + 1}" name="${xml(names.length > 4 ? `${names.slice(0, 4).join(', ')}, …` : names.join(', '))}"${ground[0] || ground[1] ? ` offsetx="${number(ground[0])}" offsety="${number(ground[1])}"` : ''}${parallax(layer.parallax)}>`);
     for (const draw of layer.objects) {
-      const { width, height } = project(draw.asset), w = width * draw.scale, h = height * draw.scale, x = draw.x + draw.shift[0], y = draw.y + draw.shift[1];
-      body.push(`  <object id="${++objects}" name="${xml(label(draw.instance))}" gid="${gid(draw)}" x="${x}" y="${y + h}" width="${w}" height="${h}"/>`);
+      const { width, height } = project(draw.asset), w = width * draw.scale, h = height * draw.scale, [x, y] = stands(draw.x + draw.shift[0], draw.y + draw.shift[1], w, h);
+      body.push(`  <object id="${++objects}" name="${xml(label(draw.instance))}" gid="${gid(draw)}" x="${number(x)}" y="${number(y)}" width="${w}" height="${h}"/>`);
     }
     body.push(' </objectgroup>');
   });
   if (unbaked.size) warnings.push(`${[...unbaked].join(', ')}: drawn without haze: no hazed tileset was given for it`);
   const lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-    `<map version="${TILED_FORMAT}" orientation="orthogonal" renderorder="right-down" width="${size[0]}" height="${size[1]}" tilewidth="${grid[0]}" tileheight="${grid[1]}" infinite="0" backgroundcolor="${colour}" nextlayerid="${layers.length + 1}" nextobjectid="${objects + 1}">`,
+    `<map version="${TILED_FORMAT}" orientation="${iso ? 'isometric' : 'orthogonal'}" renderorder="right-down" width="${size[0]}" height="${size[1]}" tilewidth="${grid[0]}" tileheight="${grid[1]}" infinite="0" backgroundcolor="${colour}" nextlayerid="${layers.length + 1}" nextobjectid="${objects + 1}">`,
     ...listed.map(([firstgid, source]) => ` <tileset firstgid="${firstgid}" source="${xml(source)}"/>`), ...body, '</map>', ''];
   return { text: lines.join('\n'), warnings };
 }

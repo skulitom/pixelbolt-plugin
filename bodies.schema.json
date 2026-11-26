@@ -128,6 +128,10 @@
             "maximum": 1000,
             "description": "Milliseconds per frame. Default 40."
           },
+          "loop": {
+            "type": "boolean",
+            "description": "true: cloth in a wind that repeats every `frames` frames, drawn once it has settled into it, so the last frame leads into the first. Only for cloth pinned to points or to fixed bodies that stay still; everything else plays once."
+          },
           "substeps": {
             "type": "integer",
             "minimum": 1,
@@ -526,7 +530,11 @@
                 },
                 "symbol": {
                   "type": "string",
-                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns)."
+                  "description": "Draw this symbol instead of fill and outline, centred on the body and turned with it to the whole degree, its outline kept a closed line (under 6 pixels across, in quarter turns). A circle's stays upright unless it rolls."
+                },
+                "rolls": {
+                  "type": "boolean",
+                  "description": "A circle with a symbol: turn the symbol as the ball rolls (a wheel, a boulder), its round outline kept as drawn. Without it the symbol stays upright (a face)."
                 },
                 "trail": {
                   "type": "object",
@@ -597,6 +605,10 @@
                       "minimum": 0,
                       "maximum": 8,
                       "description": "Pixels a frame the pieces fly apart at, away from where it was hit, on top of its own motion. Default 0.5."
+                    },
+                    "fall": {
+                      "type": "boolean",
+                      "description": "On a weightless body: its pieces take weight and fall, where they would float as it did."
                     }
                   },
                   "required": [],
@@ -721,7 +733,7 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Point on a in its own pixels. With a: \"world\", the world point."
+                  "description": "Point on a in its own pixels; default its centre. With a: \"world\", the canvas point: default, for a hinge or weld, where b's anchor starts."
                 },
                 "anchorB": {
                   "type": "array",
@@ -732,7 +744,7 @@
                   },
                   "maxItems": 2,
                   "minItems": 2,
-                  "description": "Point on b in its own pixels. With b: \"world\", the world point."
+                  "description": "Point on b in its own pixels; default its centre. With b: \"world\", the canvas point: default, for a hinge or weld, where a's anchor starts."
                 },
                 "length": {
                   "type": "number",
@@ -896,7 +908,7 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1,
-                  "description": "Optional outline key for a rope line."
+                  "description": "Optional outline key for a rope line. On a chain: the key of every other link, which is what reads as a chain."
                 },
                 "density": {
                   "type": "number",
@@ -975,7 +987,7 @@
                   },
                   "maxItems": 128,
                   "minItems": 2,
-                  "description": "Rows of # for cloth and . for a hole; the size must match."
+                  "description": "Rows of # for cloth and . for a hole; the size must match. With a fill of ramps by character, the rows draw the cloth's design with those characters."
                 },
                 "fill": {
                   "oneOf": [
@@ -995,9 +1007,35 @@
                       },
                       "maxItems": 8,
                       "minItems": 1
+                    },
+                    {
+                      "type": "object",
+                      "minProperties": 1,
+                      "maxProperties": 16,
+                      "additionalProperties": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 1,
+                            "description": "A one-character palette key; dot and space are reserved."
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1,
+                              "description": "A one-character palette key; dot and space are reserved."
+                            },
+                            "maxItems": 8,
+                            "minItems": 1
+                          }
+                        ]
+                      }
                     }
                   ],
-                  "description": "A key, or 1–8 keys from dark to light used as the fold ramp."
+                  "description": "A key, or 1–8 keys from dark to light used as the fold ramp. Or a design: such a ramp under each character the mask draws with, {\"b\": [\"d\", \"b\", \"l\"], \"g\": [\"G\", \"g\"]} for a blue cloth with a gold stripe."
                 },
                 "outline": {
                   "type": "string",
@@ -1038,6 +1076,18 @@
                   "minimum": 0,
                   "maximum": 1,
                   "description": "How much the wind varies in time and across the cloth, flapping across it. Default 0."
+                },
+                "ripple": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 8,
+                  "description": "Pixels the free end is drawn swayed by a wave that travels down the cloth from its held end: what makes a flag wave. Default 0."
+                },
+                "waves": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 4,
+                  "description": "Ripple waves along the cloth. Default 1.5."
                 },
                 "stiffness": {
                   "type": "number",

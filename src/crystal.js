@@ -14,6 +14,8 @@ import { atan2Deg } from './shapes.js';
 export const CRYSTAL_HABITS = ['prism', 'cube', 'octahedron', 'snowflake'];
 const LIMITS = { crystals: 32, total: 256, looks: 8, colors: 6 };
 const MAX_FRAMES = 256; // the most frames an effect has
+// A crystal canvas keeps 256 a side, whatever an animation frame may be: its per-frame cost is not budgeted.
+const CRYSTAL_SIDE = 256;
 const MIN_LIGHT = 0.001; // the shortest light direction read: a shorter one has too little length to divide by
 // A number, or [low, high] drawn per crystal from the effect's seed.
 const span = (v, path, min, max, whole = false) => {
@@ -142,7 +144,7 @@ function readEffect(effect, path, source, looks) {
   if (crystals.length > LIMITS.total) fail(`${path}.crystals`, `the counts make ${crystals.length} crystals; at most ${LIMITS.total}`);
   const decoration = key => {
     if (effect[key] === undefined) return null;
-    const { rows } = readRows(effect[key], `${path}.${key}`, source.palette);
+    const { rows } = readRows(effect[key], `${path}.${key}`, source.palette, CRYSTAL_SIDE);
     if (rows.length !== source.height || rows[0].length !== source.width) fail(`${path}.${key}`, 'expected a full-canvas grid');
     return rows;
   };
@@ -428,7 +430,7 @@ const inHex = (x, y, r) => { const ax = Math.abs(x), ay = Math.abs(y); return ax
 export function compileCrystals(source) {
   fields(source, ['format', 'version', 'name', 'width', 'height', 'palette', 'anchor', 'sheet', 'looks', 'effects'], 'crystal');
   if (source.format !== 'pixelforge-crystal' || source.version !== 1) fail('crystal', 'expected version-1 pixelforge-crystal');
-  const width = int(source.width, 'crystal.width', 1, 256), height = int(source.height, 'crystal.height', 1, 256);
+  const width = int(source.width, 'crystal.width', 1, CRYSTAL_SIDE), height = int(source.height, 'crystal.height', 1, CRYSTAL_SIDE);
   if (!source.palette || typeof source.palette !== 'object' || Array.isArray(source.palette)) fail('crystal.palette', 'expected a palette object');
   const shell = { version: 1, name: source.name, width, height, palette: source.palette,
     ...(source.anchor !== undefined && { anchor: source.anchor }), ...(source.sheet !== undefined && { sheet: source.sheet }) };

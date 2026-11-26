@@ -92,6 +92,7 @@
       "frames": 9,
       "duration": 55,
       "seed": 11,
+      "residue": true,
       "emitters": [
         { "at": [24, 30], "name": "flash", "burst": 1, "life": 2, "shapes": ["flash-0", "flash-1"], "play": "once" },
         {
@@ -134,6 +135,7 @@
       "frames": 11,
       "duration": 70,
       "seed": 6,
+      "residue": true,
       "emitters": [
         {
           "at": [22, 35],
@@ -165,6 +167,7 @@
       "frames": 12,
       "duration": 70,
       "seed": 9,
+      "residue": true,
       "emitters": [
         {
           "at": [24, 18],
@@ -187,6 +190,7 @@
       "frames": 12,
       "duration": 60,
       "seed": 3,
+      "residue": true,
       "emitters": [
         {
           "at": [24, 26],

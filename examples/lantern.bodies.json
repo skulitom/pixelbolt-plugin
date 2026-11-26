@@ -1,0 +1,67 @@
+{
+  "format": "pixelforge-bodies",
+  "version": 1,
+  "name": "lantern",
+  "width": 48,
+  "height": 64,
+  "palette": {
+    "k": "#14141c",
+    "i": "#4a5068",
+    "y": "#e8a23a",
+    "Y": "#ffd866",
+    "W": "#fff6c9",
+    "b": "#8a5a36",
+    "c": "#8b93ad"
+  },
+  "symbols": {
+    "lantern": [
+      ".....kkk.....",
+      "....kiiik....",
+      "...kkiiikk...",
+      "..kiiiiiiik..",
+      ".kkkkkkkkkkk.",
+      ".kiyyYYYyyik.",
+      ".kiyYYWYYyik.",
+      ".kiyYWWWYyik.",
+      ".kiyYWWWYyik.",
+      ".kiyYYWYYyik.",
+      ".kiyyYYYyyik.",
+      ".kiyyyYyyyik.",
+      ".kkkkkkkkkkk.",
+      "..kiiiiiiik..",
+      "...kkkkkkk..."
+    ]
+  },
+  "effects": {
+    "lantern": {
+      "frames": 76,
+      "duration": 40,
+      "gravity": [0, 0.5],
+      "bodies": [
+        { "name": "beam", "shape": "box", "size": [44, 5], "at": [24, 4.5], "fixed": true, "fill": "b", "outline": "k" },
+        {
+          "name": "lantern",
+          "shape": "box",
+          "size": [13, 15],
+          "at": [24, 37.5],
+          "velocity": [2.2, 0],
+          "density": 3,
+          "drag": 0.03,
+          "spinDrag": 0.1,
+          "symbol": "lantern"
+        }
+      ],
+      "ropes": [
+        {
+          "from": { "body": "beam", "point": [0, 2.5] },
+          "to": { "body": "lantern", "point": [0, -7.5] },
+          "links": 8,
+          "slack": 0,
+          "look": "chain",
+          "fill": "c",
+          "outline": "k"
+        }
+      ]
+    }
+  }
+}

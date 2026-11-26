@@ -11,7 +11,10 @@
 // a fixed scan order, and there is no Math.random and no trigonometry of its own (tumbling pieces turn by craft.js's
 // polynomial sines and bodies.js's solver, + − × ÷ and sqrt). Temperatures are kept in sixteenths of a degree and
 // velocities in 256ths of a pixel per frame.
-import { parseColor, renderProject, CANVAS_SIDE, FRAME_AREA, fail, isObject } from './core.js';
+// Left and right are alike to the cells: where a cell could go either way, a draw or the cells round it choose (the
+// nearer drop, the nearer bank), never the parity of its row or of the frame, and each row is read left to right or
+// right to left by a draw. So a source drawn mirrored runs the mirrored way as often, though not cell for cell.
+import { PixelError, parseColor, renderProject, FRAME_AREA, fail, isObject } from './core.js';
 import { hash, ditherThreshold, sinDeg, cosDeg } from './craft.js';
 import { atan2Deg } from './shapes.js';
 import { createBodyWorld, polygonPart, areaBeyond, turnBetween } from './bodies.js';
@@ -66,7 +69,7 @@ const NUDGES = [[0, 0], [0, -1], [-1, 0], [1, 0], [0, 1]];
 // Single-character palette keys. '.' marks an empty pixel.
 const KEY_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#$%&*+-=?@^~!<>/|:;,_()[]{}';
 // Salts that keep the random streams apart.
-const SALT = { step: 1, input: 2, scene: 3, script: 5 };
+const SALT = { step: 1, input: 2, scene: 3, script: 5, way: 6 };
 
 const MATERIAL_FIELDS = ['state', 'density', 'spread', 'speed', 'expand', 'viscosity', 'drag', 'splash', 'falls', 'clings', 'colors', 'pattern', 'top', 'streak', 'haze', 'colorBy', 'shimmer', 'hot', 'temperature', 'conduct', 'cool', 'heat', 'life', 'above', 'below', 'burn', 'emit'];
 const SOURCE_FIELDS = ['$schema', 'format', 'version', 'name', 'base', 'width', 'height', 'seed', 'ambient', 'background', 'gravity', 'air', 'wall', 'pieces', 'materials', 'reactions', 'scene', 'inputs', 'clips'];
@@ -106,6 +109,22 @@ function withBase(source) {
   if (isObject(source.air)) merged.air = { ...base.air, ...source.air, ...(isObject(source.air.flow) && { flow: { ...base.air.flow, ...source.air.flow } }) };
   delete merged.base;
   return merged;
+}
+
+// An error in the starter table's reaction at merged index n, said as what broke it: the source's own material of a
+// name the table uses, which replaced the table's whole (P-182).
+function tableReactionError(error, r, n, given) {
+  if (!(error instanceof PixelError)) return error;
+  const at = `powder.reactions[${n}]`, field = error.path.startsWith(at) ? error.path.slice(at.length).replace(/^\./, '') : '';
+  const said = error.message.startsWith(`${error.path}: `) ? error.message.slice(error.path.length + 2) : error.message;
+  const used = [r.a, r.b, ...(Array.isArray(r.into) ? r.into : [])];
+  const words = said.split(/[^a-z0-9-]+/), named = name => (words.includes(name) ? 0 : 1);
+  // The material the error is about comes first, so it is the path.
+  const replaced = used.filter((name, i) => typeof name === 'string' && used.indexOf(name) === i && Object.hasOwn(SANDBOX.materials, name) && isObject(given.materials) && Object.hasOwn(given.materials, name)).sort((x, y) => named(x) - named(y));
+  const reaction = `the table's reaction of ${r.a} and ${r.b}${field ? ` (its ${field})` : ''}`;
+  const fix = `Rename your material, give it what that reaction needs, or write your own reaction for ${r.a} and ${r.b}, which replaces the table's`;
+  if (!replaced.length) return new PixelError('powder.base', `the starter ${reaction.slice(4)} fails: ${said}`);
+  return new PixelError(`powder.materials.${replaced[0]}`, `this replaces the starter table's ${replaced.join(' and ')} whole${replaced.length > 1 ? ` (with powder.materials.${replaced.slice(1).join(' and powder.materials.')})` : ''}, and ${reaction} then fails: ${said}. ${fix}`);
 }
 
 // Reads a pixelforge-powder source into flat tables, one entry per material id (0 is empty air).
@@ -356,7 +375,7 @@ function readPowder(given) {
   // the reaction wait until that side burns.
   const reactions = source.reactions ?? [];
   if (!Array.isArray(reactions) || reactions.length > LIMITS.reactions) fail('powder.reactions', `expected a list of at most ${LIMITS.reactions} reactions`);
-  reactions.forEach((r, n) => {
+  const readReaction = (r, n) => {
     const path = `powder.reactions[${n}]`;
     if (!isObject(r)) fail(path, 'expected { a, b, into, chance, heat, ignite, douse, burning }');
     known(r, ['a', 'b', 'into', 'chance', 'heat', 'ignite', 'douse', 'burning'], path);
@@ -365,7 +384,7 @@ function readPowder(given) {
     if (!Array.isArray(into) || into.length !== 2) fail(`${path}.into`, 'expected [what a becomes, what b becomes]; null keeps it');
     const side = (value, label) => { if (value !== undefined && value !== 'a' && value !== 'b') fail(`${path}.${label}`, 'expected "a" or "b"'); return value === 'a' ? 1 : value === 'b' ? 2 : 0; };
     const entry = {
-      a, b, into: into.map((v, k) => (v === null ? -1 : ref(v, `${path}.into[${k}]`))), chance: chanceOf(r.chance ?? 1, `${path}.chance`),
+      into: into.map((v, k) => (v === null ? -1 : ref(v, `${path}.into[${k}]`))), chance: chanceOf(r.chance ?? 1, `${path}.chance`),
       heat: r.heat === undefined ? 0 : degrees(r.heat, `${path}.heat`), ignite: side(r.ignite, 'ignite'), douse: side(r.douse, 'douse'), burning: side(r.burning, 'burning')
     };
     for (const [key, which] of [['ignite', entry.ignite], ['douse', entry.douse], ['burning', entry.burning]]) {
@@ -378,6 +397,14 @@ function readPowder(given) {
     t.pair[a * M + b] = index * 2;
     if (a !== b) t.pair[b * M + a] = index * 2 + 1;
     t.reactive[a] = 1; t.reactive[b] = 1;
+  };
+  // withBase lists the source's own reactions first and the starter table's after them. Only a material the source
+  // names again (it replaces the table's whole) can break one of the table's, so an error there names that material
+  // and the table's reaction, not an index into a list the source never wrote.
+  const own = given.base === undefined ? reactions.length : Array.isArray(given.reactions) ? given.reactions.length : 0;
+  reactions.forEach((r, n) => {
+    if (n < own) return readReaction(r, n);
+    try { readReaction(r, n); } catch (error) { throw tableReactionError(error, r, n, given); }
   });
   t.reactive[0] = 0;
 
@@ -624,7 +651,6 @@ export function createLivePowder(source, options = {}) {
   const lifeDraw = m => (lifeMax[m] ? lifeMin[m] + rand() % (lifeMax[m] - lifeMin[m] + 1) : 0);
   const clampT = v => (v < T_LOW * SIXTEENTHS ? T_LOW * SIXTEENTHS : v > T_HIGH * SIXTEENTHS ? T_HIGH * SIXTEENTHS : v);
 
-  // A cell changes material in place and keeps its temperature (a phase change, burning out, a life ending).
   // Blotch and grain fields per material, from craft's seeded value noise.
   const fields = Array.from(T.pattern, (p, m) => (p === 1 ? ditherThreshold('value', [0, 0], hash(seed, m, 1), 6) : p === 2 ? ditherThreshold('value', [0, 0], hash(seed, m, 2), 12) : null));
   const shadeAt = (c, m) => {
@@ -635,6 +661,7 @@ export function createLivePowder(source, options = {}) {
     // Grain: each row its own tone, drifting slowly along the row.
     return ((hash(seed, m, y) & 255) * 0.55 + fields[m](x, y * 6) * 115) | 0;
   };
+  // A cell changes material in place and keeps its temperature (a phase change, burning out, a life ending).
   const become = (c, m) => {
     if (state[mat[c]] === SOLID || state[m] === SOLID) supportChanged = true;
     mat[c] = m; flag[c] = 0; shade[c] = m ? shadeAt(c, m) : 0; life[c] = lifeDraw(m);
@@ -692,22 +719,65 @@ export function createLivePowder(source, options = {}) {
     return false;
   };
   // A liquid's or gas's sideways run: the farthest of up to `reach` free cells in direction s, stopping early at a
-  // cell it could fall (or rise) from, when `dropped` is set. `blocker` is the material that ended it (-1 for none).
-  let dropped = false, blocker = -1;
+  // cell it could fall (or rise) from.
   const run = (c, x, s, reach, ahead, intoGas) => {
     let best = -1;
-    dropped = false; blocker = -1;
     for (let i = 1; i <= reach; i++) {
       const xx = x + s * i;
       if (xx < 0 || xx >= W) break;
       const d = c + s * i, n = mat[d];
-      if (n !== 0 && !(intoGas && (state[n] === GAS || state[n] === FIRE))) { blocker = n; break; }
+      if (n !== 0 && !(intoGas && (state[n] === GAS || state[n] === FIRE))) break;
       best = d;
       const below = d + ahead;
-      if (ahead && below >= 0 && below < N && mat[below] === 0) { dropped = true; break; }
+      if (ahead && below >= 0 && below < N && mat[below] === 0) break;
     }
     return best;
   };
+  // Does n float on a liquid m? A lighter powder or liquid does: a skin of ash on water, oil over it.
+  const floats = (n, m) => (state[n] === POWDER || state[n] === LIQUID) && density[n] < density[m];
+  // A resting liquid's look along its row, up to FAR cells the way s, for somewhere lower: an empty cell over an empty
+  // cell. Returns how far that is (0 for none). It looks past more of its own kind, so the cells of a film running off
+  // a table follow the ones ahead of them, off either end alike (stopped by them, the cells one side went a cell at a
+  // time). `free` is the cells beside it that it could move into, and `blocker` the material that ends them (-1 for
+  // none). With `through`, what floats on it is as air to it: it looks through that and moves into it (the two change
+  // places), and somewhere lower is also where what floats lies on more that floats, so a pool levels under a skin of
+  // ash or a layer of oil, and not only where it is bare. (Water running down a gorge's walls sank through the ash on
+  // the river where it landed and could go no further: the river stood in a V, a cell's step to a row, while it rained.)
+  let free = 0, blocker = -1;
+  const lower = (c, x, s, m, ahead, through) => {
+    free = 0; blocker = -1;
+    for (let i = 1; i <= FAR; i++) {
+      const xx = x + s * i;
+      if (xx < 0 || xx >= W) break;
+      const d = c + s * i, n = mat[d];
+      if (n !== 0 && state[n] !== GAS && state[n] !== FIRE && !(through && floats(n, m))) {
+        if (blocker < 0) blocker = n;
+        if (n !== m || !free) break;
+        continue;
+      }
+      if (blocker < 0) free = i;
+      if (ahead) { const under = mat[d + ahead]; if (under === 0 || (through && floats(under, m))) return i; }
+    }
+    return 0;
+  };
+  // The way a resting liquid drifts along its row when nowhere is lower: toward the nearer bank, the first cell either
+  // way that is neither empty, a gas, what floats on it nor more of its kind (or the grid's edge), so a pool's top
+  // layer gathers against both its banks alike and a source drawn mirrored runs mirrored. Where both banks are as
+  // near, or further than FAR, it is the row's own way, left or right by the seed. A cell only ever drifts toward its
+  // bank, so nothing goes back and forth. (Every row had one way, left on even rows and right on odd: the top layer of
+  // a lake gathered against one of its two dams, and that dam gave way first whichever way round the source was drawn.)
+  const ways = Int8Array.from({ length: H }, (_, y) => (hash(seed, SALT.way, y) & 1 ? 1 : -1));
+  const shore = (c, x, s, m, through) => {
+    let i = 1;
+    for (; i <= FAR; i++) {
+      const xx = x + s * i;
+      if (xx < 0 || xx >= W) break;
+      const n = mat[c + s * i];
+      if (n !== 0 && n !== m && state[n] !== GAS && state[n] !== FIRE && !(through && floats(n, m))) break;
+    }
+    return i;
+  };
+  const bank = (c, x, y, m, through) => { const l = shore(c, x, -1, m, through), r = shore(c, x, 1, m, through); return l < r ? -1 : r < l ? 1 : ways[y]; };
   // A powder or liquid cell in the air: gravity, then this frame's whole pixels one cell at a time, more vertically or
   // sideways as its velocity leans, sliding off what it falls onto as a resting cell would, and landing where it can
   // go no lower. `first` says the cell below is already known to be free (it was just checked, with its draw).
@@ -830,7 +900,10 @@ export function createLivePowder(source, options = {}) {
       (y < H - 1 && ready(c, c + W, pair[row + mat[c + W]])) || (x > 0 && ready(c, c - 1, pair[row + mat[c - 1]]));
   };
 
-  // One frame: queued inputs, then every cell from the bottom row up (each row in alternating directions), then heat.
+  // One frame: queued inputs, then every cell from the bottom row up, then heat. Each row is read left to right or right
+  // to left by a draw: a row's cells move more readily against the way they are read (each makes room for the next),
+  // and rows read by turns (even rows one way on even frames) sent a block of water poured on a table off one end
+  // first every time, whichever way the source was drawn, and kept step with anything painted every other frame.
   const advance = () => {
     // The stamps are 16 bits, so they are wiped as the tick wraps: one left from 65535 frames ago would read as this frame's.
     if (tick === 65535) { stamp.fill(0); tick = 1; } else tick++;
@@ -844,7 +917,7 @@ export function createLivePowder(source, options = {}) {
     if (F) airStep();
     reseed(SALT.step, t);
     for (let y = H - 1; y >= 0; y--) {
-      const row = y * W, forward = ((y + t) & 1) === 0, band = (y >> 4) * CW;
+      const row = y * W, forward = rand() >>> 31 === 0, band = (y >> 4) * CW;
       for (let q = 0; q < CW; q++) {
         const cx = forward ? q : CW - 1 - q;
         if (!awake[band + cx]) continue;
@@ -909,27 +982,31 @@ export function createLivePowder(source, options = {}) {
                 else if (!thick || rand() >= thick) { swap(c, to); const left = u - (u >> 2); vx[to] = left > -SUB && left < SUB ? 0 : left; }
                 keep(c);
               } else if (spread[m]) {
-                // Downhill first: the nearer place within FAR either way where it could fall, approached at most its
-                // spread a frame, so a terrace's end steps down onto the next and a puddle drains into a hole. Otherwise
-                // a liquid holds together, and moves only the row's way (left on even rows, right on odd, so nothing
-                // goes back and forth): the end of a strip joins the next strip of its kind, and a lone cell on a pool
-                // drifts on until it meets something. Puddles and pools come to rest, flat but for one strip.
-                const reach = spread[m], way = y & 1 ? 1 : -1;
-                const r = run(c, x, 1, FAR, ahead, true), rd = dropped, rb = blocker;
-                const l = run(c, x, -1, FAR, ahead, true), ld = dropped, lb = blocker;
+                // Downhill first: the nearer place within FAR either way where it could fall (either, by a draw, when
+                // they are as near), approached at most its spread a frame, so a terrace's end steps down onto the next
+                // and a puddle drains into a hole. Otherwise a liquid holds together, and moves only toward its nearer
+                // bank: the end of a strip joins the next strip of its kind that way, and what lies on a pool drifts
+                // on until it meets something. Puddles and pools come to rest, flat but for a strip against each bank.
+                // What floats on it is as air to it in all of this, unless it lies on that itself: held back by its
+                // drag, it has yet to sink, and looks for nowhere else.
+                const reach = spread[m], through = !ahead || !floats(mat[c + W], m);
+                const dr = lower(c, x, 1, m, ahead, through), rf = free, rb = blocker;
+                const dl = lower(c, x, -1, m, ahead, through), lf = free, lb = blocker;
                 let to = -1;
-                if (rd || ld) {
-                  const dr = rd ? r - c : FAR + 1, dl = ld ? c - l : FAR + 1, dir = dr < dl || (dr === dl && way > 0) ? 1 : -1, dist = dir > 0 ? dr : dl;
+                if (dr || dl) {
+                  const dir = !dl || (dr && (dr < dl || (dr === dl && rand() >>> 31))) ? 1 : -1, far = dir > 0 ? rf : lf;
+                  let dist = dir > 0 ? dr : dl;
+                  if (dist > far) dist = far;
                   to = c + dir * (dist < reach ? dist : reach);
-                } else {
-                  const end = way > 0 ? r : l;
-                  if (end >= 0) {
-                    const dist = (end - c) * way, lone = (x === 0 || mat[c - 1] !== m) && (x === W - 1 || mat[c + 1] !== m);
-                    if ((way > 0 ? rb : lb) === m || (lone && ahead && state[mat[c + W]] === LIQUID)) to = c + way * (dist < reach ? dist : reach);
+                } else if (rf || lf) {
+                  const afloat = ahead && state[mat[c + W]] === LIQUID;
+                  if (afloat || (rf && rb === m) || (lf && lb === m)) {
+                    const way = bank(c, x, y, m, through), dist = way > 0 ? rf : lf;
+                    if (dist && (afloat || (way > 0 ? rb : lb) === m)) to = c + way * (dist < reach ? dist : reach);
                   }
                 }
                 // With room beside it, it watches its row FAR either way: a change there wakes its chunk (see ripple).
-                if (r >= 0 || l >= 0) watching[chunkOf[c]] = 1;
+                if (rf || lf) watching[chunkOf[c]] = 1;
                 if (to >= 0) { if (thick && rand() < thick) keep(c); else swap(c, to); }
               }
             } else if (vx[c]) vx[c] = 0;
@@ -2011,17 +2088,21 @@ export function createLivePowder(source, options = {}) {
 }
 
 // ---- Compiling ----------------------------------------------------------------------------------------------------
-// Bakes a source into an ordinary recipe: the grid runs from its scene, playing its scripted inputs, and each clip
-// samples it every `every` steps from `start` (60 steps a second), drawn exactly as render() draws it. Pixels that never
-// change in any sampled frame are drawn once, as the symbol `still`, stamped under every frame; each frame draws the
-// rest as one palette grid per 16-row band, cropped to where anything changes. Returns { recipe, metadata, warnings? }:
-// warnings (only when there are any) name scripted inputs played after the last step a clip samples.
-export function compilePowder(source) {
+/** The most frames of a clip written as numbered video frames (powderFrames), past the 256 a recipe holds. */
+export const CLIP_FRAMES = 18000;
+// A source's runner and the clips to play, checked against what is made of them. For a recipe (`only` undefined) that
+// is every clip, within a recipe's canvas, frames and pixels. For video frames it is one clip (`only` names it; null
+// is the first), which may run CLIP_FRAMES frames on a grid of any size a runner takes. Either way the steps and the
+// work are those of the clips played.
+// A compiled grid keeps 256 a side, whatever an animation frame may be: a simulation's per-frame cost is not budgeted.
+const GRID_SIDE = 256;
+function readClips(source, only) {
+  const video = only !== undefined;
   if (!isObject(source)) fail('powder', 'expected a pixelforge-powder source object');
   if (source.version !== 1) fail('powder.version', 'expected 1');
   const name = recipeName(source.name, 'powder.name');
   const live = createLivePowder(source), { width: W, height: H } = live;
-  if (W > CANVAS_SIDE || H > CANVAS_SIDE) fail(W > CANVAS_SIDE ? 'powder.width' : 'powder.height', `a compiled powder grid is an animation, at most ${CANVAS_SIDE} pixels a side; use a smaller grid, or run a larger one live in a page or game (createLivePowder)`);
+  if (!video && (W > GRID_SIDE || H > GRID_SIDE)) fail(W > GRID_SIDE ? 'powder.width' : 'powder.height', `a compiled powder grid is at most ${GRID_SIDE} pixels a side; use a smaller grid, write a larger one as numbered video frames (pixelbolt sequence), or run it live in a page or game (createLivePowder)`);
   // Clips: each a one-shot animation.
   const given = source.clips ?? { [name]: {} };
   if (!isObject(given) || !Object.keys(given).length || Object.keys(given).length > LIMITS.clips) fail('powder.clips', `expected 1 to ${LIMITS.clips} named clips: { start, frames, every, duration }`);
@@ -2030,14 +2111,18 @@ export function compilePowder(source) {
     recipeName(clip, path);
     if (!isObject(value)) fail(path, 'expected { start, frames, every, duration }');
     known(value, ['start', 'frames', 'every', 'duration'], path);
-    const start = integer(value.start ?? 0, `${path}.start`, 0, LIMITS.steps), frames = integer(value.frames ?? 60, `${path}.frames`, 1, LIMITS.frames);
+    if (!video && Number.isInteger(value.frames) && value.frames > LIMITS.frames && value.frames <= CLIP_FRAMES) fail(`${path}.frames`, `a recipe holds at most ${LIMITS.frames} frames; write a longer clip as numbered video frames: pixelbolt sequence <source> --out <folder> --fps 30, or pixel_compile with sequence`);
+    const start = integer(value.start ?? 0, `${path}.start`, 0, LIMITS.steps), frames = integer(value.frames ?? 60, `${path}.frames`, 1, video ? CLIP_FRAMES : LIMITS.frames);
     const every = integer(value.every ?? 2, `${path}.every`, 1, 60), duration = integer(value.duration ?? Math.round(every * 1000 / 60), `${path}.duration`, 10, 10000);
     return { clip, start, frames, every, duration, last: start + (frames - 1) * every };
   });
   if (new Set(clips.map(c => c.clip.toLowerCase())).size !== clips.length) fail('powder.clips', 'clip names must be unique ignoring case');
-  const total = clips.reduce((sum, c) => sum + c.frames, 0), steps = Math.max(...clips.map(c => c.last));
-  if (total > LIMITS.frames) fail('powder.clips', `${total} frames in all; a recipe holds at most ${LIMITS.frames}`);
-  if (W * H * total > FRAME_AREA) fail('powder.clips', `${total} frames of ${W}×${H} are ${(W * H * total).toLocaleString('en')} pixels; a recipe holds at most 4,194,304 (fewer frames, or a smaller grid)`);
+  // Video frames play one clip: the one named, or the first.
+  const played = !video ? clips : clips.filter((c, n) => (only === null ? n === 0 : c.clip === only));
+  if (!played.length) fail('sequence.animation', `no clip named "${only}"; choose one of: ${clips.map(c => c.clip).join(', ')}`);
+  const total = played.reduce((sum, c) => sum + c.frames, 0), steps = Math.max(...played.map(c => c.last));
+  if (!video && total > LIMITS.frames) fail('powder.clips', `${total} frames in all; a recipe holds at most ${LIMITS.frames}`);
+  if (!video && W * H * total > FRAME_AREA) fail('powder.clips', `${total} frames of ${W}×${H} are ${(W * H * total).toLocaleString('en')} pixels; a recipe holds at most 4,194,304 (fewer frames, or a smaller grid)`);
   if (steps > LIMITS.steps) fail('powder.clips', `the clips need ${steps} steps; at most ${LIMITS.steps}`);
   // The work, in cell steps (see INPUT_WORK): the grid's, weighed for tumbling pieces, and each scripted input's on the
   // steps it runs before the last one sampled (the step from `steps` on is never run).
@@ -2056,6 +2141,15 @@ export function compilePowder(source) {
   }
   // A scripted input played only after the last step a clip samples changes no frame.
   const warnings = plan.script.filter(entry => entry.from >= steps).map(entry => `${entry.path} is played ${entry.from === entry.to ? 'on' : 'from'} step ${entry.from}, so it first shows on step ${entry.from + 1}, after the last step a clip samples (${steps}): no frame shows it; play it earlier, or sample later (a clip's start, frames and every)`);
+  return { name, live, W, H, clips: played, steps, warnings };
+}
+// Bakes a source into an ordinary recipe: the grid runs from its scene, playing its scripted inputs, and each clip
+// samples it every `every` steps from `start` (60 steps a second), drawn exactly as render() draws it. Pixels that never
+// change in any sampled frame are drawn once, as the symbol `still`, stamped under every frame; each frame draws the
+// rest as one palette grid per 16-row band, cropped to where anything changes. Returns { recipe, metadata, warnings? }:
+// warnings (only when there are any) name scripted inputs played after the last step a clip samples.
+export function compilePowder(source) {
+  const { name, live, W, H, clips, steps, warnings } = readClips(source);
 
   // Every sampled moment, in time order, then each clip's frames from them.
   const times = [...new Set(clips.flatMap(c => Array.from({ length: c.frames }, (_, k) => c.start + k * c.every)))].sort((a, b) => a - b);
@@ -2103,6 +2197,28 @@ export function compilePowder(source) {
   const recipe = { version: 1, name, width: W, height: H, ...(background && { background }), palette, ...(anyStill && { symbols: { still } }), frames, animations };
   renderProject(recipe);
   return JSON.parse(JSON.stringify({ recipe, metadata: { format: 'pixelforge-powder-metadata', version: 1, steps, clips: summaries }, ...(warnings.length && { warnings }) }));
+}
+
+/** One clip of a pixelforge-powder source stepped as it is shown, for numbered video frames: the clip may run up to
+ * CLIP_FRAMES frames, past a recipe's 256, on a grid of any size a runner takes, and none of it is kept as a recipe.
+ * Returns { name, clip, width, height, palette, background, frames, duration, warnings, image(n), ended() }: image(n)
+ * is the clip's frame n as RGBA, the picture compilePowder draws for it (a frame before the last one asked for runs
+ * the grid again from its start, since a grid only steps forward); ended() says where the grid stands after the last
+ * frame made: its step, what is on it and whether it has settled, as a compiled clip's metadata does. */
+export function powderFrames(source, clipName) {
+  const { name, live: first, W, H, clips: [clip], warnings } = readClips(source, clipName ?? null);
+  let live = first;
+  return {
+    name, clip: clip.clip, width: W, height: H, palette: first.palette, background: first.backgroundColor, frames: clip.frames, duration: clip.duration, warnings,
+    image: n => {
+      if (!Number.isInteger(n) || n < 0 || n >= clip.frames) fail('sequence', `frame ${n} is not one of the clip's ${clip.frames}`);
+      const time = clip.start + n * clip.every;
+      if (time < live.frame) live = createLivePowder(source);
+      live.step(time - live.frame);
+      return live.render().rgba;
+    },
+    ended: () => { const { counts, chunks } = live.measure(); return { step: live.frame, counts, settled: chunks.stepped === 0 }; }
+  };
 }
 
 // ---- Recorded strokes ---------------------------------------------------------------------------------------------

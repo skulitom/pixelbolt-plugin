@@ -1,0 +1,111 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "chimney-smoke",
+  "width": 64,
+  "height": 96,
+  "palette": {
+    "s": "#7d798a4d",
+    "S": "#8f8b9c80",
+    "T": "#9793a4c4",
+    "l": "#c4c1cecc",
+    "k": "#22181a",
+    "m": "#4a2f2c",
+    "d": "#7a3b2e",
+    "q": "#9c4a36",
+    "Q": "#b85f43",
+    "C": "#9a97a3",
+    "c": "#73707d",
+    "x": "#4f4c59",
+    "P": "#cf8259",
+    "p": "#b0613f",
+    "n": "#8a452f"
+  },
+  "symbols": {
+    "pot": [
+      "kkkkkkkkkkkk",
+      "kPPppppppnnk",
+      "kkkkkkkkkkkk",
+      ".kPpppppnnk.",
+      ".kPpppppnnk.",
+      ".kPPppppnnk.",
+      ".kPpppppnnk.",
+      ".kPpppppnnk.",
+      ".kPpppppnnk.",
+      "kkPPppppnnkk"
+    ],
+    "cap": [
+      ".kkkkkkkkkkkkkkkkkkkkkkkkkkkk.",
+      "kCCCCCCCCCCCCCCCCCCCCCCcccccck",
+      "kCccccccccccccccccccccccccxxxk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ],
+    "stack": [
+      "kQQQQQQmQQQQQQQmQqqqqqqk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQmQQQQQQQmQQQQQqqmqqqk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQQQQQmQQQQQQQmQqqqqqqk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQmQQQQQQQmQQQQQqqmqqqk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQQQQQmQQQQQQQmQqqqqqqk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kqqqqqdmqqqqqqdmqddddddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQmQQQQQQQmQQQQQqqmqqqk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kqdmqqqqqqdmqqqqqddmdddk",
+      "kmmmmmmmmmmmmmmmmmmmmmmk",
+      "kQQQQQQmQQQQQQQmQqqqqqqk",
+      "kqqqqqdmqqqqqqdmqddddddk"
+    ]
+  },
+  "effects": {
+    "chimney-smoke": {
+      "frames": 32,
+      "duration": 80,
+      "loop": true,
+      "seed": 7,
+      "buoyancy": 0.3,
+      "vorticity": 0.45,
+      "dissipation": 0.065,
+      "cooling": 0.04,
+      "drag": 0.02,
+      "obstacles": [
+        { "symbol": "stack", "x": 20, "y": 74 },
+        { "symbol": "cap", "x": 17, "y": 70 },
+        { "symbol": "pot", "x": 26, "y": 60 }
+      ],
+      "emitters": [
+        {
+          "name": "smoke",
+          "at": [32, 57],
+          "radius": 5.5,
+          "rate": 1,
+          "density": 0.9,
+          "temperature": 0.6,
+          "falloff": 0.8,
+          "velocity": [0, -0.9],
+          "noise": 0.5,
+          "flicker": 0.3,
+          "pulse": { "amplitude": 0.8, "period": 16 },
+          "orbit": { "radius": [2.5, 0], "period": 32 }
+        }
+      ],
+      "look": [
+        { "field": "density", "colors": ["s", "S", "T"], "thresholds": [0.06, 0.16, 0.34], "dither": 0 },
+        { "field": "light", "colors": ["l"], "thresholds": [0.5], "dither": 0 }
+      ],
+      "cleanup": { "strays": true }
+    }
+  }
+}

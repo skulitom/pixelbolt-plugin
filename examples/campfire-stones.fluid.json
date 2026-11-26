@@ -1,0 +1,175 @@
+{
+  "format": "pixelforge-fluid",
+  "version": 1,
+  "name": "campfire-stones",
+  "width": 64,
+  "height": 96,
+  "palette": {
+    "r": "#b8322f",
+    "o": "#f0772b",
+    "y": "#ffcc4d",
+    "W": "#fff6d1",
+    "s": "#8f8a9a40",
+    "S": "#9e9aaa73",
+    "T": "#b4b0bfa6",
+    "a": "#ff8a2a12",
+    "e": "#ff97341f",
+    "f": "#ffa6442e",
+    "g": "#ffb85a40",
+    "D": "#0c0a1466",
+    "u": "#0c0a1447",
+    "v": "#0c0a1424",
+    "z": "#00000000",
+    "H": "#ffd08a40",
+    "k": "#1c1418",
+    "w": "#45291b",
+    "b": "#6a4128",
+    "B": "#93603a",
+    "E": "#c08a55",
+    "x": "#3a3c48",
+    "n": "#5d6070",
+    "N": "#8e93a3"
+  },
+  "symbols": {
+    "back": [
+      "..........kkkNkkk............kkkNkkk..........",
+      ".........kkNNNnnnk..........kNNNnnnkk.........",
+      "..kkkk...kNNnnnnnkk........kkNNnnnnnk...kkkk..",
+      ".kkNNnkk.kNnnnnnxkk........kknnnnnnxk.kkNNnkk.",
+      "kNNnnnnk.kknnnnxxk..........knnnnxxkk.kNNnnnnk",
+      "kNnnnnnkk.kknxxkkk..........kkknxxkk.kkNnnnnnk",
+      "knnnnnxk....kkk................kkk....knnnnxxk",
+      "kknnxxkk..............................kknnxxkk",
+      "..kkkk..................................kkkk.."
+    ],
+    "logs": [
+      ".......kk..........................kk.......",
+      ".....kkBBkkk....................kkkBBkk.....",
+      "....kkbBBBBBkkkk............kkkkBBBBBbkk....",
+      "....kbbbbbBBBBBBkkk......kkkBBBBBBbbbbbk....",
+      "....kbbbbbbbbBBBBBBkkkkkkBBBBBBbbbbbbbbk....",
+      "....kwwbbbbbbbbbBBBBBBkkkBBBbbbbbbbbbwwk....",
+      "....kkwwwwbbbbbbbbbBBBBBBkkkbbbbbbwwwwkk....",
+      ".....kkwwwwwwbbbbbbbbbbBBBBBkkkkwwwwwkk.....",
+      ".......kkkwwwwwwwbbbbbbbbbBBBBBBkkkkk.......",
+      "......kkkBkkkwwwwwwwbbbbbbbbbBBBBBBkkk......",
+      "...kkkBBBBBBbkkkwwwwwwwbbbbbbbbbBBBBBBkkk...",
+      ".kkEEBBBBbbbbbbbkkkkwwwwwwbbbbbbbbbBBBBEEkk.",
+      "kkEEEEbbbbbbbbbwwwwwkkkwwwwwwbbbbbbbbbEEEEkk",
+      "kEBbbBEbbbbwwwwwwwkkk..kkkwwwwwwwbbbbEBbbBEk",
+      "kEBbbBEbwwwwwwwkkk........kkkwwwwwwwbEBbbBEk",
+      "kEBbbBEwwwwwkkk..............kkkwwwwwEBbbBEk",
+      "kkEEEEwwkkkk....................kkkkwwEEEEkk",
+      ".kkEEkkk............................kkkEEkk.",
+      "...kk..................................kk..."
+    ],
+    "front": [
+      "..kkkkkk..................................kkkkkk..",
+      ".kkNNnnkk................................kkNNnnkk.",
+      "kkNNnnnnkkkkkk......................kkkkkkNNnnnnkk",
+      "kNNnnnnnkkNNNnkk.......kkkk.......kkNNNnkkNnnnnnxk",
+      "knnnnnnkkNNNnnnkk....kkNNNnkk....kkNNNnnnkknnnnxxk",
+      ".knnnnxkNNnnnnnnk...kNNNNnnnnk...kNNnnnnnnknnnxxk.",
+      "..kkkkkkNnnnnnnxkk.kkNNnnnnnnkk.kkNnnnnnnxkkkkkk..",
+      ".......knnnnnnxxk..kNNnnnnnnnxk..knnnnnnxxk.......",
+      "........knnnxxxkk..kknnnnnnxxkk..kknnnxxxk........",
+      ".........kkkkkk.....knnnnnxxxk.....kkkkkk.........",
+      ".....................kknxxxkk.....................",
+      ".......................kkkk......................."
+    ],
+    "ground": [
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk",
+      "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"
+    ]
+  },
+  "effects": {
+    "campfire-stones": {
+      "frames": 32,
+      "duration": 60,
+      "loop": true,
+      "seed": 3,
+      "walls": ["bottom"],
+      "buoyancy": 0.45,
+      "vorticity": 0.55,
+      "dissipation": 0.08,
+      "cooling": 0.1,
+      "drag": 0.02,
+      "obstacles": [
+        { "symbol": "back", "x": 9, "y": 73, "draw": "under", "solid": false },
+        { "symbol": "logs", "x": 10, "y": 69, "solid": false },
+        { "symbol": "front", "x": 7, "y": 79, "solid": false },
+        { "symbol": "ground", "x": 0, "y": 88, "draw": "none" }
+      ],
+      "emitters": [
+        {
+          "name": "fire",
+          "at": [32, 73],
+          "radius": 9,
+          "rate": 1,
+          "temperature": 1.5,
+          "density": 0.3,
+          "falloff": 0.65,
+          "velocity": [0, -2],
+          "noise": 1.3,
+          "flicker": 0.5
+        },
+        {
+          "name": "left",
+          "at": [24, 76],
+          "radius": 5,
+          "rate": 1,
+          "temperature": 1.15,
+          "density": 0.08,
+          "falloff": 0.6,
+          "velocity": [-0.1, -1.5],
+          "noise": 1.5,
+          "flicker": 0.6,
+          "pulse": { "amplitude": 0.4, "period": 16 }
+        },
+        {
+          "name": "right",
+          "at": [40.5, 76],
+          "radius": 5,
+          "rate": 1,
+          "temperature": 1.2,
+          "density": 0.08,
+          "falloff": 0.6,
+          "velocity": [0.1, -1.6],
+          "noise": 1.5,
+          "flicker": 0.6,
+          "pulse": { "amplitude": 0.4, "period": 8, "phase": 90 }
+        },
+        {
+          "name": "embers",
+          "at": [32, 58],
+          "radius": 6,
+          "rate": 1,
+          "sparks": {
+            "count": 0.7,
+            "life": [12, 24],
+            "colors": ["W", "y", "y", "o", "o"],
+            "trail": true,
+            "angle": [240, 300],
+            "speed": [0.5, 1.3],
+            "drag": 0.05
+          }
+        }
+      ],
+      "look": [
+        { "field": "density", "colors": ["s", "S", "T"], "thresholds": [0.06, 0.13, 0.25], "dither": 0 },
+        { "field": "temperature", "colors": ["r", "o", "y", "W"], "thresholds": [0.36, 0.52, 0.76, 1.25], "dither": 0 }
+      ],
+      "shine": {
+        "from": 0.5,
+        "full": 1.2,
+        "reach": 28,
+        "dark": "D",
+        "colors": ["u", "v", "z", "H"],
+        "thresholds": [0.2, 0.4, 0.6, 0.82],
+        "dither": 0.6,
+        "smoke": ["a", "e", "f", "g"]
+      },
+      "cleanup": { "strays": true }
+    }
+  }
+}

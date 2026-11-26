@@ -1,0 +1,1357 @@
+{
+  "scorerLock": "c48db17ab86333e8f62ed7e35c67a2edba73934df5f312eafa70d3706e108676",
+  "fixtureLocks": {
+    "field": "3cfe878ea2afcffb694c26283af2cee698a45dc11b5a5b811e5f3cb2cf605ce9",
+    "marsh": "7b652801e099e50f6eb1ca86c4ffc57602d4399aec4d2b6d0a82931d65fa77c1",
+    "loft": "dc95457bcb2723d479ae3cb0921b1e17ee0c808b360ee33395ae574fc4c941b9"
+  },
+  "collect": [
+    {
+      "job": "quartz",
+      "arm": "baseline",
+      "family": "field",
+      "variant": "damaged",
+      "receiptSha256": "f51d1395d48f8482029fbd1f7da25f0343527e6a8ba45ad6adb851dc946ae834",
+      "finalSourceSha256": "72820009f9dbf5ab300b5c2550c8c702ed10e2a66a1859620a633a6bc0a2e704",
+      "reviewSha256": "a6f7729da751a27718879d3bf0c8424ea7d7de9a94ac449339b31d7f6fefb8dd",
+      "first": {
+        "passed": false,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 39,
+          "ownership": 39,
+          "carrier": 39,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 16,
+            "examples": [
+              [
+                "walk-right-1",
+                9,
+                24
+              ],
+              [
+                "walk-right-1",
+                10,
+                24
+              ],
+              [
+                "walk-right-1",
+                11,
+                24
+              ],
+              [
+                "walk-right-1",
+                9,
+                25
+              ],
+              [
+                "walk-right-1",
+                10,
+                25
+              ]
+            ]
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 23,
+            "examples": [
+              [
+                "walk-right-1",
+                16,
+                23
+              ],
+              [
+                "walk-right-1",
+                16,
+                24
+              ],
+              [
+                "walk-right-1",
+                17,
+                24
+              ],
+              [
+                "walk-right-2",
+                16,
+                23
+              ],
+              [
+                "walk-right-2",
+                16,
+                24
+              ]
+            ]
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 6,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 6,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "shaft",
+          "id": "F1",
+          "initialFailed": 16,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "defects",
+          "kind": "joint",
+          "id": "F2",
+          "initialFailed": 23,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "sable",
+      "arm": "candidate",
+      "family": "field",
+      "variant": "clean",
+      "receiptSha256": "69b6096abe524d9276318e51b1d476bf06d072ff6fe1a8a8287de9b772e9a7f5",
+      "finalSourceSha256": "8abf6c91129ad4a0137679bc997643e7348ebdd31898861c082d96977c5681fa",
+      "reviewSha256": "1cd326407f64fddf6a604028bf51d8649e74cdf97d965d286f5b5d6d58986616",
+      "first": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "shaft",
+          "id": "F1",
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "defects",
+          "kind": "joint",
+          "id": "F2",
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "linden",
+      "arm": "candidate",
+      "family": "marsh",
+      "variant": "damaged",
+      "receiptSha256": "e30da85caa90a5ea8ddae1d42db25c580b746ccb076666594363d06add460217",
+      "finalSourceSha256": "765fdb1fa9f4babdbd5c06bb522a7e7edc0c2aa63b4c67c41996cce255c2298e",
+      "reviewSha256": "81a46b232e72304d8234ec5d58c3a9a5bb0d8073aeb3eb6fda445b6e2caeb1d6",
+      "first": {
+        "passed": false,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 25,
+          "ownership": 38,
+          "carrier": 38,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "creel-rand",
+            "tested": 35,
+            "failed": 35,
+            "examples": [
+              [
+                "walk-right-1",
+                10,
+                26
+              ],
+              [
+                "walk-right-1",
+                11,
+                26
+              ],
+              [
+                "walk-right-1",
+                11,
+                27
+              ],
+              [
+                "walk-right-2",
+                11,
+                25
+              ],
+              [
+                "walk-right-2",
+                12,
+                25
+              ]
+            ]
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "creel-rand",
+            "tested": 35,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "equipment",
+          "id": "creel-rand",
+          "initialFailed": 35,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "opal",
+      "arm": "candidate",
+      "family": "loft",
+      "variant": "clean",
+      "receiptSha256": "79409324466c6f8b5bacc4813585aa9457d1ccd0c50741c825ab6aff47b1c4aa",
+      "finalSourceSha256": "3220acebc083400abd9aeffa440d1c2252d71901d2fd84628684658dfd575a67",
+      "reviewSha256": "2b78193644a0bfe2f9d3d7f3f51534566a638aef95c32f83c6c7ff1cde7a57e1",
+      "first": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "feathers",
+            "tested": 9,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "binding",
+            "tested": 92,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 27,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "feathers",
+            "tested": 9,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "binding",
+            "tested": 92,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 27,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "joint",
+          "id": "feathers",
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "defects",
+          "kind": "equipment",
+          "id": "binding",
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "birch",
+      "arm": "candidate",
+      "family": "loft",
+      "variant": "damaged",
+      "receiptSha256": "77e0d6a2e094696a8dc6c07048626afd9f2b61c6c17202ea121c0ca35a38a1df",
+      "finalSourceSha256": "3f93de1bc9b797dbaf62f110619a8e438d64e36a6265fb1c7fd45598f686a1cb",
+      "reviewSha256": "be73d691f5e07e331f49cda79c712d8efdd6fa00ea87a6b808768a82661648d2",
+      "first": {
+        "passed": false,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 79,
+          "ownership": 109,
+          "carrier": 109,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "feathers",
+            "tested": 9,
+            "failed": 9,
+            "examples": [
+              [
+                "walk-right-1",
+                19,
+                21
+              ],
+              [
+                "walk-right-1",
+                18,
+                22
+              ],
+              [
+                "walk-right-1",
+                19,
+                22
+              ],
+              [
+                "walk-right-1",
+                18,
+                23
+              ],
+              [
+                "walk-right-1",
+                19,
+                23
+              ]
+            ]
+          },
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "binding",
+            "tested": 92,
+            "failed": 92,
+            "examples": [
+              [
+                "walk-right-1",
+                11,
+                29
+              ],
+              [
+                "walk-right-1",
+                12,
+                29
+              ],
+              [
+                "walk-right-1",
+                15,
+                29
+              ],
+              [
+                "walk-right-1",
+                16,
+                29
+              ],
+              [
+                "walk-right-1",
+                10,
+                30
+              ]
+            ]
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 27,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "feathers",
+            "tested": 9,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "binding",
+            "tested": 92,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 27,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "joint",
+          "id": "feathers",
+          "initialFailed": 9,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "defects",
+          "kind": "equipment",
+          "id": "binding",
+          "initialFailed": 92,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "amber",
+      "arm": "candidate",
+      "family": "marsh",
+      "variant": "clean",
+      "receiptSha256": "7a4870f8614381fe7a4f8f09431b908d8ddc13acd204ae121297f9f978d553a6",
+      "finalSourceSha256": "094e6c9fa9701f82a9133d3ce4f33e757f65c33cbe47e8602f103b604ce0592a",
+      "reviewSha256": "a83e8e3f8e389904dbad9ca2952c360ff1a24d69c657706a3842fbffb67ef38a",
+      "first": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "creel-rand",
+            "tested": 35,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "cleanPixelsAndCarriers": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 0,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "equipment",
+            "id": "creel-rand",
+            "tested": 35,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 32,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "equipment",
+          "id": "creel-rand",
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    },
+    {
+      "job": "flint",
+      "arm": "candidate",
+      "family": "field",
+      "variant": "damaged",
+      "receiptSha256": "5a737ebc439c3ee0cbeef22b15209279ee463e83cc5d66a15237e208424c4ded",
+      "finalSourceSha256": "8025ea9ecff2756c79c2d87aa6939f590ea34b039e4754452d77c82f4772e437",
+      "reviewSha256": "19839ef035753a37523ec1479a8a346a273acff7fe6ccd6cecb688173d8e1422",
+      "first": {
+        "passed": false,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 39,
+          "ownership": 39,
+          "carrier": 39,
+          "alternateUnderpaint": 0,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 16,
+            "examples": [
+              [
+                "walk-right-1",
+                9,
+                24
+              ],
+              [
+                "walk-right-1",
+                10,
+                24
+              ],
+              [
+                "walk-right-1",
+                11,
+                24
+              ],
+              [
+                "walk-right-1",
+                9,
+                25
+              ],
+              [
+                "walk-right-1",
+                10,
+                25
+              ]
+            ]
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 23,
+            "examples": [
+              [
+                "walk-right-1",
+                16,
+                23
+              ],
+              [
+                "walk-right-1",
+                16,
+                24
+              ],
+              [
+                "walk-right-1",
+                17,
+                24
+              ],
+              [
+                "walk-right-2",
+                16,
+                23
+              ],
+              [
+                "walk-right-2",
+                16,
+                24
+              ]
+            ]
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "exports": true
+      },
+      "final": {
+        "passed": true,
+        "checks": {
+          "clips": true,
+          "frames": true,
+          "anchorsTiming": true,
+          "standingRGBA": true,
+          "gait": true,
+          "noVisibleCollateral": true,
+          "noCarrierRegressions": true,
+          "suppliedSourceIntact": true
+        },
+        "differences": {
+          "rgba": 6,
+          "ownership": 0,
+          "carrier": 0,
+          "alternateUnderpaint": 6,
+          "visibleCollateral": 0,
+          "carrierCollateral": 0,
+          "outsideWitnessRGBA": 0
+        },
+        "collateralExamples": [],
+        "witnesses": [
+          {
+            "category": "defects",
+            "kind": "shaft",
+            "id": "F1",
+            "tested": 16,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "defects",
+            "kind": "joint",
+            "id": "F2",
+            "tested": 23,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "opening",
+            "id": null,
+            "tested": 392,
+            "failed": 0,
+            "examples": []
+          },
+          {
+            "category": "controls",
+            "kind": "crossing",
+            "id": null,
+            "tested": 95,
+            "failed": 0,
+            "examples": []
+          }
+        ],
+        "delivery": {
+          "frames": 18,
+          "atlasAnimations": 4,
+          "gifs": 2
+        },
+        "exports": true
+      },
+      "resolutions": [
+        {
+          "category": "defects",
+          "kind": "shaft",
+          "id": "F1",
+          "initialFailed": 16,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "defects",
+          "kind": "joint",
+          "id": "F2",
+          "initialFailed": 23,
+          "finalFailed": 0,
+          "resolved": true
+        },
+        {
+          "category": "controls",
+          "kind": "opening",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        },
+        {
+          "category": "controls",
+          "kind": "crossing",
+          "id": null,
+          "initialFailed": 0,
+          "finalFailed": 0,
+          "resolved": false
+        }
+      ]
+    }
+  ],
+  "builds": {
+    "baseline": {
+      "commit": "22403d505d43fb9fa461e2813eefc0a064e08164",
+      "tarballSha256": "6b1c2929c392b1a575412a6903f1c78eec2636ce200d7b24c1a1d2815cd74da2"
+    },
+    "candidate": {
+      "commit": "a14b900cbe8978e13e01a8c82b2fd5a51bcee56f",
+      "tarballSha256": "605c0464ee89886a30c6696a347038037f78a46db6abde0aef104784f7fb043d"
+    },
+    "families": {
+      "field": "3cfe878ea2afcffb694c26283af2cee698a45dc11b5a5b811e5f3cb2cf605ce9",
+      "marsh": "7b652801e099e50f6eb1ca86c4ffc57602d4399aec4d2b6d0a82931d65fa77c1",
+      "loft": "dc95457bcb2723d479ae3cb0921b1e17ee0c808b360ee33395ae574fc4c941b9"
+    },
+    "frozenAt": "2026-11-24T21:17:04Z",
+    "jobs": [
+      [
+        "quartz",
+        "field",
+        "damaged"
+      ],
+      [
+        "sable",
+        "field",
+        "clean"
+      ],
+      [
+        "linden",
+        "marsh",
+        "damaged"
+      ],
+      [
+        "opal",
+        "loft",
+        "clean"
+      ],
+      [
+        "birch",
+        "loft",
+        "damaged"
+      ],
+      [
+        "amber",
+        "marsh",
+        "clean"
+      ],
+      [
+        "flint",
+        "field",
+        "damaged"
+      ]
+    ]
+  },
+  "protocol": {
+    "participants": "fresh sessions without prior conversation or answer keys; file boundaries were instructed, not an OS sandbox",
+    "candidateFeedback": "none",
+    "control": "same neutral wording within each character pair; tool and job paths were assigned separately",
+    "scoring": "frozen after the baseline, before candidate submissions were scored"
+  }
+}

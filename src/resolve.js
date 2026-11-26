@@ -3,7 +3,7 @@
 // paths resolve from `baseDir`; when `root` is set (the MCP server), every referenced file must stay inside it.
 import { readFile, realpath } from 'node:fs/promises';
 import path from 'node:path';
-import { PixelError, inlineSharedPalette, fail, isObject } from './core.js';
+import { inlineSharedPalette, fail, isObject } from './core.js';
 
 const within = (parent, child) => { const relative = path.relative(parent, child); return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); };
 /**
@@ -113,7 +113,7 @@ async function resolveScene(scene, baseDir, context) {
  */
 export async function resolveReferences(document, { baseDir = process.cwd(), root, revisions } = {}) {
   const context = { root, revisions, files: new Set(), palettes: [] };
-  const sidecars = { 'pixelforge-poses': 'poses', 'pixelforge-autotile': 'autotile', 'pixelforge-fx': 'fx', 'pixelforge-fluid': 'fluid', 'pixelforge-wave': 'wave', 'pixelforge-crystal': 'crystal', 'pixelforge-powder': 'powder', 'pixelforge-bodies': 'bodies' };
+  const sidecars = { 'pixelforge-stack': 'stack', 'pixelforge-poses': 'poses', 'pixelforge-autotile': 'autotile', 'pixelforge-fx': 'fx', 'pixelforge-fluid': 'fluid', 'pixelforge-wave': 'wave', 'pixelforge-crystal': 'crystal', 'pixelforge-powder': 'powder', 'pixelforge-bodies': 'bodies' };
   const resolved = document?.format === 'pixelforge-scene' ? await resolveScene(document, baseDir, context)
     : document?.format === 'pixelforge-normals' && document.recipe !== undefined ? { ...document, recipe: await loadRecipe(document.recipe, baseDir, context, 'normals.recipe') }
       : document?.format === 'pixelforge-fx' ? await resolveEffects(document, baseDir, context)

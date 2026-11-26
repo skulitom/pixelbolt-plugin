@@ -509,11 +509,13 @@ function tidy(E) {
       const dx = b.x - a.x, dy = b.y - a.y;
       if (dx * dx + dy * dy <= SPLIT * SPLIT) continue;
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, ion: a.ion < b.ion ? a.ion : b.ion, trace: a.trace < b.trace ? a.trace : b.trace, links: [], k: list.length };
-      // A midpoint in a cell another marker holds joins that marker instead.
+      // A midpoint in a cell another marker holds joins that marker instead; in the cell of one of the link's own ends
+      // (a link of 1.5 to 2.8 pixels can put it there) the link stays as it is. Parting and rejoining it moved it to
+      // the end of both markers' links and stepped past the link that took its place, which then waited a step to split.
       const c = cellOf(E, m), there = owner[c] >= 0 ? list[owner[c]] : null;
+      if (there === a || there === b) continue;
       part(a, b); l--;
-      if (there && there !== a && there !== b) { join(a, there); join(there, b); continue; }
-      if (there) { join(a, b); l++; continue; }
+      if (there) { join(a, there); join(there, b); continue; }
       owner[c] = list.length; list.push(m); join(a, m); join(m, b);
     }
   }

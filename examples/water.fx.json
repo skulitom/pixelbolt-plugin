@@ -7,7 +7,7 @@
   "palette": { "o": "#123c40", "d": "#2a7f86", "m": "#4fb3b5", "b": "#9fe3e0", "h": "#e8fffb" },
   "effects": {
     "geyser": {
-      "frames": 16,
+      "frames": 18,
       "duration": 83,
       "seed": 6,
       "looks": {
@@ -80,7 +80,7 @@
       ]
     },
     "whip": {
-      "frames": 14,
+      "frames": 15,
       "duration": 83,
       "seed": 4,
       "looks": {
@@ -129,7 +129,7 @@
       ]
     },
     "ring": {
-      "frames": 14,
+      "frames": 15,
       "duration": 83,
       "seed": 2,
       "looks": {
@@ -172,7 +172,7 @@
       ]
     },
     "dome": {
-      "frames": 16,
+      "frames": 18,
       "duration": 83,
       "seed": 8,
       "looks": {
@@ -239,7 +239,7 @@
       ]
     },
     "curl": {
-      "frames": 14,
+      "frames": 15,
       "duration": 83,
       "seed": 3,
       "looks": {
